@@ -1,20 +1,17 @@
-import type { NextConfig } from 'next';
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ['127.0.0.1', 'localhost'],
-  webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      tailwindcss: require.resolve('tailwindcss'),
-    };
-    return config;
-  },
-  postcss: {
-    plugins: {
-      tailwindcss: require.resolve('tailwindcss'),
-      autoprefixer: require.resolve('autoprefixer'),
-    },
-  },
+  // Turbopack + webpack conflict fix (this is what we needed)
+  turbopack: {},
+
+  // Optional but recommended settings for Next.js 16 + React 19 + Tailwind
+  reactStrictMode: true,
+  swcMinify: true,
+
+  // If you need any custom webpack config later, you can add it here
+  // webpack: (config) => {
+  //   return config;
+  // },
 };
 
 export default nextConfig;
