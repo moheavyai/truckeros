@@ -7,8 +7,8 @@ const nextConfig: NextConfig = {
   },
   postcss: {
     plugins: {
-      tailwindcss: {},
-      autoprefixer: {},
+      tailwindcss: require('tailwindcss'),
+      autoprefixer: require('autoprefixer'),
     },
   },
 };
