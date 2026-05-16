@@ -6,13 +6,13 @@ First, run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
+
+> **Note for Windows users**: This project uses `NEXT_TURBOPACK=0` to force Webpack instead of Turbopack for better stability. If you run into dev server issues, try the backup command:
+>
+> ```bash
+> npm run dev:webpack
+> ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
