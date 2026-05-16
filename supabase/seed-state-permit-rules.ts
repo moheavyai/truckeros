@@ -10,6 +10,8 @@
  *   npx tsx supabase/seed-state-permit-rules.ts
  */
 
+// @ts-nocheck - Seed script with optional dev dependencies (dotenv)
+
 import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
 import { resolve } from 'path'

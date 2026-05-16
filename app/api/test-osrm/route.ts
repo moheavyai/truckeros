@@ -8,16 +8,19 @@ export async function GET() {
   const destLat = 40.81
   const destLon = -96.68
 
-  const route = await getRoute(originLat, originLon, destLat, destLon)
+  const response = await getRoute(originLat, originLon, destLat, destLon)
 
-  if (!route) {
+  if (!response || !response.routes || response.routes.length === 0) {
     return NextResponse.json({ error: 'Failed to get route from OSRM' }, { status: 500 })
   }
+
+  const route = response.routes[0]
 
   return NextResponse.json({
     success: true,
     distanceMeters: route.distance,
     durationSeconds: route.duration,
     message: 'OSRM route fetched successfully',
+    alternatives: response.routes.length,
   })
 }

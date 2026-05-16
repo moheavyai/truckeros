@@ -10,18 +10,28 @@ export async function GET() {
   const destLon = -96.68
 
   try {
-    const result = await buildIntelligentCorridor(
+    const results = await buildIntelligentCorridor(
       originLat,
       originLon,
       destLat,
       destLon
     )
 
+    if (!results || results.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'No corridor data returned' },
+        { status: 404 }
+      )
+    }
+
+    const result = results[0]
+
     return NextResponse.json({
       success: true,
       routeCorridor: result.routeCorridor,
       distanceKm: result.distanceMeters ? (result.distanceMeters / 1000).toFixed(1) : null,
       durationHours: result.durationSeconds ? (result.durationSeconds / 3600).toFixed(1) : null,
+      alternatives: results.length,
     })
   } catch (error) {
     console.error('Corridor test error:', error)

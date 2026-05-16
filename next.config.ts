@@ -6,7 +6,6 @@ const nextConfig: NextConfig = {
 
   // Optional but recommended settings for Next.js 16 + React 19 + Tailwind
   reactStrictMode: true,
-  swcMinify: true,
 
   // If you need any custom webpack config later, you can add it here
   // webpack: (config) => {
