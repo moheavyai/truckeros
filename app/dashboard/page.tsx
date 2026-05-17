@@ -1,20 +1,45 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [recentRequests, setRecentRequests] = useState<any[]>([])
   const router = useRouter()
 
+  /**
+   * Authentication Guard (client-side) + Initial Data Load
+   *
+   * - Checks for a valid Supabase session on mount.
+   * - Redirects unauthenticated users to /login immediately.
+   * - Once authenticated, fetches the user's recent permit requests.
+   * - Listens for auth changes (logout in another tab, token expiry, etc.).
+   * - Keeps the page behind a loading state until auth is confirmed.
+   * - Consistent protection pattern with /permit-test and other protected routes.
+   */
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const supabase = createClient()
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
         router.push('/login')
       } else {
         setUser(session.user)
+
+        // Fetch real recent requests (only after confirming the user is logged in)
+        const { data: requests } = await supabase
+          .from('permit_requests')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false })
+          .limit(5)
+
+        if (requests) {
+          setRecentRequests(requests)
+        }
       }
       setLoading(false)
     })
@@ -31,12 +56,27 @@ export default function Dashboard() {
   }, [router])
 
   const handleLogout = async () => {
+    const supabase = createClient()
     await supabase.auth.signOut()
     router.push('/login')
   }
 
+  // === Authentication Protection ===
+  // Show a clean, branded loading state while verifying the user's session.
+  // This prevents any flash of protected content and provides good UX.
   if (loading) {
-    return <div className="p-8">Loading...</div>
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          {/* TruckerOS brand mark */}
+          <div className="w-14 h-14 bg-black rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+            <span className="text-white text-3xl font-bold tracking-tighter">T</span>
+          </div>
+          <p className="text-gray-700 font-semibold text-lg">Checking authentication...</p>
+          <p className="text-gray-500 text-sm mt-1">Please wait while we verify your session</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -59,6 +99,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-4 text-sm">
             <a href="/dashboard" className="text-gray-700 hover:text-black font-medium">Dashboard</a>
             <a href="/permit-test" className="text-gray-700 hover:text-black font-medium">New Analysis</a>
+            <a href="/history" className="text-gray-700 hover:text-black font-medium">History</a>
             <div className="w-px h-4 bg-gray-300 mx-1" />
             {user && (
               <span className="text-gray-600 hidden md:inline">{user.email}</span>
@@ -121,27 +162,46 @@ export default function Dashboard() {
           <div className="lg:col-span-2 bg-white border rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-lg tracking-tight">Recent Analyses</h2>
-              <a href="/permit-test" className="text-sm text-gray-600 hover:text-black">View all →</a>
+              <a href="/history" className="text-sm text-gray-600 hover:text-black">View all →</a>
             </div>
 
             <div className="divide-y">
-              {[1,2,3].map((i) => (
-                <div key={i} className="py-4 flex items-center justify-between text-sm">
-                  <div>
-                    <div className="font-medium text-gray-900">Calvert, AL → Lincoln, NE</div>
-                    <div className="text-gray-500 text-xs mt-0.5">9.67 ft wide • 13.5 ft tall • 80,000 lbs</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-emerald-600 font-medium text-xs">No Permit Required</div>
-                    <div className="text-gray-400 text-xs">2 days ago</div>
-                  </div>
+              {recentRequests.length > 0 ? (
+                recentRequests.map((req, index) => {
+                  const permitCount = req.permit_required_states?.length || 0
+                  const date = req.created_at ? new Date(req.created_at).toLocaleDateString() : ''
+
+                  return (
+                    <div key={index} className="py-4 flex items-center justify-between text-sm">
+                      <div>
+                        <div className="font-medium text-gray-900">
+                          {req.origin_city}, {req.origin_state} → {req.destination_city}, {req.destination_state}
+                        </div>
+                        <div className="text-gray-500 text-xs mt-0.5">
+                          {req.weight?.toLocaleString()} lbs • {req.length} ft
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`${permitCount > 0 ? 'text-orange-600' : 'text-emerald-600'} font-medium text-xs`}>
+                          {permitCount > 0 ? `${permitCount} State${permitCount > 1 ? 's' : ''} Require Permit` : 'No Permit Required'}
+                        </div>
+                        <div className="text-gray-400 text-xs">{date}</div>
+                      </div>
+                    </div>
+                  )
+                })
+              ) : (
+                <div className="py-6 text-center text-sm text-gray-500">
+                  No analyses yet. Run your first route analysis to see history here.
                 </div>
-              ))}
+              )}
             </div>
 
-            <div className="pt-4 text-xs text-gray-500 border-t">
-              Full history and saved requests coming soon.
-            </div>
+            {recentRequests.length > 0 && (
+              <div className="pt-4 text-xs text-gray-500 border-t">
+                Showing your last {recentRequests.length} saved analyses.
+              </div>
+            )}
           </div>
 
           {/* Tips / Guidance */}

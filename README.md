@@ -8,11 +8,7 @@ First, run the development server:
 npm run dev
 ```
 
-> **Note for Windows users**: This project uses `NEXT_TURBOPACK=0` to force Webpack instead of Turbopack for better stability. If you run into dev server issues, try the backup command:
->
-> ```bash
-> npm run dev:webpack
-> ```
+> **Note for Windows users**: The `dev` script now uses `cross-env` so `npm run dev` works reliably on Windows, macOS, and Linux (forces Webpack instead of Turbopack for PostCSS/Tailwind v4 stability). The `dev:webpack` script is kept as an alternative.
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 

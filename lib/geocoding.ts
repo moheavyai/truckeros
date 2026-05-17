@@ -10,7 +10,8 @@ export interface ReverseGeocodeResult {
  */
 export async function reverseGeocode(lat: number, lon: number): Promise<ReverseGeocodeResult | null> {
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=5&addressdetails=1`
+    // Higher zoom = much better state accuracy (old zoom=5 was too coarse)
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&addressdetails=1`
 
     const res = await fetch(url, {
       headers: {
@@ -19,19 +20,22 @@ export async function reverseGeocode(lat: number, lon: number): Promise<ReverseG
     })
 
     if (!res.ok) {
-      console.error('Nominatim request failed:', res.status)
+      console.warn(`Nominatim attempt failed: ${res.status}`)
       return null
     }
 
     const data = await res.json()
     const address = data.address || {}
 
+    // Prefer short state code (more reliable) when available
+    const state = address.state_code?.toUpperCase() || address.state
+
     return {
-      state: address.state,
+      state,
       country: address.country,
     }
   } catch (error) {
-    console.error('Reverse geocoding error:', error)
+    console.warn('Reverse geocoding error:', error)
     return null
   }
 }

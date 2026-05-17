@@ -33,12 +33,15 @@ export async function getRoute(
       return null
     }
 
-    const routes: OSRMRoute[] = data.routes.map((route: any) => ({
+    let routes: OSRMRoute[] = data.routes.map((route: any) => ({
       distance: route.distance,
       duration: route.duration,
       geometry: route.geometry,
       steps: route.legs?.[0]?.steps || [],
     }))
+
+    // Sort by distance ascending — shortest (usually best) first
+    routes.sort((a, b) => a.distance - b.distance)
 
     return { routes }
   } catch (error) {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
 export default function AdminDatabasePage() {
@@ -19,6 +19,8 @@ export default function AdminDatabasePage() {
   ADD COLUMN IF NOT EXISTS duration_hours NUMERIC(6,2);`
 
   useEffect(() => {
+    const supabase = createClient()
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
         router.push('/login')
@@ -62,6 +64,7 @@ export default function AdminDatabasePage() {
 
   async function checkStateRulesStatus() {
     try {
+      const supabase = createClient()
       const { data, error, count } = await supabase
         .from('state_permit_rules')
         .select('*', { count: 'exact', head: true })
