@@ -47,6 +47,9 @@ export async function POST(request: NextRequest) {
       destinationLon: body.destinationLon ? Number(body.destinationLon) : undefined,
       // Support the "Change Route" manual override feature
       manualRoute: Array.isArray(body.manualRoute) ? body.manualRoute : undefined,
+      // Thread specialInstructions (primary) or fallback string manualRoute for prefs (array manualRoute is for override only)
+      specialInstructions: typeof body.specialInstructions === 'string' ? body.specialInstructions :
+        (typeof body.manualRoute === 'string' ? body.manualRoute : undefined),
       mcNumber: body.mcNumber,
       dotNumber: body.dotNumber,
       vehicleInfo: body.vehicleInfo,

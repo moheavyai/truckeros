@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import VehicleDiagram from '@/components/VehicleDiagram'
+import type { RigConfiguration, Tractor, Trailer } from '@/types/equipment'
+import { computeRigDimensions } from '@/types/equipment'
 
 export default function PermitTestPage() {
   const [user, setUser] = useState<any>(null)
@@ -50,6 +53,16 @@ export default function PermitTestPage() {
     }
   }, [loadingAuth, user])
 
+  // NEW: Load the carrier's saved equipment profiles + new smart rigs
+  // Also load decoded tractors/trailers so Rig Selector can show full (tractor+trailer) VehicleDiagram previews.
+  useEffect(() => {
+    if (!loadingAuth && user) {
+      loadEquipmentProfiles()
+      loadRigs()
+      loadRigTractorsAndTrailers()
+    }
+  }, [loadingAuth, user])
+
   const [formData, setFormData] = useState({
     origin: {
       street: '',
@@ -71,6 +84,35 @@ export default function PermitTestPage() {
     originLon: -86.85,
     destinationLat: 40.81,
     destinationLon: -96.68,
+
+    // NEW (Intake Form v2): equipment rig + cargo details per task + migration 009.
+    // Use '' for optional text/numeric fields (avoids "Year: 0" display bugs). Numbers only where they have real defaults.
+    unitNumber: '',
+    vin: '',
+    year: '',
+    make: '',
+    model: '',
+    axles: 5,
+    axleSpacing: '',
+    tireWidthIn: 11,
+    registeredGvwLbs: 80000,
+    kingpinSettingIn: 36,
+    trailerMake: '',
+    trailerModel: '',
+    trailerYear: '',
+    trailerLengthFt: 53,
+    cargoDescription: '',
+    cargoMakeModel: '',
+    cargoSerialNumber: '',
+    cargoManufacturer: '',
+    // NEW: Specific load dimensions (distinct from top-level routing envelope fields).
+    // Static capture only for now — no calculations or validation.
+    loadWeightLbs: '',
+    loadLengthFt: '',
+    loadWidthFt: '',
+    loadHeightFt: '',
+    axleWeights: [16000, 16000, 16000, 16000, 16000],
+    grossLoadedWeight: 80000,
   })
 
   const [result, setResult] = useState<any>(null)
@@ -98,6 +140,10 @@ export default function PermitTestPage() {
 
   // Change Route feature
   const [showChangeRouteInput, setShowChangeRouteInput] = useState(false)
+  // manualRoute (string) is intentionally overloaded for minimal scope:
+  // - Free-text prefs/specialInstructions (textarea + voice 'preferences') → sent as specialInstructions on main submit (affects ranking in buildIntelligentCorridor).
+  // - Comma-separated 2-letter states for explicit "Change Route" override → parsed to array and sent as manualRoute (bypasses intelligent + prefs entirely; precedence preserved in agent).
+  // Help text updated only on prefs textarea; parsing in handleChangeRoute filters to valid codes (often [] for natural language prefs text).
   const [manualRoute, setManualRoute] = useState('')
 
   // Tier selector for cost estimation (temporary for testing)
@@ -105,6 +151,28 @@ export default function PermitTestPage() {
 
   // NEW: Routing engine selector (GraphHopper = truck profile, OSRM = baseline)
   const [routingEngine, setRoutingEngine] = useState<'osrm' | 'graphhopper'>('osrm')
+  const [routingStatus, setRoutingStatus] = useState<{ graphhopper: { enabled: boolean; label: string } } | null>(null)
+
+  // NEW (Intake v2): equipment profile selector + Quick Route Glance state (declared early so helpers below can reference safely)
+  const [equipmentProfiles, setEquipmentProfiles] = useState<any[]>([])
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
+  const [loadingProfiles, setLoadingProfiles] = useState(false)
+  const [glance, setGlance] = useState<any>(null)
+
+  // NEW Smart Rig Builder integration (v3): separate tractors/trailers/rigs from /equipment
+  const [rigs, setRigs] = useState<RigConfiguration[]>([])
+  const [selectedRigId, setSelectedRigId] = useState<string | null>(null)
+  const [selectedRigSnapshot, setSelectedRigSnapshot] = useState<any>(null)
+  const [loadingRigs, setLoadingRigs] = useState(false)
+  const [loadOverhangFrontFt, setLoadOverhangFrontFt] = useState<number>(0)
+  const [loadOverhangRearFt, setLoadOverhangRearFt] = useState<number>(0)
+  // NEW: Split of front overhang per requirements (Rig = contributes to envelope; Trailer = permit info only)
+  const [loadOverhangFrontTrailerFt, setLoadOverhangFrontTrailerFt] = useState<number>(0)
+
+  // Full tractor/trailer objects (decoded from equipment_profiles RIGBUILDER payloads).
+  // Required so VehicleDiagram receives overall_length_ft, fifth_wheel, axle data etc. for full rig graphics.
+  const [tractors, setTractors] = useState<Tractor[]>([])
+  const [trailers, setTrailers] = useState<Trailer[]>([])
 
   // === Load Pilot Voice Agent (Week 1 Item 6) ===
   // Uses Web Speech API (SpeechRecognition + SpeechSynthesis)
@@ -243,7 +311,7 @@ export default function PermitTestPage() {
 
       speak(`Set ${field} to ${city || 'unknown city'} ${state || ''}.`)
 
-    } else if (['weight', 'length', 'width', 'height'].includes(field)) {
+    } else if (['weight', 'length', 'width', 'height', 'axles', 'registeredGvwLbs', 'kingpinSettingIn', 'tireWidthIn', 'trailerLengthFt', 'grossLoadedWeight', 'loadWeightLbs', 'loadLengthFt', 'loadWidthFt', 'loadHeightFt'].includes(field)) {
       const num = parseSpokenNumber(text)
       if (num > 0) {
         setFormData(prev => ({ ...prev, [field]: num }))
@@ -251,6 +319,11 @@ export default function PermitTestPage() {
       } else {
         setVoiceStatus('Could not understand the number. Please try again.')
       }
+    } else if (['unitNumber', 'vin', 'make', 'model', 'axleSpacing', 'cargoDescription', 'cargoMakeModel', 'cargoSerialNumber', 'cargoManufacturer', 'trailerMake', 'trailerModel', 'year', 'trailerYear'].includes(field)) {
+      // Text / mixed fields: take transcript (light cleanup for spoken filler)
+      const cleaned = transcript.replace(/\b(the|a|an|please|set|to|for|my)\b/gi, '').trim()
+      setFormData(prev => ({ ...prev, [field]: cleaned || transcript }))
+      speak(`${field} noted.`)
     } else if (field === 'preferences') {
       // For route preferences / special instructions
       setManualRoute(transcript)
@@ -260,14 +333,308 @@ export default function PermitTestPage() {
 
   // Voice confirmation: reads back the current form values
   function confirmWithVoice() {
-    const summary = `Origin: ${formData.origin.city} ${formData.origin.state}. Destination: ${formData.destination.city} ${formData.destination.state}. Weight: ${formData.weight} pounds. Length: ${formData.length} feet. Width: ${formData.width} feet. Height: ${formData.height} feet. Routing engine: ${routingEngine}.`
+    const summary = `Origin: ${formData.origin.city} ${formData.origin.state}. Destination: ${formData.destination.city} ${formData.destination.state}. Weight: ${formData.weight} pounds. Length: ${formData.length} feet. Axles: ${formData.axles}. Gross: ${formData.grossLoadedWeight}. Routing engine: ${routingEngine}.`
     speak(summary)
     setVoiceStatus('Load Pilot is reading back your details...')
     setTimeout(() => setVoiceStatus(''), 6000)
   }
 
+  // === NEW (Intake v2) real helpers — smallest implementation that satisfies the requirements ===
+  // Follows exact existing Supabase client pattern used elsewhere in this file and in history/page.tsx.
+
+  async function loadEquipmentProfiles() {
+    if (!user) return
+    setLoadingProfiles(true)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('equipment_profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      if (!error) setEquipmentProfiles(data || [])
+    } catch (e) {
+      console.warn('[intake] loadEquipmentProfiles failed (RLS or table missing?):', e)
+    } finally {
+      setLoadingProfiles(false)
+    }
+  }
+
+  // NEW: Load saved rig configurations (from smart Rig Builder) for the top-of-form selector
+  async function loadRigs() {
+    if (!user) return
+    setLoadingRigs(true)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('rig_configurations')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      if (!error) setRigs((data as any) || [])
+    } catch (e) {
+      console.warn('[intake] loadRigs failed:', e)
+    } finally {
+      setLoadingRigs(false)
+    }
+  }
+
+  // NEW: Load + decode the structured tractor/trailer rows from equipment_profiles.
+  // This gives us the rich fields (overall_length_ft, fifth_wheel_from_rear_in, kingpin distances, axle_spacings etc.)
+  // that VehicleDiagram + computeRigDimensions require to render a *full* tractor + trailer rig instead of falling back to trailer-only.
+  async function loadRigTractorsAndTrailers() {
+    if (!user) return
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('equipment_profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.warn('[permit-test] loadRigTractorsAndTrailers failed:', error)
+        return
+      }
+
+      const rows = (data || []) as any[]
+
+      const decoded = rows.map((row) => {
+        let meta: any = {}
+        let plainNotes = row.notes || ''
+        if (typeof row.notes === 'string' && row.notes.startsWith('RIGBUILDER:v1:')) {
+          try {
+            const jsonPart = row.notes.slice('RIGBUILDER:v1:'.length)
+            meta = JSON.parse(jsonPart) || {}
+            plainNotes = meta._notes || ''
+          } catch (e) {
+            console.warn('decode RIGBUILDER payload failed for row', row.id, e)
+          }
+        }
+        return { row, meta, plainNotes }
+      })
+
+      // Tractors (exact shape expected by types/equipment.ts + VehicleDiagram)
+      const tractorsDecoded = decoded.filter((d) => d.meta.type === 'tractor')
+      setTractors(
+        tractorsDecoded.map((d) => ({
+          id: d.row.id,
+          user_id: d.row.user_id,
+          profile_name: d.row.profile_name || '',
+          overall_length_ft: d.meta.overall_length_ft ?? null,
+          num_axles: d.meta.num_axles ?? null,
+          steer_axle_setback_in: d.meta.steer_axle_setback_in ?? null,
+          wheelbase_in: d.meta.wheelbase_in ?? null,
+          axle_spacings: Array.isArray(d.meta.axle_spacings) ? d.meta.axle_spacings : [],
+          fifth_wheel_from_rear_in: d.meta.fifth_wheel_from_rear_in ?? null,
+          unit_number: d.meta.unit_number ?? d.row.unit_number ?? null,
+          vin: d.meta.vin ?? d.row.vin ?? null,
+          year: d.meta.year ?? d.row.year ?? null,
+          make: d.meta.make ?? d.row.make ?? null,
+          model: d.meta.model ?? d.row.model ?? null,
+          notes: d.plainNotes || null,
+          created_at: d.row.created_at,
+          updated_at: d.row.updated_at,
+        })) as Tractor[]
+      )
+
+      // Trailers
+      const trailersDecoded = decoded.filter((d) => d.meta.type === 'trailer')
+      setTrailers(
+        trailersDecoded.map((d) => ({
+          id: d.row.id,
+          user_id: d.row.user_id,
+          profile_name: d.row.profile_name || '',
+          overall_length_ft: d.meta.overall_length_ft ?? d.row.trailer_length_ft ?? null,
+          kingpin_distance_from_front_in: d.meta.kingpin_distance_from_front_in ?? null,
+          num_axles: d.meta.num_axles ?? null,
+          axle_spacings: Array.isArray(d.meta.axle_spacings) ? d.meta.axle_spacings : [],
+          kingpin_to_first_axle_in: d.meta.kingpin_to_first_axle_in ?? null,
+          has_lift_axle: !!d.meta.has_lift_axle,
+          is_extendable: !!d.meta.is_extendable,
+          extendable_extra_ft: d.meta.extendable_extra_ft ?? 0,
+          trailer_type: d.meta.trailer_type ?? d.row.trailer_make ?? null,
+          make: d.meta.make ?? d.row.trailer_make ?? null,
+          model: d.meta.model ?? d.row.trailer_model ?? null,
+          year: d.meta.year ?? d.row.trailer_year ?? null,
+          notes: d.plainNotes || null,
+          created_at: d.row.created_at,
+          updated_at: d.row.updated_at,
+        })) as Trailer[]
+      )
+    } catch (e) {
+      console.warn('[permit-test] loadRigTractorsAndTrailers unexpected error', e)
+    }
+  }
+
+  function handleSelectProfile(profile: any) {
+    if (!profile) {
+      setSelectedProfileId(null)
+      return
+    }
+    setSelectedProfileId(profile.id)
+    setFormData(prev => ({
+      ...prev,
+      unitNumber: profile.unit_number || '',
+      vin: profile.vin || '',
+      year: profile.year != null ? String(profile.year) : '',
+      make: profile.make || '',
+      model: profile.model || '',
+      axles: profile.axles || 5,
+      axleSpacing: profile.axle_spacing || '',
+      tireWidthIn: profile.tire_width_in || 11,
+      registeredGvwLbs: profile.registered_gvw_lbs || 80000,
+      kingpinSettingIn: profile.kingpin_setting_in || 36,
+      trailerMake: profile.trailer_make || '',
+      trailerModel: profile.trailer_model || '',
+      trailerYear: profile.trailer_year != null ? String(profile.trailer_year) : '',
+      trailerLengthFt: profile.trailer_length_ft || 53,
+    }))
+    setGlance(null)
+  }
+
+  // NEW Smart Rig Selector handler (v3) — sets snapshot for clean display + submit payload
+  function handleSelectRig(rig: RigConfiguration | null) {
+    if (!rig) {
+      setSelectedRigId(null)
+      setSelectedRigSnapshot(null)
+      return
+    }
+    setSelectedRigId(rig.id)
+
+    // Resolve the *full* Tractor + Trailer objects (with overall_length_ft, 5th wheel, kingpin, axle data).
+    // This is the root cause of the "only trailer shows" bug: previous code only stored {id: ...}
+    // so VehicleDiagram saw tractorLen=0 → treated the whole thing as isTrailerOnly and skipped TractorGraphic.
+    const fullTractor = tractors.find((t) => t.id === rig.tractor_id) || null
+    const fullTrailers = (rig.trailer_ids || [])
+      .map((tid: string) => trailers.find((tr) => tr.id === tid))
+      .filter(Boolean) as Trailer[]
+
+    // Build rich snapshot (now carries the data VehicleDiagram needs + richer audit trail in permit_requests)
+    const snap = {
+      rigId: rig.id,
+      rigName: rig.rig_name,
+      overallLengthFt: rig.computed_total_length_ft,
+      totalAxles: rig.computed_total_axles,
+      tractor: fullTractor || { id: rig.tractor_id },
+      trailers: fullTrailers.length > 0 ? fullTrailers : (rig.trailer_ids || []).map((tid: string) => ({ id: tid })),
+    }
+    setSelectedRigSnapshot(snap)
+
+    // Helpful: also update the legacy length field so the routing envelope has a good starting value
+    if (rig.computed_total_length_ft) {
+      setFormData((prev) => ({ ...prev, length: Math.max(prev.length || 60, Math.ceil(rig.computed_total_length_ft!)) }))
+    }
+    setGlance(null)
+  }
+
+  // Safety net: if user selected a rig before the async tractor/trailer load finished,
+  // re-hydrate the snapshot as soon as the rich objects become available. No-op otherwise.
+  useEffect(() => {
+    if (!selectedRigId || !rigs.length) return
+    const currentRig = rigs.find((r) => r.id === selectedRigId)
+    if (!currentRig) return
+
+    const hasRichTractor = tractors.some((t) => t.id === currentRig.tractor_id)
+    const hasAnyTrailerData = (currentRig.trailer_ids || []).length === 0 || trailers.length > 0
+
+    if (hasRichTractor && hasAnyTrailerData) {
+      // Re-run the resolution (re-uses the same logic)
+      const fullTractor = tractors.find((t) => t.id === currentRig.tractor_id) || null
+      const fullTrailers = (currentRig.trailer_ids || [])
+        .map((tid: string) => trailers.find((tr) => tr.id === tid))
+        .filter(Boolean) as Trailer[]
+
+      const snap = {
+        rigId: currentRig.id,
+        rigName: currentRig.rig_name,
+        overallLengthFt: currentRig.computed_total_length_ft,
+        totalAxles: currentRig.computed_total_axles,
+        tractor: fullTractor || { id: currentRig.tractor_id },
+        trailers: fullTrailers.length > 0 ? fullTrailers : (currentRig.trailer_ids || []).map((tid: string) => ({ id: tid })),
+      }
+      setSelectedRigSnapshot(snap)
+    }
+  }, [tractors, trailers, selectedRigId, rigs])
+
+  async function saveCurrentAsProfile() {
+    if (!user) {
+      alert('Log in to save equipment profiles.')
+      return
+    }
+    const suggested = `${formData.make || 'Rig'}${formData.unitNumber ? ' #' + formData.unitNumber : ''}${formData.trailerMake ? ' + ' + formData.trailerMake : ''}`
+    const name = prompt('Profile name (e.g. "Pete 389 #4721 + 53 flatbed")', suggested || 'My Equipment Profile')
+    if (!name || !name.trim()) return
+    try {
+      const supabase = createClient()
+      const rec: any = {
+        user_id: user.id,
+        profile_name: name.trim(),
+        unit_number: formData.unitNumber || null,
+        vin: formData.vin || null,
+        year: formData.year ? parseInt(String(formData.year)) : null,
+        make: formData.make || null,
+        model: formData.model || null,
+        axles: formData.axles ? Number(formData.axles) : null,
+        // Normalize to Postgres text[] literal so it works after migration 011
+        // (the column is now text[]; legacy intake used to send a plain string)
+        axle_spacing: formData.axleSpacing
+          ? `{${String(formData.axleSpacing)
+              .split(',')
+              .map((s: string) => s.trim())
+              .filter(Boolean)
+              .join(',')}}`
+          : null,
+        tire_width_in: formData.tireWidthIn ? Number(formData.tireWidthIn) : null,
+        registered_gvw_lbs: formData.registeredGvwLbs ? Number(formData.registeredGvwLbs) : null,
+        kingpin_setting_in: formData.kingpinSettingIn ? Number(formData.kingpinSettingIn) : null,
+        trailer_make: formData.trailerMake || null,
+        trailer_model: formData.trailerModel || null,
+        trailer_year: formData.trailerYear ? parseInt(String(formData.trailerYear)) : null,
+        trailer_length_ft: formData.trailerLengthFt ? Number(formData.trailerLengthFt) : null,
+      }
+      const { error } = await supabase.from('equipment_profiles').insert(rec)
+      if (error) throw error
+      await loadEquipmentProfiles()
+      alert(`Saved "${name}". It will now appear in the selector for future requests.`)
+    } catch (e: any) {
+      alert('Failed to save profile: ' + (e?.message || e))
+    }
+  }
+
+  function handleQuickGlance() {
+    const o = (formData.origin.state || '').toUpperCase()
+    const d = (formData.destination.state || '').toUpperCase()
+    const corridor = `${o || '?'} → ${d || '?'}`
+
+    // Heuristic major highways for the corridors used in this app (AL-NE demo + common long-haul). Matches History badge style.
+    let highways: string[] = ['I-40', 'I-80']
+    if ((o === 'AL' && d === 'NE') || (o === 'NE' && d === 'AL')) highways = ['I-65', 'I-70', 'I-80']
+    else if (o === 'CA' || d === 'CA') highways = ['I-5', 'I-10', 'I-40']
+    else if (o === 'TX' || d === 'TX') highways = ['I-10', 'I-20', 'I-35']
+
+    const w = Number(formData.weight) || 80000
+    const isLong = (Number(formData.length) || 60) > 60
+    const rough = Math.max(65, Math.round(((w - 80000) / 1500) * 11 + (isLong ? 55 : 0) + 50))
+
+    setGlance({
+      corridor,
+      highways,
+      roughFee: rough,
+      note: 'Preview only — Submit runs the full Permit Agent with live DOT restrictions and accurate routing engine highways.',
+    })
+  }
+
   // Ref for scrolling to results after submission
   const resultsRef = useRef<HTMLDivElement>(null)
+
+  // Fetch routing engine availability (so we can show "Live" vs "Fallback" for GraphHopper)
+  useEffect(() => {
+    fetch('/api/routing/status')
+      .then(r => r.json())
+      .then(setRoutingStatus)
+      .catch(() => setRoutingStatus(null))
+  }, [])
 
   // Debounced geocoding with cooldown protection (uses ref to avoid stale formData)
   const debouncedGeocode = useCallback((type: 'origin' | 'destination') => {
@@ -454,13 +821,26 @@ export default function PermitTestPage() {
     setLoading(true)
 
     try {
+      // Only send the original known LoadDetails keys + routing choice to the agent.
+      // New rig/cargo fields are intentionally omitted here (they are extra context for snapshots only).
+      const analyzePayload = {
+        origin: formData.origin,
+        destination: formData.destination,
+        weight: formData.weight,
+        length: formData.length,
+        width: formData.width,
+        height: formData.height,
+        originLat: formData.originLat,
+        originLon: formData.originLon,
+        destinationLat: formData.destinationLat,
+        destinationLon: formData.destinationLon,
+        routingEngine,
+        specialInstructions: manualRoute,
+      }
       const agentResponse = await fetch('/api/analyze-permit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          routingEngine, // pass the user's engine choice (osrm | graphhopper)
-        }),
+        body: JSON.stringify(analyzePayload),
       })
 
       const agentData = await agentResponse.json()
@@ -535,6 +915,37 @@ export default function PermitTestPage() {
         cost_breakdown: null,
         distance_miles: primary.distanceMiles || null,
         duration_hours: primary.durationHours || null,
+
+        // Rich snapshots (full rig + cargo) so History and analytics see exactly what the carrier submitted
+        equipment: {
+          // Legacy fields kept for compatibility
+          unitNumber: formData.unitNumber, vin: formData.vin, year: formData.year, make: formData.make, model: formData.model,
+          axles: formData.axles, axleSpacing: formData.axleSpacing, tireWidthIn: formData.tireWidthIn,
+          registeredGvwLbs: formData.registeredGvwLbs, kingpinSettingIn: formData.kingpinSettingIn,
+          trailerMake: formData.trailerMake, trailerModel: formData.trailerModel, trailerYear: formData.trailerYear, trailerLengthFt: formData.trailerLengthFt,
+          profileId: selectedProfileId,
+          // NEW smart rig snapshot (preferred when Rig Selector used)
+          rig: selectedRigSnapshot || null,
+          selectedRigId,
+          // Updated overhang snapshot (front split)
+          loadOverhangs: {
+            frontOfRigFt: loadOverhangFrontFt,
+            frontOfTrailerFt: loadOverhangFrontTrailerFt,
+            rearFt: loadOverhangRearFt,
+          },
+        },
+        cargo: {
+          description: formData.cargoDescription, makeModel: formData.cargoMakeModel, serialNumber: formData.cargoSerialNumber,
+          manufacturer: formData.cargoManufacturer, axleWeights: formData.axleWeights, grossLoadedWeight: formData.grossLoadedWeight,
+          envelope: { weight: formData.weight, length: formData.length, width: formData.width, height: formData.height },
+          // NEW: specific load dimensions (distinct from routing envelope)
+          load: {
+            weightLbs: formData.loadWeightLbs ? Number(formData.loadWeightLbs) : null,
+            lengthFt: formData.loadLengthFt ? Number(formData.loadLengthFt) : null,
+            widthFt: formData.loadWidthFt ? Number(formData.loadWidthFt) : null,
+            heightFt: formData.loadHeightFt ? Number(formData.loadHeightFt) : null,
+          },
+        },
       }
 
       const saveResponse = await fetch('/api/permit-requests', {
@@ -598,6 +1009,37 @@ export default function PermitTestPage() {
         cost_breakdown: null,
         distance_miles: option.distanceMiles || null,
         duration_hours: option.durationHours || null,
+
+        // Rich snapshots (full rig + cargo) so History and analytics see exactly what the carrier submitted
+        equipment: {
+          // Legacy fields kept for compatibility
+          unitNumber: formData.unitNumber, vin: formData.vin, year: formData.year, make: formData.make, model: formData.model,
+          axles: formData.axles, axleSpacing: formData.axleSpacing, tireWidthIn: formData.tireWidthIn,
+          registeredGvwLbs: formData.registeredGvwLbs, kingpinSettingIn: formData.kingpinSettingIn,
+          trailerMake: formData.trailerMake, trailerModel: formData.trailerModel, trailerYear: formData.trailerYear, trailerLengthFt: formData.trailerLengthFt,
+          profileId: selectedProfileId,
+          // NEW smart rig snapshot (preferred when Rig Selector used)
+          rig: selectedRigSnapshot || null,
+          selectedRigId,
+          // Updated overhang snapshot (front split)
+          loadOverhangs: {
+            frontOfRigFt: loadOverhangFrontFt,
+            frontOfTrailerFt: loadOverhangFrontTrailerFt,
+            rearFt: loadOverhangRearFt,
+          },
+        },
+        cargo: {
+          description: formData.cargoDescription, makeModel: formData.cargoMakeModel, serialNumber: formData.cargoSerialNumber,
+          manufacturer: formData.cargoManufacturer, axleWeights: formData.axleWeights, grossLoadedWeight: formData.grossLoadedWeight,
+          envelope: { weight: formData.weight, length: formData.length, width: formData.width, height: formData.height },
+          // NEW: specific load dimensions (distinct from routing envelope)
+          load: {
+            weightLbs: formData.loadWeightLbs ? Number(formData.loadWeightLbs) : null,
+            lengthFt: formData.loadLengthFt ? Number(formData.loadLengthFt) : null,
+            widthFt: formData.loadWidthFt ? Number(formData.loadWidthFt) : null,
+            heightFt: formData.loadHeightFt ? Number(formData.loadHeightFt) : null,
+          },
+        },
       }
 
       const saveResponse = await fetch('/api/permit-requests', {
@@ -818,7 +1260,66 @@ export default function PermitTestPage() {
             </ul>
           </div>
         )}
-        {/* Origin */}
+
+        {/* NEW: Rig Selector — FIRST decision per requirements. Clean, links to dedicated /equipment manager. */}
+        <div className="border border-emerald-300 bg-emerald-50 rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <div className="font-semibold text-emerald-900 flex items-center gap-2 text-base">
+                Rig Selection <span className="text-[10px] px-2 py-0.5 bg-emerald-200 text-emerald-800 rounded-full font-medium">FIRST STEP</span>
+              </div>
+              <p className="text-xs text-emerald-700">Choose a saved tractor + trailer combination (built in Equipment Manager) or go manage your fleet.</p>
+            </div>
+            <a href="/equipment" className="text-xs px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium whitespace-nowrap">Manage Equipment →</a>
+          </div>
+
+          <select
+            value={selectedRigId || ''}
+            onChange={(e) => {
+              const id = e.target.value
+              if (!id) {
+                handleSelectRig(null)
+                return
+              }
+              const rig = rigs.find((r: any) => r.id === id)
+              if (rig) handleSelectRig(rig as any)
+            }}
+            className="border border-emerald-300 bg-white p-2.5 rounded-xl text-sm w-full"
+            disabled={loadingRigs}
+          >
+            <option value="">— Custom / No saved rig (enter dimensions below) —</option>
+            {rigs.map((r: any) => (
+              <option key={r.id} value={r.id}>
+                {r.rig_name} — {r.computed_total_length_ft?.toFixed(1) || '?'} ft, {r.computed_total_axles || '?'} axles
+              </option>
+            ))}
+          </select>
+          {loadingRigs && <div className="text-xs text-emerald-600 mt-1">Loading your rigs…</div>}
+          {rigs.length === 0 && !loadingRigs && (
+            <div className="text-xs text-emerald-700 mt-1">No saved rigs yet. <a href="/equipment" className="underline">Build your first rig in the Equipment Manager</a>.</div>
+          )}
+
+          {/* Selected rig summary + mini graphical preview (when chosen) */}
+          {selectedRigId && selectedRigSnapshot && (
+            <div className="mt-3 p-3 bg-white border border-emerald-200 rounded-xl text-sm">
+              <div className="font-medium text-emerald-900 mb-1">Selected: {selectedRigSnapshot.rigName}</div>
+              <div className="text-xs text-gray-600 mb-2">Overall vehicle length (computed from 5th wheel + kingpin alignment): <b>{selectedRigSnapshot.overallLengthFt?.toFixed(1) || '?'} ft</b></div>
+              {/* Compact diagram for visual confirmation */}
+              <div className="mt-1">
+                <VehicleDiagram
+                  tractor={selectedRigSnapshot.tractor}
+                  trailers={selectedRigSnapshot.trailers}
+                  showDimensions={false}
+                  height={140}
+                  className="border-0 shadow-none"
+                />
+              </div>
+              <button type="button" onClick={() => handleSelectRig(null)} className="text-[10px] mt-1 text-emerald-700 hover:text-red-600">Clear selection</button>
+            </div>
+          )}
+        </div>
+
+        {/* Origin (Route section will follow Load in a future polish; Rig + Load now lead the flow) */}
         <div>
           <div className="flex items-center gap-2 mb-2">
             <h2 className="font-semibold flex items-center gap-2">
@@ -1052,10 +1553,241 @@ export default function PermitTestPage() {
           </div>
         </div>
 
-        {/* Load Details */}
+        {/* Legacy equipment profile selector (kept for backward compat with old saved profiles).
+           The primary path is now the clean Rig Selector at the top of the form (from dedicated Equipment page). */}
+        {equipmentProfiles.length > 0 && (
+          <div className="text-xs text-gray-500 bg-gray-50 border rounded p-2">
+            Legacy profiles available: <select value={selectedProfileId || ''} onChange={(e) => {
+              const p = equipmentProfiles.find((x: any) => x.id === e.target.value); if (p) handleSelectProfile(p)
+            }} className="border px-1 py-0.5 rounded text-xs"><option value="">None</option>{equipmentProfiles.map((p: any) => <option key={p.id} value={p.id}>{p.profile_name}</option>)}</select>
+          </div>
+        )}
+
+        {/* Load Details (Rig + Cargo + Axle weights + Overhangs) — second major decision after Rig Selector */}
+        <div>
+          <h2 className="font-semibold mb-2 text-gray-800 flex items-center gap-2">
+            Load Details (Cargo, Axle Weights, Overhangs)
+            <button type="button" onClick={() => startVoiceInput('cargoDescription')} disabled={isListening} className="text-base p-1 hover:bg-gray-100 rounded" title="Speak cargo description">🎤</button>
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+            <div className="md:col-span-2">
+              <label className="block text-xs font-medium mb-1">Description — what are you hauling?</label>
+              <input
+                value={formData.cargoDescription}
+                onChange={(e) => setFormData((p) => ({ ...p, cargoDescription: e.target.value }))}
+                className="border p-2 rounded w-full"
+                placeholder="e.g. Oversize transformer on lowboy, 42k lb compressor skid"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Manufacturer</label>
+              <input value={formData.cargoManufacturer} onChange={(e) => setFormData((p) => ({ ...p, cargoManufacturer: e.target.value }))} className="border p-2 rounded w-full" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Make / Model / SN</label>
+              <input value={formData.cargoMakeModel} onChange={(e) => setFormData((p) => ({ ...p, cargoMakeModel: e.target.value }))} className="border p-2 rounded w-full" placeholder="Serial optional" />
+            </div>
+          </div>
+
+          {/* NEW: Specific Load Dimensions — placed immediately under Manufacturer / Make-Model/SN per requirements.
+              These are distinct from the top-level routing envelope (weight/length/width/height at top of form).
+              Static capture only for now — no calculations, validation, or auto-sync. */}
+          <div className="mb-3">
+            <div className="text-xs font-medium mb-1 text-gray-600">Load Dimensions (specific cargo)</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-[10px] text-gray-500">Load Weight (lbs)</label>
+                <input
+                  type="number"
+                  value={formData.loadWeightLbs || ''}
+                  onChange={(e) => setFormData((p) => ({ ...p, loadWeightLbs: e.target.value }))}
+                  className="border p-1.5 rounded w-full text-sm"
+                  placeholder="e.g. 42000"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-500">Load Length (ft)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={formData.loadLengthFt || ''}
+                  onChange={(e) => setFormData((p) => ({ ...p, loadLengthFt: e.target.value }))}
+                  className="border p-1.5 rounded w-full text-sm"
+                  placeholder="e.g. 48"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-500">Load Width (ft)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={formData.loadWidthFt || ''}
+                  onChange={(e) => setFormData((p) => ({ ...p, loadWidthFt: e.target.value }))}
+                  className="border p-1.5 rounded w-full text-sm"
+                  placeholder="e.g. 10.5"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-500">Load Height (ft)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={formData.loadHeightFt || ''}
+                  onChange={(e) => setFormData((p) => ({ ...p, loadHeightFt: e.target.value }))}
+                  className="border p-1.5 rounded w-full text-sm"
+                  placeholder="e.g. 11.5"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Load overhangs — FRONT SPLIT per requirements:
+              - Front of Rig: contributes to overall rig length envelope (used for routing/bridge)
+              - Front of Trailer: captured for permit documentation only (no envelope impact)
+              - Rear: unchanged, still contributes to envelope */}
+          <div className="mb-3 p-3 border rounded-lg bg-amber-50 text-sm">
+            <div className="font-medium text-amber-900 mb-1">Load Overhangs</div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-gray-600">Front of Rig Overhang (ft) <span className="text-amber-600 text-[9px]">(envelope)</span></label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={loadOverhangFrontFt}
+                  onChange={(e) => setLoadOverhangFrontFt(parseFloat(e.target.value) || 0)}
+                  className="border p-1.5 rounded w-full"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-600">Front of Trailer Overhang (ft) <span className="text-amber-600 text-[9px]">(permit info only)</span></label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={loadOverhangFrontTrailerFt}
+                  onChange={(e) => setLoadOverhangFrontTrailerFt(parseFloat(e.target.value) || 0)}
+                  className="border p-1.5 rounded w-full"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-600">Rear Overhang (ft)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={loadOverhangRearFt}
+                  onChange={(e) => setLoadOverhangRearFt(parseFloat(e.target.value) || 0)}
+                  className="border p-1.5 rounded w-full"
+                />
+              </div>
+            </div>
+            <div className="text-[10px] text-amber-700 mt-1">
+              Front-of-rig + rear contribute to effective total length for routing. Trailer-front overhang is recorded for permit documentation only. All values captured in snapshot.
+            </div>
+          </div>
+
+          {/* Dynamic axle weights (driven by axles count) + auto gross + helpers */}
+          <div className="border rounded-lg p-3 bg-white">
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-medium text-sm">Axle Weight Distribution (lbs) — auto-totals to Gross</div>
+              <div className="flex gap-2 text-xs">
+                <button type="button" onClick={() => {
+                  const n = Math.max(1, Math.min(12, Number(formData.axles) || 5))
+                  const even = Math.round((Number(formData.grossLoadedWeight) || 80000) / n)
+                  const arr = Array.from({ length: n }, () => even)
+                  setFormData((p) => ({ ...p, axleWeights: arr }))
+                }} className="px-2 py-0.5 border rounded hover:bg-gray-50">Distribute Evenly</button>
+                <button type="button" onClick={() => {
+                  const sum = (formData.axleWeights || []).slice(0, Math.max(1, Math.min(12, Number(formData.axles) || 5))).reduce((a: number, b: any) => a + (Number(b) || 0), 0)
+                  setFormData((p) => ({ ...p, grossLoadedWeight: sum }))
+                }} className="px-2 py-0.5 border rounded hover:bg-gray-50">Axles → Gross</button>
+              </div>
+            </div>
+
+            {(() => {
+              const n = Math.max(1, Math.min(12, Number(formData.axles) || 5))
+              const weights: number[] = formData.axleWeights || []
+              const sum = weights.slice(0, n).reduce((a, b) => a + (Number(b) || 0), 0)
+              const gross = Number(formData.grossLoadedWeight) || 0
+              return (
+                <>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-2">
+                    {Array.from({ length: n }).map((_, i) => (
+                      <div key={i}>
+                        <label className="text-[10px] text-gray-500">Axle {i + 1}</label>
+                        <input
+                          type="number"
+                          value={weights[i] || 0}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0
+                            setFormData((prev) => {
+                              const arr = [...(prev.axleWeights || [])]
+                              arr[i] = val
+                              const newSum = arr.slice(0, n).reduce((a, b) => a + (Number(b) || 0), 0)
+                              return { ...prev, axleWeights: arr, grossLoadedWeight: newSum || prev.grossLoadedWeight }
+                            })
+                          }}
+                          className="border p-1.5 rounded w-full text-sm"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-sm">
+                    <div>
+                      <span className="font-medium">Gross Loaded Weight</span>
+                      <input
+                        type="number"
+                        value={gross}
+                        onChange={(e) => setFormData((p) => ({ ...p, grossLoadedWeight: parseFloat(e.target.value) || 0 }))}
+                        className="ml-2 w-28 border p-1 rounded"
+                      /> lbs
+                    </div>
+                    <div className="text-xs text-gray-500">Sum of shown axles: <span className="font-mono">{sum.toLocaleString()}</span></div>
+                    {gross !== sum && gross > 0 && (
+                      <div className="text-amber-600 text-xs">⚠ Gross differs from axle sum (normal for 5th-wheel/kingpin load transfer)</div>
+                    )}
+                  </div>
+                </>
+              )
+            })()}
+          </div>
+          <p className="text-[10px] text-gray-500 mt-1">Auto-calc + distribute helpers match real carrier bridge-law workflows. Values are captured on save.</p>
+        </div>
+
+        {/* Quick Route Glance — pre-submission carrier preview (exact blue card + pill style from History) */}
+        <div className="p-4 border-2 border-blue-100 bg-blue-50 rounded-xl">
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-semibold text-blue-900 text-sm">Quick Route Glance</div>
+            <button
+              type="button"
+              onClick={handleQuickGlance}
+              className="text-xs px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Preview Corridor &amp; Fee
+            </button>
+          </div>
+          <p className="text-xs text-blue-700 mb-2">Rough estimate from current origin/dest + load envelope. Real highways + DOT restrictions come from the full Submit.</p>
+
+          {glance && (
+            <div className="space-y-2 text-sm">
+              <div><span className="font-medium text-blue-900">Corridor:</span> <span className="font-mono">{glance.corridor}</span></div>
+              <div>
+                <span className="font-medium text-blue-900">Est. Major Highways:</span>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {glance.highways.map((h: string, i: number) => (
+                    <span key={i} className="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium border bg-white text-blue-800 border-blue-200">{h}</span>
+                  ))}
+                </div>
+              </div>
+              <div><span className="font-medium text-blue-900">Rough Fee Estimate:</span> <span className="font-semibold">${glance.roughFee}</span> <span className="text-xs text-blue-600">(varies by exact route &amp; permits)</span></div>
+              <div className="text-[10px] text-blue-600 italic">{glance.note}</div>
+            </div>
+          )}
+          {!glance && <div className="text-xs text-blue-600">Click the button for an instant visual before you run the full analysis.</div>}
+        </div>
+
+        {/* Load Details (original 4 fields — still the envelope sent to the routing/agent) */}
         <div>
           <h2 className="font-semibold mb-2 flex items-center gap-2">
-            Load Details
+            Load Details (Routing Envelope)
             <button
               type="button"
               onClick={() => startVoiceInput('weight')}
@@ -1121,19 +1853,33 @@ export default function PermitTestPage() {
             <button
               type="button"
               onClick={() => setRoutingEngine('graphhopper')}
+              disabled={routingStatus && !routingStatus.graphhopper?.enabled}
               className={`flex-1 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
                 routingEngine === 'graphhopper'
                   ? 'bg-emerald-600 text-white border-emerald-700'
                   : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-              }`}
+              } ${routingStatus && !routingStatus.graphhopper?.enabled ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
-              <div className="font-semibold">GraphHopper (Truck Profile)</div>
-              <div className="text-[10px] opacity-70 mt-0.5">Better truck routing • Respects height/weight/bridge data</div>
+              <div className="font-semibold flex items-center justify-center gap-2">
+                GraphHopper (Truck Profile)
+                {routingStatus && (
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded ${routingStatus.graphhopper?.enabled ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'}`}>
+                    {routingStatus.graphhopper?.enabled ? 'LIVE' : 'FALLBACK'}
+                  </span>
+                )}
+              </div>
+              <div className="text-[10px] opacity-70 mt-0.5">
+                {routingStatus?.graphhopper?.enabled 
+                  ? 'Real truck profile + bridge/weight awareness (key configured)' 
+                  : 'Better truck routing • Respects height/weight/bridge data (key missing → OSRM)'}
+              </div>
             </button>
           </div>
           <p className="text-[11px] text-gray-500 mt-1.5">
-            GraphHopper uses real truck dimensions and avoids many low bridges / weight-restricted segments that OSRM ignores.
-            Requires <code>GRAPHHOPPER_API_KEY</code> (falls back automatically).
+            GraphHopper uses real truck dimensions (length/width/height/weight) and avoids low bridges / weight-restricted roads that basic OSRM ignores.
+            {routingStatus?.graphhopper?.enabled 
+              ? ' ✓ Live key detected — truck profile is active.' 
+              : ' Add GRAPHHOPPER_API_KEY to .env.local to enable real truck-aware routing.'}
           </p>
         </div>
 
@@ -1157,7 +1903,7 @@ export default function PermitTestPage() {
             onChange={(e) => setManualRoute(e.target.value)}
             className="border p-3 rounded w-full text-sm min-h-[60px] resize-y"
           />
-          <p className="text-[10px] text-gray-500 mt-1">Voice input or type. Used for the "Change Route" feature later.</p>
+          <p className="text-[10px] text-gray-500 mt-1">Voice input or type. Affects route ranking and suggestions.</p>
         </div>
         </div> {/* End form card */}
 

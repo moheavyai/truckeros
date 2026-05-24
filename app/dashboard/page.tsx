@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import AppHeader from '@/components/AppHeader'
 
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
@@ -81,38 +82,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Professional Header */}
-      <header className="bg-white border-b sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <a href="/" className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-black rounded flex items-center justify-center">
-                <span className="text-white text-lg font-bold tracking-tighter">T</span>
-              </div>
-              <div>
-                <span className="text-xl font-semibold tracking-tight">TruckerOS</span>
-              </div>
-            </a>
-            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full font-medium">Permit Agent</span>
-          </div>
-
-          <div className="flex items-center gap-4 text-sm">
-            <a href="/dashboard" className="text-gray-700 hover:text-black font-medium">Dashboard</a>
-            <a href="/permit-test" className="text-gray-700 hover:text-black font-medium">New Analysis</a>
-            <a href="/history" className="text-gray-700 hover:text-black font-medium">History</a>
-            <div className="w-px h-4 bg-gray-300 mx-1" />
-            {user && (
-              <span className="text-gray-600 hidden md:inline">{user.email}</span>
-            )}
-            <button 
-              onClick={handleLogout} 
-              className="px-4 py-1.5 text-sm border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppHeader user={user} activePage="dashboard" />
 
       <main className="max-w-7xl mx-auto px-6 py-10">
         {/* Welcome Header */}
@@ -126,7 +96,7 @@ export default function Dashboard() {
         </div>
 
         {/* Primary CTA */}
-        <div className="mb-10">
+        <div className="mb-10 flex flex-wrap gap-3">
           <a
             href="/permit-test"
             className="group inline-flex items-center gap-3 bg-black hover:bg-gray-900 text-white px-8 py-4 rounded-xl text-base font-semibold transition-all active:scale-[0.985]"
@@ -134,7 +104,13 @@ export default function Dashboard() {
             <span>Start New Route Analysis</span>
             <span className="text-xl group-hover:translate-x-0.5 transition">→</span>
           </a>
-          <p className="text-sm text-gray-500 mt-2 ml-1">Analyze load dimensions against real state and provincial rules</p>
+          <a
+            href="/equipment"
+            className="inline-flex items-center gap-3 border border-gray-300 hover:bg-white px-6 py-4 rounded-xl text-base font-semibold transition-all text-gray-800"
+          >
+            🚛 Manage Equipment &amp; Rigs
+          </a>
+          <p className="text-sm text-gray-500 mt-2 ml-1 basis-full">Build accurate tractor + trailer profiles with graphical previews. Then use them in every analysis.</p>
         </div>
 
         {/* Stats + Quick Cards */}
@@ -225,8 +201,8 @@ export default function Dashboard() {
               <div className="flex gap-3">
                 <div className="text-lg">🚛</div>
                 <div>
-                  <div className="font-medium">Review escort requirements</div>
-                  <div className="text-gray-600 text-xs">Some states require escorts even before permits are triggered.</div>
+                  <div className="font-medium">Use the Rig Builder first</div>
+                  <div className="text-gray-600 text-xs">Save precise tractor/trailer measurements (5th wheel, kingpin, axle spacing) once — then they prefill every permit request with accurate overall length.</div>
                 </div>
               </div>
             </div>

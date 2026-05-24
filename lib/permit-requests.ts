@@ -29,6 +29,12 @@ export interface SavePermitRequestInput {
   width: number
   height: number
 
+  // NEW (Intake Form v2): full equipment rig + cargo snapshots captured at approval time
+  // These are stored as JSONB on permit_requests so History and future analytics
+  // can show exactly which tractor/trailer/load the carrier submitted.
+  equipment?: Record<string, any>
+  cargo?: Record<string, any>
+
   route_corridor?: string[]
   permit_required_states?: string[]
   requires_permit?: boolean

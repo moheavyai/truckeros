@@ -1,6 +1,6 @@
 // agents/permit-agent.ts
 
-import { buildIntelligentCorridor } from '@/lib/build-corridor'
+import { buildIntelligentCorridor, type CorridorResult } from '@/lib/build-corridor'
 import type { RoutingEngine } from '@/lib/routing'
 import { supabase } from '@/lib/supabase'
 import type { StatePermitRule } from '@/types/permit'
@@ -54,8 +54,12 @@ export interface LoadDetails {
   // Used for the "Change Route" manual override feature
   manualRoute?: string[]
 
-  // NEW (2026-05): Routing engine selection + truck profile for GraphHopper
+  // Routing engine selection (GraphHopper truck profile or OSRM baseline)
   routingEngine?: RoutingEngine
+
+  // NEW: Optional raw special instructions / route preferences (e.g. "avoid CA, prefer southern route, I-40").
+  // Threaded to buildIntelligentCorridor for filtering/reranking. Override (manualRoute array) takes precedence.
+  specialInstructions?: string
 }
 
 export interface AnalyzedRouteOption {
@@ -133,6 +137,7 @@ function validateLoadDetails(details: LoadDetails): string[] {
  * Intelligent routing via OSRM/GraphHopper + Nominatim is the ONLY way corridors
  * are built. There is no naive state-pair fallback. Manual route override is the
  * sole exception (for the "Change Route" feature).
+ * specialInstructions on LoadDetails (if present) is passed through to enable preference-biased corridor selection.
  */
 async function buildRouteCorridor(load: LoadDetails): Promise<Array<{
   routeCorridor: string[]
@@ -168,7 +173,7 @@ async function buildRouteCorridor(load: LoadDetails): Promise<Array<{
   const routingEngine: RoutingEngine = load.routingEngine || 'osrm'
 
   // Get multiple route options from selected engine (OSRM or GraphHopper truck profile)
-  const corridors = await buildIntelligentCorridor(
+  const corridors: CorridorResult[] = await buildIntelligentCorridor(
     load.originLat!,
     load.originLon!,
     load.destinationLat!,
@@ -182,7 +187,8 @@ async function buildRouteCorridor(load: LoadDetails): Promise<Array<{
       width: load.width,
       height: load.height,
       weight: load.weight,
-    }
+    },
+    load.specialInstructions
   )
 
   if (corridors.length === 0) {
@@ -203,9 +209,13 @@ async function buildRouteCorridor(load: LoadDetails): Promise<Array<{
     if (corridor.engineNote) {
       notes.push(corridor.engineNote)
     }
+    // Surface any user pref note (typed via imported CorridorResult; no any cast needed for new field)
+    if (corridor.userPreferenceNote) {
+      notes.push(corridor.userPreferenceNote)
+    }
 
     const option = await analyzeCorridor(load, corridor, notes)
-    // Attach engine metadata to the final option for UI display
+    // Attach engine metadata to the final option for UI display (pre-existing casts on local anonymous shape from analyzeCorridor return; our new field no longer requires any)
     ;(option as any).routingEngine = corridor.engine
     ;(option as any).routingEngineNote = corridor.engineNote
     analyzedOptions.push(option)
@@ -279,10 +289,20 @@ async function analyzeCorridor(
       }
 
       // Determine effective thresholds (fall back to legal_*)
-      const permitWidth  = rule.permit_threshold_width_ft  ?? rule.legal_width_ft
-      const permitHeight = rule.permit_threshold_height_ft ?? rule.legal_height_ft
-      const permitLength = rule.permit_threshold_length_ft ?? rule.legal_length_ft
-      const permitWeight = rule.permit_threshold_weight_lbs ?? rule.legal_weight_lbs
+      let permitWidth  = rule.permit_threshold_width_ft  ?? rule.legal_width_ft
+      let permitHeight = rule.permit_threshold_height_ft ?? rule.legal_height_ft
+      let permitLength = rule.permit_threshold_length_ft ?? rule.legal_length_ft
+      let permitWeight = rule.permit_threshold_weight_lbs ?? rule.legal_weight_lbs
+
+      // Fallback to standard US oversize thresholds when the DB effective value
+      // (after ??) is null/undefined/<=0 (or NaN). This handles seeded state_permit_rules
+      // rows that only populate curfews/notes/pricing but leave dimension columns
+      // NULL or 0 (causing 11.5 > null === false etc.). Respects explicit positive
+      // per-state DB values when present.
+      if (permitWidth  == null || permitWidth  <= 0 || (typeof permitWidth === 'number' && Number.isNaN(permitWidth))) permitWidth  = 8.5
+      if (permitHeight == null || permitHeight <= 0 || (typeof permitHeight === 'number' && Number.isNaN(permitHeight))) permitHeight = 13.5
+      if (permitLength == null || permitLength <= 0 || (typeof permitLength === 'number' && Number.isNaN(permitLength))) permitLength = 60
+      if (permitWeight == null || permitWeight <= 0 || (typeof permitWeight === 'number' && Number.isNaN(permitWeight))) permitWeight = 80000
 
       // === Permit Required? ===
       const needsPermit =

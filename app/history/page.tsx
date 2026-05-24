@@ -3,6 +3,10 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import AppHeader from '@/components/AppHeader'
+import BrandedLoader from '@/components/BrandedLoader'
+import ErrorDisplay from '@/components/ErrorDisplay'
+import { getRestrictionsForCorridor } from '@/lib/dot-corridor-restrictions'
 
 interface PermitRequest {
   id: string
@@ -16,6 +20,7 @@ interface PermitRequest {
   width: number
   height: number
   route_corridor: string[] | null
+  highways: string[] | null
   permit_required_states: string[] | null
   requires_permit: boolean | null
   reasons: string[] | null
@@ -26,9 +31,22 @@ interface PermitRequest {
   cost_breakdown?: any
 }
 
+interface PortalSubmission {
+  id: string
+  permit_request_id: string
+  state_code: string
+  status: string
+  permit_number: string | null
+  portal_fees: number | null
+  human_approved: boolean
+  created_at: string
+  route_comparison?: any
+}
+
 export default function HistoryPage() {
   const [user, setUser] = useState<any>(null)
   const [requests, setRequests] = useState<PermitRequest[]>([])
+  const [submissions, setSubmissions] = useState<PortalSubmission[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedRequest, setSelectedRequest] = useState<PermitRequest | null>(null)
   const router = useRouter()
@@ -46,16 +64,31 @@ export default function HistoryPage() {
       } else {
         setUser(session.user)
 
-        // Fetch user's permit history (RLS also enforces this, but explicit filter is clear)
-        const { data, error } = await supabase
+        // Fetch user's permit history
+        const { data: prData, error: prError } = await supabase
           .from('permit_requests')
           .select('*')
           .eq('user_id', session.user.id)
           .order('created_at', { ascending: false })
           .limit(100)
 
-        if (!error && data) {
-          setRequests(data as PermitRequest[])
+        if (!prError && prData) {
+          const requests = prData as PermitRequest[]
+          setRequests(requests)
+
+          // Fetch associated portal submissions
+          if (requests.length > 0) {
+            const requestIds = requests.map(r => r.id)
+            const { data: subData } = await supabase
+              .from('portal_submissions')
+              .select('*')
+              .in('permit_request_id', requestIds)
+              .order('created_at', { ascending: false })
+
+            if (subData) {
+              setSubmissions(subData as PortalSubmission[])
+            }
+          }
         }
       }
       setLoading(false)
@@ -79,14 +112,12 @@ export default function HistoryPage() {
   // Branded loading state (consistent across app)
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-14 h-14 bg-black rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-            <span className="text-white text-3xl font-bold tracking-tighter">T</span>
-          </div>
-          <p className="text-gray-700 font-semibold text-lg">Checking authentication...</p>
-          <p className="text-gray-500 text-sm mt-1">Loading your analysis history</p>
-        </div>
+      <div className="min-h-screen bg-gray-50">
+        <AppHeader />
+        <BrandedLoader 
+          message="Loading your analysis history..." 
+          subMessage="Fetching your previous permit requests and portal submissions"
+        />
       </div>
     )
   }
@@ -123,36 +154,7 @@ export default function HistoryPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Consistent Header */}
-      <header className="border-b bg-white sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <a href="/" className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-black rounded flex items-center justify-center">
-                <span className="text-white text-lg font-bold tracking-tighter">T</span>
-              </div>
-              <span className="text-xl font-semibold tracking-tight">TruckerOS</span>
-            </a>
-            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full font-medium">Permit Agent</span>
-          </div>
-
-          <div className="flex items-center gap-4 text-sm">
-            <a href="/dashboard" className="text-gray-700 hover:text-black font-medium">Dashboard</a>
-            <a href="/permit-test" className="text-gray-700 hover:text-black font-medium">New Analysis</a>
-            <a href="/history" className="text-black font-semibold">History</a>
-            <div className="w-px h-4 bg-gray-300 mx-1" />
-            {user && (
-              <span className="text-gray-600 hidden md:inline text-sm">{user.email}</span>
-            )}
-            <button
-              onClick={handleLogout}
-              className="px-4 py-1.5 text-sm border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppHeader user={user} activePage="history" />
 
       <main className="max-w-7xl mx-auto px-6 py-10">
         <div className="mb-8">
@@ -229,6 +231,12 @@ export default function HistoryPage() {
                           >
                             View
                           </button>
+                          <a
+                            href={`/portal-assist?requestId=${req.id}`}
+                            className="text-sm px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition"
+                          >
+                            Portal Assist
+                          </a>
                         </td>
                       </tr>
                     )
@@ -300,6 +308,55 @@ export default function HistoryPage() {
                 </div>
               </div>
 
+              {/* Enhanced Highway-level visualization (matches live results style) */}
+              {selectedRequest.highways && selectedRequest.highways.length > 0 && (
+                <div className="p-4 border-2 border-blue-100 rounded-xl bg-blue-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="font-semibold text-blue-900 text-sm">Key Highways / Interstates</div>
+                    <span className="text-[10px] px-2 py-0.5 bg-blue-200 text-blue-800 rounded-full font-medium">From routing engine</span>
+                  </div>
+
+                  {(() => {
+                    // Compute relevant DOT restrictions for this saved request
+                    const relevantRestrictions = getRestrictionsForCorridor(
+                      selectedRequest.route_corridor || [],
+                      selectedRequest.highways || []
+                    )
+
+                    return (
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedRequest.highways.map((hwy: string, i: number) => {
+                          // Check if this highway is mentioned in any relevant restriction
+                          const hasRestriction = relevantRestrictions.some(r =>
+                            r.highway.toLowerCase().includes(hwy.toLowerCase().replace(/\s/g, '')) ||
+                            r.description.toLowerCase().includes(hwy.toLowerCase())
+                          )
+
+                          return (
+                            <span
+                              key={i}
+                              className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border transition-all ${
+                                hasRestriction
+                                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                  : 'bg-white text-blue-800 border-blue-200'
+                              }`}
+                              title={hasRestriction ? "This highway has known restrictions in the loaded DOT data" : ""}
+                            >
+                              {hwy}
+                              {hasRestriction && <span className="ml-1 text-amber-600">⚠</span>}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
+
+                  <p className="text-[10px] text-blue-700 mt-2">
+                    Amber = highway matches known restrictions from State DOT open data.
+                  </p>
+                </div>
+              )}
+
               {/* Permit Status */}
               <div>
                 <div className="text-gray-500 text-xs mb-1">PERMIT STATUS</div>
@@ -331,6 +388,33 @@ export default function HistoryPage() {
                   </ul>
                 </div>
               )}
+
+              {/* Portal Submissions (new unified view) */}
+              {(() => {
+                const related = submissions.filter(s => s.permit_request_id === selectedRequest.id)
+                if (related.length === 0) return null
+
+                return (
+                  <div>
+                    <div className="text-gray-500 text-xs mb-2">PORTAL SUBMISSIONS</div>
+                    <div className="space-y-2">
+                      {related.map((sub, i) => (
+                        <div key={i} className="p-3 bg-gray-50 border rounded text-xs">
+                          <div className="flex justify-between">
+                            <span className="font-semibold">{sub.state_code}</span>
+                            <span className={`px-2 rounded ${sub.human_approved ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {sub.status}
+                            </span>
+                          </div>
+                          {sub.permit_number && <div>Permit #: <strong>{sub.permit_number}</strong></div>}
+                          {sub.portal_fees != null && <div>Fees: ${sub.portal_fees}</div>}
+                          <div className="text-[10px] text-gray-500 mt-1">{new Date(sub.created_at).toLocaleString()}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* Cost */}
               {selectedRequest.estimated_cost != null && (
