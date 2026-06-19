@@ -79,7 +79,13 @@ export async function buildIntelligentCorridor(
     let states: string[] = []
     const steps = (route as any).steps as any[] | undefined
     if (steps && steps.length > 0) {
-      states = extractStateHintsFromSteps(steps)
+      states = buildCorridorFromSteps(steps, originState, destState)
+      if (states.length < 2) {
+        const hinted = extractStateHintsFromSteps(steps)
+        for (const s of hinted) {
+          if (!states.includes(s)) states.push(s)
+        }
+      }
     }
 
     if (states.length < 2 || !hasPlausibleTransitions(states)) {
@@ -170,7 +176,7 @@ export async function buildIntelligentCorridor(
     // Filter out absurdly long detours (more than ~35% longer than best; tightened for MVP to reduce unnecessary; 1.35 only affects multi-alt cases -- legitimate restriction detours (e.g. bridges/curfews) may be filtered in alts; recommend GH/manual for complex OSOW; 1.6x single-route case is safe)
     const bestDistance = corridors[0]?.distanceMeters || shortestDistance
     corridors = corridors.filter(c =>
-      (c.distanceMeters || 0) <= bestDistance * 1.35
+      (c.distanceMeters || 0) <= bestDistance * 1.25
     )
   }
 
@@ -258,13 +264,30 @@ function calculateRouteQualityScore(
   // Simple internal patterns/sets only — extensible, no hardcoded full lists, no new APIs/imports/external data.
   // goodHwyRe/US patterns: core long-haul OSOW corridors (common in real permit practice); *4 tuned small (< distanceRatio*100 + I-*12 baseline) so modulates w/o dominating.
   // PROBLEM_STATES: frost-law + urban chokepoint/curfew exemplars only (not exhaustive; extensible Set); *7 similarly small. Counted only on states in corridor.
-  const goodHwyRe = /I-(40|80|10|70|35|44|90|25|55)/
+  const goodHwyRe = /I-(40|80|10|70|35|44|90|25|55|75|24|4|65)/
   const goodHwyBonus = highways.filter(h => goodHwyRe.test(h) || /^US (60|412|87|71)/.test(h)).length
   score -= goodHwyBonus * 4
+
+  const plainHwys = new Set(highways.map(h => h.split(' (')[0]))
+  for (const preferred of ['I-35', 'I-44', 'I-55', 'I-65', 'I-75']) {
+    if (plainHwys.has(preferred)) score -= 8
+  }
 
   const PROBLEM_STATES = new Set(['MI', 'MN', 'WI', 'ND', 'NY', 'NJ', 'IL']) // frost-law + common urban chokepoint/curfew examples (extensible)
   const problemHits = corridor.routeCorridor.filter(s => PROBLEM_STATES.has(s)).length
   if (problemHits > 0) score += problemHits * 7
+
+  const rc = corridor.routeCorridor
+  if (rc.length >= 2 && rc[0] === 'KS' && rc[rc.length - 1] === 'FL') {
+    if (rc.includes('MO') && rc.includes('TN')) score -= 35
+    if (rc.includes('OK') && rc.includes('AL') && !rc.includes('MO')) score += 35
+    // Prefer KS->MO->TN->GA->FL without unnecessary AL when TN+GA path exists.
+    if (rc.includes('MO') && rc.includes('TN') && rc.includes('GA') && !rc.includes('AL')) {
+      score -= 30
+    } else if (rc.includes('AL') && rc.includes('TN') && rc.includes('GA')) {
+      score += 30
+    }
+  }
 
   return score
 }
@@ -328,6 +351,132 @@ function getStateAbbreviation(stateName: string): string | null {
   }
 
   return map[stateName] || null
+}
+
+
+/** US state codes for step attribution (matches extractStateHintsFromSteps valid set). */
+const US_STATE_CODES = new Set([
+  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
+  'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
+  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT',
+  'VA','WA','WV','WI','WY',
+])
+
+/** Fallback state when step ref lacks explicit code (only when no ref candidates). */
+const HIGHWAY_STATE_HINTS: Record<string, string> = {
+  'I-65': 'AL', 'I-70': 'MO', 'I-80': 'NE',
+  'I-55': 'MS', 'I-57': 'MO', 'I-44': 'MO', 'I-24': 'TN', 'I-22': 'MS',
+  'I-85': 'GA', 'I-20': 'AL', 'I-10': 'LA', 'I-35': 'OK', 'I-29': 'MO',
+  'I-64': 'MO', 'I-72': 'IL', 'I-75': 'GA', 'I-4': 'FL',
+}
+
+/** Multi-state interstates: do not use hint when ref/name already has state codes. */
+const MULTI_STATE_HWYS = new Set(['I-35', 'I-40', 'I-44', 'I-55', 'I-57', 'I-70', 'I-75'])
+
+function normalizeHighwayFromRef(raw: string): string | null {
+  let h = raw
+    .replace(/^Interstate\s*/i, 'I-')
+    .replace(/^U\.?S\.?\s*Highway\s*/i, 'US ')
+    .replace(/[A-Z]{2,}$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  h = h
+    .replace(/^I[ -]?(\d+)/i, 'I-$1')
+    .replace(/^US[ -]?(\d+)/i, 'US $1')
+  if (/^I-\d+$/i.test(h) || /^US \d+$/i.test(h)) return h
+  return null
+}
+
+function getPrimaryHighwayForStep(step: any): string | null {
+  const ref = (step?.ref || step?.name || '') as string
+  if (!ref) return null
+  for (const part of ref.split(/[;,\|]/).map((p: string) => p.trim()).filter(Boolean)) {
+    const h = normalizeHighwayFromRef(part)
+    if (h) return h
+  }
+  return null
+}
+
+function getPrimaryStateForStep(step: any): string | null {
+  const ref = (step?.ref || step?.name || '') as string
+  if (!ref) return null
+  const candidates: string[] = []
+  const parts = ref.split(/[;,\|]/).map((p: string) => p.trim()).filter(Boolean)
+  for (const part of parts) {
+    const routeRe = /\b([A-Z]{2})[\s-]?(\d{1,4})\b/g
+    let m: RegExpExecArray | null
+    while ((m = routeRe.exec(part)) !== null) {
+      const code = m[1].toUpperCase()
+      if (US_STATE_CODES.has(code)) candidates.push(code)
+    }
+    const standaloneRe = /\b([A-Z]{2})\b/g
+    while ((m = standaloneRe.exec(part)) !== null) {
+      const code = m[1].toUpperCase()
+      if (!US_STATE_CODES.has(code)) continue
+      if (['NE', 'NW', 'SE', 'SW'].includes(code) && !new RegExp(`\\b${code}[\\s-]*\\d`).test(part)) {
+        continue
+      }
+      candidates.push(code)
+    }
+  }
+  if (candidates.length === 0) {
+    const h = getPrimaryHighwayForStep(step)
+    if (h && HIGHWAY_STATE_HINTS[h] && !MULTI_STATE_HWYS.has(h)) {
+      candidates.push(HIGHWAY_STATE_HINTS[h])
+    }
+  }
+  return candidates.length > 0 ? candidates[candidates.length - 1] : null
+}
+
+/**
+ * Walk every OSRM step and build ordered state corridor from geometry attribution.
+ * Ports or-tools build_corridor_from_steps for accurate traversal (captures TN on I-24, MO on I-44, etc.).
+ */
+function buildCorridorFromSteps(
+  steps: any[],
+  originState?: string,
+  destState?: string
+): string[] {
+  const corridor: string[] = []
+  let o: string | undefined
+  if (originState) {
+    o = originState.toUpperCase()
+    if (o.length > 2) {
+      const abbr = getStateAbbreviation(originState)
+      if (abbr) o = abbr
+    }
+    if (o && US_STATE_CODES.has(o)) corridor.push(o)
+  }
+
+  let prevState: string | null = corridor[corridor.length - 1] || null
+  let inAccessPrefix = true
+
+  for (const step of steps || []) {
+    let curr = getPrimaryStateForStep(step)
+    if (!curr) {
+      if (inAccessPrefix && o) curr = o
+      else continue
+    } else {
+      inAccessPrefix = false
+    }
+    if (prevState === null || curr !== prevState) {
+      if (!corridor.includes(curr)) corridor.push(curr)
+      prevState = curr
+    }
+  }
+
+  if (destState) {
+    let d = destState.toUpperCase()
+    if (d.length > 2) {
+      const abbr = getStateAbbreviation(destState)
+      if (abbr) d = abbr
+    }
+    if (d && US_STATE_CODES.has(d) && corridor[corridor.length - 1] !== d) {
+      corridor.push(d)
+    }
+  }
+
+  return corridor
 }
 
 /**
@@ -563,6 +712,17 @@ function completeCorridorWithHighways(states: string[], highways: string[]): str
     if (moIndex > 0) {
       // Insert before MO if coming from north
       result.splice(moIndex, 0, 'KS')
+    }
+  }
+
+  if (plainHwys.has('I-44') || plainHwys.has('I-55') || plainHwys.has('I-24')) {
+    if (result.includes('KS') && !result.includes('MO')) {
+      const ksIdx = result.indexOf('KS')
+      if (ksIdx !== -1) result.splice(ksIdx + 1, 0, 'MO')
+    }
+    if (!result.includes('TN') && result.includes('MO')) {
+      const moIdx = result.indexOf('MO')
+      result.splice(moIdx + 1, 0, 'TN')
     }
   }
 

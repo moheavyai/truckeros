@@ -1,6 +1,7 @@
 // agents/permit-agent.ts
 
 import { buildIntelligentCorridor, type CorridorResult } from '@/lib/build-corridor'
+import { snapToStateHighway } from '@/lib/snap-highway'
 import type { RoutingEngine } from '@/lib/routing'
 import { supabase } from '@/lib/supabase'
 import type { StatePermitRule } from '@/types/permit'
@@ -172,12 +173,16 @@ async function buildRouteCorridor(load: LoadDetails): Promise<Array<{
   // Determine routing engine (defaults to OSRM for full backward compatibility)
   const routingEngine: RoutingEngine = load.routingEngine || 'osrm'
 
+  // Snap origin/destination to nearest state highway (avoids local/county permits by default)
+  const oSnap = await snapToStateHighway(load.originLat!, load.originLon!)
+  const dSnap = await snapToStateHighway(load.destinationLat!, load.destinationLon!)
+
   // Get multiple route options from selected engine (OSRM or GraphHopper truck profile)
   const corridors: CorridorResult[] = await buildIntelligentCorridor(
-    load.originLat!,
-    load.originLon!,
-    load.destinationLat!,
-    load.destinationLon!,
+    oSnap.lat,
+    oSnap.lon,
+    dSnap.lat,
+    dSnap.lon,
     load.origin?.state,
     load.destination?.state,
     routingEngine,

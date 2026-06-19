@@ -7,6 +7,7 @@ import AppHeader from '@/components/AppHeader'
 import BrandedLoader from '@/components/BrandedLoader'
 import ErrorDisplay from '@/components/ErrorDisplay'
 import { getRestrictionsForCorridor } from '@/lib/dot-corridor-restrictions'
+import { formatHighwayForDisplay } from '@/lib/format-highway-display'
 
 interface PermitRequest {
   id: string
@@ -29,6 +30,11 @@ interface PermitRequest {
   distance_miles: number | null
   duration_hours: number | null
   cost_breakdown?: any
+  // Support for rich or-tools saved data (permitReady/permitWarnings) so history can show correct status even if permit_required_states not populated in older saves.
+  permitReady?: boolean | null
+  permitWarnings?: string[] | null
+  permit_ready?: boolean | null
+  permit_warnings?: string[] | null
 }
 
 interface PortalSubmission {
@@ -134,9 +140,14 @@ export default function HistoryPage() {
 
   const getPermitStatus = (req: PermitRequest) => {
     const count = req.permit_required_states?.length || 0
-    if (count > 0) {
+    // Support saved rich data: show "Permit Required" (or the states count) if permitReady true or has warnings (as used in permit-test results).
+    // This fixes history incorrectly showing "No Permit Required" / "No Permit Needed" for or-tools cases with permitReady + warnings.
+    const hasPermitReady = (req as any).permitReady === true || (req as any).permit_ready === true
+    const hasWarnings = (Array.isArray((req as any).permitWarnings) && (req as any).permitWarnings.length > 0) ||
+                        (Array.isArray((req as any).permit_warnings) && (req as any).permit_warnings.length > 0)
+    if (count > 0 || hasPermitReady || hasWarnings) {
       return {
-        text: `${count} State${count > 1 ? 's' : ''} Require Permit`,
+        text: count > 0 ? `${count} State${count > 1 ? 's' : ''} Require Permit` : 'Permit Required',
         color: 'text-orange-600 bg-orange-50 border-orange-200',
       }
     }
@@ -213,8 +224,22 @@ export default function HistoryPage() {
                             {req.length}' × {req.width}' × {req.height}'
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-gray-600 max-w-[220px] truncate" title={corridor}>
-                          {corridor}
+                        <td className="px-6 py-4 text-gray-600" title={corridor}>
+                          <div className="flex flex-wrap gap-0.5">
+                            {(req.route_corridor || []).map((st: string, i: number) => {
+                              const sub = submissions.find(s => s.permit_request_id === req.id && s.state_code === st)
+                              let cls = 'bg-gray-200 text-gray-600'
+                              if (sub) {
+                                const sl = (sub.status || '').toLowerCase()
+                                if (sl.includes('pdf') || sl.includes('received') || sl.includes('complete')) cls = 'bg-emerald-500 text-white'
+                                else if (sl.includes('applied') || sl.includes('apply') || sl.includes('pending') || sl.includes('submit') || sl.includes('prefilled') || sl.includes('submitted')) cls = 'bg-yellow-500 text-white'
+                                else cls='bg-gray-400 text-white'
+                              } else if ((req.permit_required_states || []).includes(st)) {
+                                cls = 'bg-red-500 text-white'
+                              }
+                              return <span key={i} className={`px-1 py-px text-[9px] rounded font-mono ${cls}`}>{st}</span>
+                            })}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${status.color}`}>
@@ -300,11 +325,19 @@ export default function HistoryPage() {
               <div>
                 <div className="text-gray-500 text-xs mb-1">ROUTE CORRIDOR</div>
                 <div className="flex flex-wrap gap-1">
-                  {(selectedRequest.route_corridor || []).map((state, i) => (
-                    <span key={i} className="px-2 py-0.5 bg-gray-100 rounded text-xs font-mono">
-                      {state}
-                    </span>
-                  ))}
+                  {(selectedRequest.route_corridor || []).map((state, i) => {
+                    const sub = submissions.find(s => s.permit_request_id === selectedRequest.id && s.state_code === state)
+                    let cls = 'bg-gray-100 text-gray-700'
+                    if (sub) {
+                      const sl = (sub.status || '').toLowerCase()
+                      if (sl.includes('pdf') || sl.includes('received') || sl.includes('complete')) cls = 'bg-emerald-500 text-white'
+                      else if (sl.includes('applied') || sl.includes('apply') || sl.includes('pending') || sl.includes('submit') || sl.includes('prefilled') || sl.includes('submitted')) cls = 'bg-yellow-500 text-white'
+                      else cls = 'bg-gray-400 text-white'
+                    } else if ((selectedRequest.permit_required_states || []).includes(state)) {
+                      cls = 'bg-red-500 text-white'
+                    }
+                    return <span key={i} className={`px-2 py-0.5 rounded text-xs font-mono ${cls}`}>{state}</span>
+                  })}
                 </div>
               </div>
 
@@ -327,9 +360,10 @@ export default function HistoryPage() {
                       <div className="flex flex-wrap gap-1.5">
                         {selectedRequest.highways.map((hwy: string, i: number) => {
                           // Check if this highway is mentioned in any relevant restriction
+                          const displayHwy = formatHighwayForDisplay(hwy)
                           const hasRestriction = relevantRestrictions.some(r =>
-                            r.highway.toLowerCase().includes(hwy.toLowerCase().replace(/\s/g, '')) ||
-                            r.description.toLowerCase().includes(hwy.toLowerCase())
+                            r.highway.toLowerCase().includes(displayHwy.toLowerCase().replace(/\s/g, '')) ||
+                            r.description.toLowerCase().includes(displayHwy.toLowerCase())
                           )
 
                           return (
@@ -342,7 +376,7 @@ export default function HistoryPage() {
                               }`}
                               title={hasRestriction ? "This highway has known restrictions in the loaded DOT data" : ""}
                             >
-                              {hwy}
+                              {displayHwy}
                               {hasRestriction && <span className="ml-1 text-amber-600">⚠</span>}
                             </span>
                           )

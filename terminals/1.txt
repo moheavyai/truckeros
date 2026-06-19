@@ -1,0 +1,32 @@
+---
+pid: 18452
+cwd: "C:\Users\andre\truckeros"
+command: "cd C:\\Users\\andre\\truckeros; npm run dev"
+started_at: 2026-06-17T20:00:58.580Z
+running_for_ms: 0
+---
+
+> truckeros@0.1.0 dev
+> next dev --webpack
+
+▲ Next.js 16.2.6 (webpack)
+⚠ Port 3000 is in use by process 17172, using available port 3001 instead.
+- Local:         http://localhost:3001
+- Network:       http://10.47.151.54:3001
+- Environments: .env.local
+✓ Ready in 881ms
+[?25h
+⨯ Another next dev server is already running.
+
+- Local:        http://localhost:3000
+- PID:          17172
+- Dir:          C:\Users\andre\truckeros
+- Log:          .next\dev\logs\next-development.log
+
+Run taskkill /PID 17172 /F to stop it.
+
+---
+exit_code: 1
+elapsed_ms: 3720
+ended_at: 2026-06-17T20:01:02.000Z
+---

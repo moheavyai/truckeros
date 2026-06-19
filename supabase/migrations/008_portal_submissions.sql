@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS portal_submissions (
 
   state_code text NOT NULL CHECK (char_length(state_code) = 2),
   status text NOT NULL DEFAULT 'initiated' CHECK (status IN (
-    'initiated', 'prefilled', 'submitted', 'approved', 'rejected', 'needs_correction'
+    'initiated', 'prefilled', 'submitted', 'approved', 'rejected', 'needs_correction', 'pdf-received'
   )),
 
   our_recommended_corridor jsonb,

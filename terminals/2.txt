@@ -1,0 +1,27 @@
+---
+pid: 27772
+cwd: "C:\Users\andre\truckeros"
+command: "$env:ORTOOLS_SERVICE_URL='http://127.0.0.1:59999/optimize-route'; $env:ORTOOLS_TIMEOUT_MS='2000'; cd C:\\Users\\andre\\truckeros; npx next dev --port 3002"
+started_at: 2026-06-17T20:01:35.678Z
+running_for_ms: 0
+---
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3002
+- Network:       http://10.47.151.54:3002
+- Environments: .env.local
+✓ Ready in 573ms
+[?25h⨯ Another next dev server is already running.
+
+
+- Local:        http://localhost:3000
+- PID:          17172
+- Dir:          C:\Users\andre\truckeros
+- Log:          .next\dev\logs\next-development.log
+
+Run taskkill /PID 17172 /F to stop it.
+
+---
+exit_code: 1
+elapsed_ms: 3406
+ended_at: 2026-06-17T20:01:39.000Z
+---

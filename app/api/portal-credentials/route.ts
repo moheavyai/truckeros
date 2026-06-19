@@ -12,8 +12,9 @@ const ALGORITHM = 'aes-256-gcm'
 const IV_LENGTH = 12
 
 function encryptCredential(plainText: string, keyBase64: string): string {
-  if (!keyBase64) throw new Error('PORTAL_CREDENTIALS_KEY is not configured')
+  if (!keyBase64) throw new Error('PORTAL_CREDENTIALS_ENCRYPTION_KEY is not configured')
   const key = Buffer.from(keyBase64, 'base64')
+  if (key.length !== 32) throw new Error('PORTAL_CREDENTIALS_ENCRYPTION_KEY must be 32 bytes base64 (for AES-256-GCM)')
   const iv = crypto.randomBytes(IV_LENGTH)
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv)
   let encrypted = cipher.update(plainText, 'utf8', 'hex')
@@ -23,8 +24,9 @@ function encryptCredential(plainText: string, keyBase64: string): string {
 }
 
 function decryptCredential(encryptedText: string, keyBase64: string): string {
-  if (!keyBase64) throw new Error('PORTAL_CREDENTIALS_KEY is not configured')
+  if (!keyBase64) throw new Error('PORTAL_CREDENTIALS_ENCRYPTION_KEY is not configured')
   const key = Buffer.from(keyBase64, 'base64')
+  if (key.length !== 32) throw new Error('PORTAL_CREDENTIALS_ENCRYPTION_KEY must be 32 bytes base64 (for AES-256-GCM)')
   const [ivHex, authTagHex, encrypted] = encryptedText.split(':')
   const iv = Buffer.from(ivHex, 'hex')
   const authTag = Buffer.from(authTagHex, 'hex')
@@ -43,8 +45,11 @@ const encryptionKey = process.env.PORTAL_CREDENTIALS_ENCRYPTION_KEY
  * POST /api/portal-credentials
  *
  * Supports two modes:
- * 1. Save credentials (no "action" field)
+ * 1. Save credentials (no "action" field) — stores AES encrypted
  * 2. Framework actions: generate-prefill, compare-routes, record-submission
+ *
+ * SECURITY: Credentials are encrypted server-side with PORTAL_CREDENTIALS_ENCRYPTION_KEY.
+ * Never returned in plain text to any client.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -117,14 +122,18 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET /api/portal-credentials?state=TX
- * Server-side only retrieval of decrypted credentials.
+ *
+ * Returns ONLY metadata (never the plaintext password).
+ * Used by client to determine "hasCredentials" + display username.
+ * Decryption is server-side only and is NEVER sent to browser.
+ * For future server-side automation (e.g. prefill actions), decrypt here internally only.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const stateCode = searchParams.get('state')?.toUpperCase()
 
   const authHeader = request.headers.get('authorization')
-  if (!authHeader || !encryptionKey || !stateCode) {
+  if (!authHeader || !stateCode) {
     return NextResponse.json({ error: 'Unauthorized or missing params' }, { status: 401 })
   }
 
@@ -138,26 +147,27 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('user_portal_credentials')
-    .select('*')
+    .select('username, updated_at, portal_url')
     .eq('user_id', user.id)
     .eq('state_code', stateCode)
     .single()
 
   if (error || !data) {
-    return NextResponse.json({ error: 'No credentials found for this state' }, { status: 404 })
+    return NextResponse.json({ error: 'No credentials found for this state', hasCredentials: false }, { status: 404 })
   }
 
-  try {
-    const password = decryptCredential(data.password_encrypted, encryptionKey)
-    return NextResponse.json({
-      stateCode,
-      username: data.username,
-      password, // server only
-      portalUrl: data.portal_url,
-    })
-  } catch (e) {
-    return NextResponse.json({ error: 'Decryption failed' }, { status: 500 })
-  }
+  // SECURITY: deliberately do not decrypt or return password here.
+  // If server automation later needs the pw, we can decrypt internally in a POST action
+  // and use it only within this server context (never JSON response).
+  console.log(`[portal-credentials] Creds metadata served for ${stateCode} (user ${user.id.slice(0,8)}...) — password NOT exposed`)
+
+  return NextResponse.json({
+    stateCode,
+    username: data.username,
+    hasCredentials: true,
+    portalUrl: data.portal_url || null,
+    updated_at: data.updated_at,
+  })
 }
 
 

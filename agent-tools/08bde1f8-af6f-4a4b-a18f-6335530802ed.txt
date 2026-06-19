@@ -1,0 +1,527 @@
+snap updated
+[ORT] 1781725048.238 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4226,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.422570?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725048.804 OSRM get_route_legs OK dist_m=3007 steps=5 elapsed=0.565 attempt=0
+[ORT] 1781725048.804 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4147,-97.8547) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.854684,36.414665?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725048.982 OSRM get_route_legs OK dist_m=5387 steps=6 elapsed=0.178 attempt=0
+[ORT] 1781725048.982 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.8449) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.844872,36.395585?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725049.148 OSRM get_route_legs OK dist_m=3020 steps=3 elapsed=0.166 attempt=0
+[ORT] 1781725049.148 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3765,-97.8547) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.854695,36.376510?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725049.311 OSRM get_route_legs OK dist_m=4277 steps=6 elapsed=0.163 attempt=0
+[ORT] 1781725049.311 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3686,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.368610?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725049.551 OSRM get_route_legs OK dist_m=3250 steps=6 elapsed=0.240 attempt=0
+[ORT] 1781725049.551 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3765,-97.9021) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.902085,36.376510?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725049.720 OSRM get_route_legs OK dist_m=4269 steps=7 elapsed=0.169 attempt=0
+[ORT] 1781725049.720 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.9119) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.911908,36.395585?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725049.886 OSRM get_route_legs OK dist_m=4053 steps=7 elapsed=0.167 attempt=0
+[ORT] 1781725049.886 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4147,-97.9021) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.902096,36.414665?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725050.072 OSRM get_route_legs OK dist_m=4008 steps=15 elapsed=0.186 attempt=0
+[ORT] 1781725050.072 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4675,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.467536?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725050.268 OSRM get_route_legs OK dist_m=8899 steps=6 elapsed=0.196 attempt=0
+[ORT] 1781725050.268 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4464,-97.8151) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.815147,36.446447?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725050.445 OSRM get_route_legs OK dist_m=11572 steps=8 elapsed=0.177 attempt=0
+[ORT] 1781725050.445 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.7890) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.789010,36.395557?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725050.676 OSRM get_route_legs OK dist_m=8700 steps=3 elapsed=0.231 attempt=0
+[ORT] 1781725050.676 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3447,-97.8152) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.815230,36.344700?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725050.860 OSRM get_route_legs OK dist_m=11359 steps=8 elapsed=0.185 attempt=0
+[ORT] 1781725050.860 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3236,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.323644?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725051.062 OSRM get_route_legs OK dist_m=8446 steps=6 elapsed=0.202 attempt=0
+[ORT] 1781725051.062 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3447,-97.9416) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.941550,36.344700?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725051.280 OSRM get_route_legs OK dist_m=11501 steps=8 elapsed=0.218 attempt=0
+[ORT] 1781725051.281 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.9678) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.967770,36.395557?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725051.483 OSRM get_route_legs OK dist_m=8548 steps=5 elapsed=0.201 attempt=0
+[ORT] 1781725051.483 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4464,-97.9416) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.941633,36.446447?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725051.661 OSRM get_route_legs OK dist_m=11329 steps=10 elapsed=0.178 attempt=0
+[ORT] 1781725051.661 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.5305,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.530488?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725051.823 OSRM get_route_legs OK dist_m=16699 steps=5 elapsed=0.162 attempt=0
+[ORT] 1781725051.823 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4909,-97.7597) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.759742,36.490919?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725052.016 OSRM get_route_legs OK dist_m=21831 steps=5 elapsed=0.193 attempt=0
+[ORT] 1781725052.016 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3955,-97.7108) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.710802,36.395473?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725052.221 OSRM get_route_legs OK dist_m=15918 steps=5 elapsed=0.205 attempt=0
+[ORT] 1781725052.221 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3001,-97.7600) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.760033,36.300144?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725052.405 OSRM get_route_legs OK dist_m=24010 steps=7 elapsed=0.184 attempt=0
+[ORT] 1781725052.405 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.2607,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.260692?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725052.582 OSRM get_route_legs OK dist_m=17143 steps=7 elapsed=0.177 attempt=0
+[ORT] 1781725052.582 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3001,-97.9967) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.996747,36.300144?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725052.760 OSRM get_route_legs OK dist_m=20824 steps=10 elapsed=0.178 attempt=0
+[ORT] 1781725052.760 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3955,-98.0460) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.045978,36.395473?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725052.953 OSRM get_route_legs OK dist_m=16505 steps=7 elapsed=0.192 attempt=0
+[ORT] 1781725052.953 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4909,-97.9970) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.997038,36.490919?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725053.119 OSRM get_route_legs OK dist_m=21005 steps=12 elapsed=0.166 attempt=0
+[ORT] 1781725053.119 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.6204,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.620420?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725053.411 OSRM get_route_legs OK dist_m=25960 steps=5 elapsed=0.292 attempt=0
+[ORT] 1781725053.411 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.5544,-97.6805) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.680481,36.554406?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725053.631 OSRM get_route_legs OK dist_m=36282 steps=7 elapsed=0.220 attempt=0
+[ORT] 1781725053.631 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3953,-97.5991) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.599077,36.395265?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725053.802 OSRM get_route_legs OK dist_m=25748 steps=4 elapsed=0.172 attempt=0
+[ORT] 1781725053.802 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.2364,-97.6813) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.681288,36.236449?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725053.980 OSRM get_route_legs OK dist_m=36708 steps=6 elapsed=0.178 attempt=0
+[ORT] 1781725053.980 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.1708,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.170760?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725054.157 OSRM get_route_legs OK dist_m=26703 steps=7 elapsed=0.177 attempt=0
+[ORT] 1781725054.157 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.2364,-98.0755) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.075492,36.236449?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725054.513 OSRM get_route_legs OK dist_m=37716 steps=10 elapsed=0.355 attempt=0
+[ORT] 1781725054.513 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3953,-98.1577) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.157703,36.395265?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725054.684 OSRM get_route_legs OK dist_m=26126 steps=9 elapsed=0.171 attempt=0
+[ORT] 1781725054.684 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.5544,-98.0763) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.076299,36.554406?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725054.884 OSRM get_route_legs OK dist_m=36511 steps=11 elapsed=0.200 attempt=0
+[ORT] 1781725054.884 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.7553,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.755319?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725055.046 OSRM get_route_legs OK dist_m=40436 steps=5 elapsed=0.162 attempt=0
+[ORT] 1781725055.046 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.6495,-97.5613) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.561344,36.649538?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725055.275 OSRM get_route_legs OK dist_m=57482 steps=8 elapsed=0.229 attempt=0
+[ORT] 1781725055.275 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3948,-97.4315) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.431492,36.394758?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725055.468 OSRM get_route_legs OK dist_m=40784 steps=4 elapsed=0.193 attempt=0
+[ORT] 1781725055.468 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.1408,-97.5634) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.563413,36.140809?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725055.680 OSRM get_route_legs OK dist_m=57480 steps=9 elapsed=0.213 attempt=0
+[ORT] 1781725055.680 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.0359,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.035861?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725055.883 OSRM get_route_legs OK dist_m=43691 steps=12 elapsed=0.203 attempt=0
+[ORT] 1781725055.883 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.1408,-98.1934) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.193367,36.140809?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725056.088 OSRM get_route_legs OK dist_m=56290 steps=12 elapsed=0.204 attempt=0
+[ORT] 1781725056.088 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3948,-98.3253) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.325288,36.394758?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725056.305 OSRM get_route_legs OK dist_m=40632 steps=8 elapsed=0.217 attempt=0
+[ORT] 1781725056.305 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.6495,-98.1954) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.195436,36.649538?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725056.496 OSRM get_route_legs OK dist_m=60769 steps=9 elapsed=0.191 attempt=0
+[ORT] 1781725056.496 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5834,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.583400?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725056.697 OSRM get_route_legs OK dist_m=3727 steps=9 elapsed=0.201 attempt=0
+[ORT] 1781725056.697 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5755,-89.5679) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.567918,41.575495?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725056.914 OSRM get_route_legs OK dist_m=4292 steps=8 elapsed=0.217 attempt=0
+[ORT] 1781725056.914 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5564,-89.5574) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.557366,41.556414?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725057.154 OSRM get_route_legs OK dist_m=3439 steps=7 elapsed=0.240 attempt=0
+[ORT] 1781725057.154 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5373,-89.5679) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.567933,41.537340?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725057.356 OSRM get_route_legs OK dist_m=3717 steps=7 elapsed=0.202 attempt=0
+[ORT] 1781725057.356 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5294,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.529440?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725057.550 OSRM get_route_legs OK dist_m=4652 steps=6 elapsed=0.194 attempt=0
+[ORT] 1781725057.550 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5373,-89.6189) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.618907,41.537340?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725057.733 OSRM get_route_legs OK dist_m=5310 steps=11 elapsed=0.183 attempt=0
+[ORT] 1781725057.733 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5564,-89.6295) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.629474,41.556414?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725057.930 OSRM get_route_legs OK dist_m=4641 steps=8 elapsed=0.198 attempt=0
+[ORT] 1781725057.930 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5755,-89.6189) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.618922,41.575495?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725058.092 OSRM get_route_legs OK dist_m=4200 steps=6 elapsed=0.161 attempt=0
+[ORT] 1781725058.092 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.6284,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.628366?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725058.295 OSRM get_route_legs OK dist_m=8404 steps=9 elapsed=0.203 attempt=0
+[ORT] 1781725058.295 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.6073,-89.5254) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.525382,41.607273?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725058.498 OSRM get_route_legs OK dist_m=12065 steps=10 elapsed=0.203 attempt=0
+[ORT] 1781725058.498 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5564,-89.4973) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.497275,41.556380?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725058.666 OSRM get_route_legs OK dist_m=8564 steps=8 elapsed=0.168 attempt=0
+[ORT] 1781725058.666 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5055,-89.5255) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.525489,41.505527?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725058.869 OSRM get_route_legs OK dist_m=10407 steps=8 elapsed=0.203 attempt=0
+[ORT] 1781725058.869 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.4845,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.484474?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725059.072 OSRM get_route_legs OK dist_m=11454 steps=11 elapsed=0.203 attempt=0
+[ORT] 1781725059.072 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5055,-89.6614) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.661351,41.505527?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725059.275 OSRM get_route_legs OK dist_m=17821 steps=9 elapsed=0.203 attempt=0
+[ORT] 1781725059.275 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5564,-89.6896) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.689565,41.556380?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725059.454 OSRM get_route_legs OK dist_m=8994 steps=6 elapsed=0.179 attempt=0
+[ORT] 1781725059.454 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.6073,-89.6615) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.661458,41.607273?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725059.654 OSRM get_route_legs OK dist_m=15114 steps=9 elapsed=0.200 attempt=0
+[ORT] 1781725059.654 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.6913,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.691318?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725059.832 OSRM get_route_legs OK dist_m=15396 steps=9 elapsed=0.178 attempt=0
+[ORT] 1781725059.832 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.6517,-89.4658) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.465760,41.651737?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725060.020 OSRM get_route_legs OK dist_m=22961 steps=10 elapsed=0.188 attempt=0
+[ORT] 1781725060.020 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5563,-89.4131) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.413148,41.556279?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725060.223 OSRM get_route_legs OK dist_m=15923 steps=8 elapsed=0.203 attempt=0
+[ORT] 1781725060.223 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.4610,-89.4661) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.466136,41.460962?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725060.401 OSRM get_route_legs OK dist_m=21840 steps=9 elapsed=0.177 attempt=0
+[ORT] 1781725060.401 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.4215,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.421522?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725060.608 OSRM get_route_legs OK dist_m=15746 steps=10 elapsed=0.207 attempt=0
+[ORT] 1781725060.608 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.4610,-89.7207) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.720704,41.460962?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725060.781 OSRM get_route_legs OK dist_m=24697 steps=8 elapsed=0.173 attempt=0
+[ORT] 1781725060.781 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5563,-89.7737) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.773692,41.556279?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725060.947 OSRM get_route_legs OK dist_m=17715 steps=6 elapsed=0.166 attempt=0
+[ORT] 1781725060.947 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.6517,-89.7211) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.721080,41.651737?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725061.166 OSRM get_route_legs OK dist_m=21532 steps=10 elapsed=0.218 attempt=0
+[ORT] 1781725061.166 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.7813,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.781250?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725061.341 OSRM get_route_legs OK dist_m=40114 steps=15 elapsed=0.175 attempt=0
+[ORT] 1781725061.341 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.7152,-89.3804) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.380443,41.715203?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725061.543 OSRM get_route_legs OK dist_m=35920 steps=11 elapsed=0.202 attempt=0
+[ORT] 1781725061.543 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5560,-89.2930) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.292967,41.556029?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725061.720 OSRM get_route_legs OK dist_m=25614 steps=8 elapsed=0.177 attempt=0
+[ORT] 1781725061.720 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.3972,-89.3815) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.381488,41.397246?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725061.898 OSRM get_route_legs OK dist_m=42912 steps=21 elapsed=0.178 attempt=0
+[ORT] 1781725061.898 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.3316,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.331590?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725062.092 OSRM get_route_legs OK dist_m=25763 steps=13 elapsed=0.194 attempt=0
+[ORT] 1781725062.092 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.3972,-89.8054) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.805352,41.397246?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725062.279 OSRM get_route_legs OK dist_m=43385 steps=13 elapsed=0.187 attempt=0
+[ORT] 1781725062.279 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5560,-89.8939) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.893873,41.556029?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725062.475 OSRM get_route_legs OK dist_m=29074 steps=7 elapsed=0.197 attempt=0
+[ORT] 1781725062.475 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.7152,-89.8064) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.806397,41.715203?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725062.654 OSRM get_route_legs OK dist_m=35048 steps=10 elapsed=0.178 attempt=0
+[ORT] 1781725062.654 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.9161,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.916149?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725062.835 OSRM get_route_legs OK dist_m=55048 steps=14 elapsed=0.181 attempt=0
+[ORT] 1781725062.835 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.8103,-89.2522) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.252152,41.810283?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725063.064 OSRM get_route_legs OK dist_m=56944 steps=11 elapsed=0.229 attempt=0
+[ORT] 1781725063.064 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5554,-89.1127) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.112699,41.555419?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725063.231 OSRM get_route_legs OK dist_m=42422 steps=13 elapsed=0.167 attempt=0
+[ORT] 1781725063.231 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.3016,-89.2548) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.254827,41.301556?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725063.418 OSRM get_route_legs OK dist_m=69022 steps=23 elapsed=0.187 attempt=0
+[ORT] 1781725063.418 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.1967,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.196691?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725063.646 OSRM get_route_legs OK dist_m=41462 steps=15 elapsed=0.228 attempt=0
+[ORT] 1781725063.646 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.3016,-89.9320) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.932013,41.301556?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725063.823 OSRM get_route_legs OK dist_m=60719 steps=14 elapsed=0.178 attempt=0
+[ORT] 1781725063.823 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5554,-90.0741) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-90.074141,41.555419?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725064.000 OSRM get_route_legs OK dist_m=42664 steps=8 elapsed=0.177 attempt=0
+[ORT] 1781725064.000 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.8103,-89.9347) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.934688,41.810283?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725064.194 OSRM get_route_legs OK dist_m=54267 steps=12 elapsed=0.194 attempt=0
+Enid snap: lat=36.39087 lon=-97.87832 snapped=True
+Walnut snap: lat=41.56004 lon=-89.59247 snapped=True
+[ORT] 1781725064.194 optimize_route START
+[ORT] 1781725064.431 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4226,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.422570?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725065.242 OSRM get_route_legs OK dist_m=3007 steps=5 elapsed=0.812 attempt=0
+[ORT] 1781725065.242 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4147,-97.8547) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.854684,36.414665?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725065.409 OSRM get_route_legs OK dist_m=5387 steps=6 elapsed=0.167 attempt=0
+[ORT] 1781725065.409 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.8449) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.844872,36.395585?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725065.612 OSRM get_route_legs OK dist_m=3020 steps=3 elapsed=0.203 attempt=0
+[ORT] 1781725065.612 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3765,-97.8547) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.854695,36.376510?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725065.790 OSRM get_route_legs OK dist_m=4277 steps=6 elapsed=0.178 attempt=0
+[ORT] 1781725065.790 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3686,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.368610?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725065.967 OSRM get_route_legs OK dist_m=3250 steps=6 elapsed=0.177 attempt=0
+[ORT] 1781725065.967 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3765,-97.9021) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.902085,36.376510?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725066.161 OSRM get_route_legs OK dist_m=4269 steps=7 elapsed=0.194 attempt=0
+[ORT] 1781725066.161 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.9119) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.911908,36.395585?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725066.334 OSRM get_route_legs OK dist_m=4053 steps=7 elapsed=0.173 attempt=0
+[ORT] 1781725066.334 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4147,-97.9021) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.902096,36.414665?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725066.502 OSRM get_route_legs OK dist_m=4008 steps=15 elapsed=0.168 attempt=0
+[ORT] 1781725066.502 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4675,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.467536?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725066.705 OSRM get_route_legs OK dist_m=8899 steps=6 elapsed=0.204 attempt=0
+[ORT] 1781725066.705 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4464,-97.8151) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.815147,36.446447?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725066.908 OSRM get_route_legs OK dist_m=11572 steps=8 elapsed=0.203 attempt=0
+[ORT] 1781725066.908 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.7890) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.789010,36.395557?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725067.086 OSRM get_route_legs OK dist_m=8700 steps=3 elapsed=0.178 attempt=0
+[ORT] 1781725067.086 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3447,-97.8152) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.815230,36.344700?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725067.248 OSRM get_route_legs OK dist_m=11359 steps=8 elapsed=0.162 attempt=0
+[ORT] 1781725067.248 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3236,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.323644?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725067.426 OSRM get_route_legs OK dist_m=8446 steps=6 elapsed=0.178 attempt=0
+[ORT] 1781725067.426 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3447,-97.9416) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.941550,36.344700?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725067.628 OSRM get_route_legs OK dist_m=11501 steps=8 elapsed=0.202 attempt=0
+[ORT] 1781725067.628 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.9678) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.967770,36.395557?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725067.823 OSRM get_route_legs OK dist_m=8548 steps=5 elapsed=0.195 attempt=0
+[ORT] 1781725067.823 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4464,-97.9416) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.941633,36.446447?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725067.999 OSRM get_route_legs OK dist_m=11329 steps=10 elapsed=0.176 attempt=0
+[ORT] 1781725067.999 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.5305,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.530488?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725068.186 OSRM get_route_legs OK dist_m=16699 steps=5 elapsed=0.187 attempt=0
+[ORT] 1781725068.186 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4909,-97.7597) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.759742,36.490919?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725068.379 OSRM get_route_legs OK dist_m=21831 steps=5 elapsed=0.193 attempt=0
+[ORT] 1781725068.379 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3955,-97.7108) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.710802,36.395473?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725068.565 OSRM get_route_legs OK dist_m=15918 steps=5 elapsed=0.186 attempt=0
+[ORT] 1781725068.565 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3001,-97.7600) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.760033,36.300144?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725068.743 OSRM get_route_legs OK dist_m=24010 steps=7 elapsed=0.178 attempt=0
+[ORT] 1781725068.743 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.2607,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.260692?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725068.936 OSRM get_route_legs OK dist_m=17143 steps=7 elapsed=0.192 attempt=0
+[ORT] 1781725068.936 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3001,-97.9967) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.996747,36.300144?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725069.123 OSRM get_route_legs OK dist_m=20824 steps=10 elapsed=0.187 attempt=0
+[ORT] 1781725069.123 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3955,-98.0460) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.045978,36.395473?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725069.300 OSRM get_route_legs OK dist_m=16505 steps=7 elapsed=0.177 attempt=0
+[ORT] 1781725069.300 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4909,-97.9970) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.997038,36.490919?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725069.494 OSRM get_route_legs OK dist_m=21005 steps=12 elapsed=0.194 attempt=0
+[ORT] 1781725069.494 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.6204,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.620420?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725069.681 OSRM get_route_legs OK dist_m=25960 steps=5 elapsed=0.186 attempt=0
+[ORT] 1781725069.681 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.5544,-97.6805) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.680481,36.554406?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725069.874 OSRM get_route_legs OK dist_m=36282 steps=7 elapsed=0.193 attempt=0
+[ORT] 1781725069.874 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3953,-97.5991) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.599077,36.395265?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725070.061 OSRM get_route_legs OK dist_m=25748 steps=4 elapsed=0.187 attempt=0
+[ORT] 1781725070.061 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.2364,-97.6813) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.681288,36.236449?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725070.228 OSRM get_route_legs OK dist_m=36708 steps=6 elapsed=0.167 attempt=0
+[ORT] 1781725070.228 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.1708,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.170760?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725070.430 OSRM get_route_legs OK dist_m=26703 steps=7 elapsed=0.202 attempt=0
+[ORT] 1781725070.430 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.2364,-98.0755) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.075492,36.236449?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725070.620 OSRM get_route_legs OK dist_m=37716 steps=10 elapsed=0.190 attempt=0
+[ORT] 1781725070.620 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3953,-98.1577) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.157703,36.395265?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725070.836 OSRM get_route_legs OK dist_m=26126 steps=9 elapsed=0.216 attempt=0
+[ORT] 1781725070.836 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.5544,-98.0763) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.076299,36.554406?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725071.005 OSRM get_route_legs OK dist_m=36511 steps=11 elapsed=0.170 attempt=0
+[ORT] 1781725071.005 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.7553,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.755319?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725071.207 OSRM get_route_legs OK dist_m=40436 steps=5 elapsed=0.202 attempt=0
+[ORT] 1781725071.207 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.6495,-97.5613) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.561344,36.649538?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725071.382 OSRM get_route_legs OK dist_m=57482 steps=8 elapsed=0.175 attempt=0
+[ORT] 1781725071.382 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3948,-97.4315) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.431492,36.394758?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725071.585 OSRM get_route_legs OK dist_m=40784 steps=4 elapsed=0.202 attempt=0
+[ORT] 1781725071.585 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.1408,-97.5634) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.563413,36.140809?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725071.788 OSRM get_route_legs OK dist_m=57480 steps=9 elapsed=0.204 attempt=0
+[ORT] 1781725071.788 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.0359,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.035861?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725071.979 OSRM get_route_legs OK dist_m=43691 steps=12 elapsed=0.191 attempt=0
+[ORT] 1781725071.979 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.1408,-98.1934) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.193367,36.140809?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725072.159 OSRM get_route_legs OK dist_m=56290 steps=12 elapsed=0.180 attempt=0
+[ORT] 1781725072.159 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3948,-98.3253) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.325288,36.394758?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725072.336 OSRM get_route_legs OK dist_m=40632 steps=8 elapsed=0.177 attempt=0
+[ORT] 1781725072.336 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.6495,-98.1954) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.195436,36.649538?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725072.548 OSRM get_route_legs OK dist_m=60769 steps=9 elapsed=0.212 attempt=0
+[ORT] 1781725072.548 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5834,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.583400?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725072.741 OSRM get_route_legs OK dist_m=3727 steps=9 elapsed=0.193 attempt=0
+[ORT] 1781725072.741 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5755,-89.5679) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.567918,41.575495?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725072.903 OSRM get_route_legs OK dist_m=4292 steps=8 elapsed=0.162 attempt=0
+[ORT] 1781725072.903 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5564,-89.5574) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.557366,41.556414?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725073.080 OSRM get_route_legs OK dist_m=3439 steps=7 elapsed=0.178 attempt=0
+[ORT] 1781725073.080 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5373,-89.5679) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.567933,41.537340?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725073.249 OSRM get_route_legs OK dist_m=3717 steps=7 elapsed=0.169 attempt=0
+[ORT] 1781725073.249 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5294,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.529440?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725073.410 OSRM get_route_legs OK dist_m=4652 steps=6 elapsed=0.162 attempt=0
+[ORT] 1781725073.410 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5373,-89.6189) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.618907,41.537340?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725073.613 OSRM get_route_legs OK dist_m=5310 steps=11 elapsed=0.203 attempt=0
+[ORT] 1781725073.613 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5564,-89.6295) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.629474,41.556414?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725073.805 OSRM get_route_legs OK dist_m=4641 steps=8 elapsed=0.192 attempt=0
+[ORT] 1781725073.805 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5755,-89.6189) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.618922,41.575495?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725074.007 OSRM get_route_legs OK dist_m=4200 steps=6 elapsed=0.202 attempt=0
+[ORT] 1781725074.007 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.6284,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.628366?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725074.221 OSRM get_route_legs OK dist_m=8404 steps=9 elapsed=0.214 attempt=0
+[ORT] 1781725074.221 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.6073,-89.5254) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.525382,41.607273?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725074.426 OSRM get_route_legs OK dist_m=12065 steps=10 elapsed=0.205 attempt=0
+[ORT] 1781725074.426 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5564,-89.4973) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.497275,41.556380?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725074.626 OSRM get_route_legs OK dist_m=8564 steps=8 elapsed=0.200 attempt=0
+[ORT] 1781725074.626 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5055,-89.5255) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.525489,41.505527?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725074.828 OSRM get_route_legs OK dist_m=10407 steps=8 elapsed=0.202 attempt=0
+[ORT] 1781725074.828 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.4845,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.484474?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725075.031 OSRM get_route_legs OK dist_m=11454 steps=11 elapsed=0.203 attempt=0
+[ORT] 1781725075.031 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5055,-89.6614) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.661351,41.505527?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725075.249 OSRM get_route_legs OK dist_m=17821 steps=9 elapsed=0.218 attempt=0
+[ORT] 1781725075.249 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5564,-89.6896) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.689565,41.556380?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725075.454 OSRM get_route_legs OK dist_m=8994 steps=6 elapsed=0.205 attempt=0
+[ORT] 1781725075.454 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.6073,-89.6615) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.661458,41.607273?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725075.665 OSRM get_route_legs OK dist_m=15114 steps=9 elapsed=0.211 attempt=0
+[ORT] 1781725075.665 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.6913,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.691318?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725075.868 OSRM get_route_legs OK dist_m=15396 steps=9 elapsed=0.203 attempt=0
+[ORT] 1781725075.868 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.6517,-89.4658) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.465760,41.651737?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725076.061 OSRM get_route_legs OK dist_m=22961 steps=10 elapsed=0.193 attempt=0
+[ORT] 1781725076.061 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5563,-89.4131) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.413148,41.556279?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725076.233 OSRM get_route_legs OK dist_m=15923 steps=8 elapsed=0.172 attempt=0
+[ORT] 1781725076.233 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.4610,-89.4661) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.466136,41.460962?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725076.487 OSRM get_route_legs OK dist_m=21840 steps=9 elapsed=0.254 attempt=0
+[ORT] 1781725076.487 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.4215,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.421522?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725076.692 OSRM get_route_legs OK dist_m=15746 steps=10 elapsed=0.204 attempt=0
+[ORT] 1781725076.692 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.4610,-89.7207) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.720704,41.460962?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725076.876 OSRM get_route_legs OK dist_m=24697 steps=8 elapsed=0.184 attempt=0
+[ORT] 1781725076.876 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5563,-89.7737) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.773692,41.556279?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725077.078 OSRM get_route_legs OK dist_m=17715 steps=6 elapsed=0.202 attempt=0
+[ORT] 1781725077.078 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.6517,-89.7211) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.721080,41.651737?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725077.299 OSRM get_route_legs OK dist_m=21532 steps=10 elapsed=0.221 attempt=0
+[ORT] 1781725077.299 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.7813,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.781250?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725077.501 OSRM get_route_legs OK dist_m=40114 steps=15 elapsed=0.202 attempt=0
+[ORT] 1781725077.501 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.7152,-89.3804) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.380443,41.715203?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725077.711 OSRM get_route_legs OK dist_m=35920 steps=11 elapsed=0.210 attempt=0
+[ORT] 1781725077.711 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5560,-89.2930) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.292967,41.556029?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725077.915 OSRM get_route_legs OK dist_m=25614 steps=8 elapsed=0.203 attempt=0
+[ORT] 1781725077.915 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.3972,-89.3815) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.381488,41.397246?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725078.135 OSRM get_route_legs OK dist_m=42912 steps=21 elapsed=0.221 attempt=0
+[ORT] 1781725078.135 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.3316,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.331590?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725078.321 OSRM get_route_legs OK dist_m=25763 steps=13 elapsed=0.185 attempt=0
+[ORT] 1781725078.321 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.3972,-89.8054) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.805352,41.397246?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725078.523 OSRM get_route_legs OK dist_m=43385 steps=13 elapsed=0.202 attempt=0
+[ORT] 1781725078.523 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5560,-89.8939) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.893873,41.556029?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725078.725 OSRM get_route_legs OK dist_m=29074 steps=7 elapsed=0.203 attempt=0
+[ORT] 1781725078.725 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.7152,-89.8064) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.806397,41.715203?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725078.928 OSRM get_route_legs OK dist_m=35048 steps=10 elapsed=0.203 attempt=0
+[ORT] 1781725078.928 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.9161,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.916149?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725079.131 OSRM get_route_legs OK dist_m=55048 steps=14 elapsed=0.202 attempt=0
+[ORT] 1781725079.131 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.8103,-89.2522) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.252152,41.810283?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725079.359 OSRM get_route_legs OK dist_m=56944 steps=11 elapsed=0.228 attempt=0
+[ORT] 1781725079.359 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5554,-89.1127) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.112699,41.555419?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725079.550 OSRM get_route_legs OK dist_m=42422 steps=13 elapsed=0.191 attempt=0
+[ORT] 1781725079.550 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.3016,-89.2548) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.254827,41.301556?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725079.765 OSRM get_route_legs OK dist_m=69022 steps=23 elapsed=0.215 attempt=0
+[ORT] 1781725079.765 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.1967,-89.5934) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.593420,41.196691?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725079.959 OSRM get_route_legs OK dist_m=41462 steps=15 elapsed=0.194 attempt=0
+[ORT] 1781725079.959 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.3016,-89.9320) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.932013,41.301556?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725080.164 OSRM get_route_legs OK dist_m=60719 steps=14 elapsed=0.205 attempt=0
+[ORT] 1781725080.164 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.5554,-90.0741) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-90.074141,41.555419?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725080.365 OSRM get_route_legs OK dist_m=42664 steps=8 elapsed=0.201 attempt=0
+[ORT] 1781725080.365 OSRM get_route_legs start from=(41.5564,-89.5934) to=(41.8103,-89.9347) url=https://router.project-osrm.org/route/v1/driving/-89.593420,41.556420;-89.934688,41.810283?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725080.567 OSRM get_route_legs OK dist_m=54267 steps=12 elapsed=0.202 attempt=0
+[ORT] snapped o/d to state highway: origin=True dest=True
+[ORT] 1781725080.567 optimize_route parsed avoided=[] included=0 num_stops=2
+[ORT] 1781725080.567 _build_distance_matrix start n=2 avoided=[]
+[ORT] 1781725080.808 OSRM get_table_matrix start url=https://router.project-osrm.org/table/v1/driving/-97.878322,36.390866;-89.592467,41.560043?annotations=distance,duration
+[ORT] 1781725081.403 OSRM get_table_matrix OK dists=2x2 elapsed=0.595 attempt=0
+[ORT] 1781725081.403 _build_distance_matrix done checks=0 penalties=0 used_real=True elapsed=0.836
+[ORT] 1781725081.403 VRP setup start n=2
+[ORT] 1781725081.418 VRP search_params: first=PATH_CHEAPEST_ARC, time_limit=120s, solution_limit=100
+[ORT] 1781725081.418 VRP SolveWithParameters (primary) START
+[ORT] 1781725081.418 VRP SolveWithParameters (primary) DONE assignment=True elapsed=0.000
+[ORT] 1781725081.418 _build_route_info_from_order (primary) START order=[0, 1]
+[ORT] 1781725081.664 _build_route_info per-leg get_route_legs i=0 a=0->b=1
+[ORT] 1781725081.664 OSRM get_route_legs start from=(36.3909,-97.8783) to=(41.5600,-89.5925) url=https://router.project-osrm.org/route/v1/driving/-97.878322,36.390866;-89.592467,41.560043?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725082.613 OSRM get_route_legs OK dist_m=1167092 steps=25 elapsed=0.949 attempt=0
+[ORT] 1781725082.613 _build_route_info per-leg get DONE elapsed=0.949 has_route=True
+[ORT] 1781725082.628 BORDER_EXTRACT + CORRIDOR_WALK START steps=25 order=[0, 1] (detailed for abort debugging)
+[ORT] 1781725082.631 BORDER_EXTRACT + CORRIDOR_WALK DONE crossings=6 corridor=['OK', 'MO', 'NE', 'IL'] elapsed=0.002
+[ORT] 1781725082.631 NOTE: geometry walk corridor has non-adj per are_adjacent table (possible OSRM attrib gap) -- keeping full seq from steps to avoid artificial skips/jumps
+[ORT] 1781725082.632 _build_route_info_from_order (primary) DONE elapsed=1.213
+[ORT] 1781725082.632 optimize_route END total_elapsed=18.437 status=ok meta_num_stops=2 used_real=True
+Enid->Walnut: corridor=['OK', 'MO', 'NE', 'IL'] distance=725.2mi
+[ORT] 1781725082.632 optimize_route START
+[ORT] 1781725082.868 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4226,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.422570?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725083.427 OSRM get_route_legs OK dist_m=3007 steps=5 elapsed=0.559 attempt=0
+[ORT] 1781725083.427 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4147,-97.8547) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.854684,36.414665?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725083.644 OSRM get_route_legs OK dist_m=5387 steps=6 elapsed=0.217 attempt=0
+[ORT] 1781725083.644 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.8449) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.844872,36.395585?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725083.821 OSRM get_route_legs OK dist_m=3020 steps=3 elapsed=0.176 attempt=0
+[ORT] 1781725083.821 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3765,-97.8547) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.854695,36.376510?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725083.998 OSRM get_route_legs OK dist_m=4277 steps=6 elapsed=0.177 attempt=0
+[ORT] 1781725083.998 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3686,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.368610?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725084.459 OSRM get_route_legs OK dist_m=3250 steps=6 elapsed=0.461 attempt=0
+[ORT] 1781725084.459 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3765,-97.9021) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.902085,36.376510?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725084.657 OSRM get_route_legs OK dist_m=4269 steps=7 elapsed=0.199 attempt=0
+[ORT] 1781725084.657 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.9119) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.911908,36.395585?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725084.860 OSRM get_route_legs OK dist_m=4053 steps=7 elapsed=0.203 attempt=0
+[ORT] 1781725084.860 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4147,-97.9021) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.902096,36.414665?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725085.028 OSRM get_route_legs OK dist_m=4008 steps=15 elapsed=0.168 attempt=0
+[ORT] 1781725085.028 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4675,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.467536?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725085.231 OSRM get_route_legs OK dist_m=8899 steps=6 elapsed=0.203 attempt=0
+[ORT] 1781725085.231 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4464,-97.8151) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.815147,36.446447?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725085.418 OSRM get_route_legs OK dist_m=11572 steps=8 elapsed=0.187 attempt=0
+[ORT] 1781725085.418 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.7890) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.789010,36.395557?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725085.596 OSRM get_route_legs OK dist_m=8700 steps=3 elapsed=0.178 attempt=0
+[ORT] 1781725085.596 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3447,-97.8152) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.815230,36.344700?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725085.763 OSRM get_route_legs OK dist_m=11359 steps=8 elapsed=0.167 attempt=0
+[ORT] 1781725085.763 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3236,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.323644?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725085.976 OSRM get_route_legs OK dist_m=8446 steps=6 elapsed=0.213 attempt=0
+[ORT] 1781725085.976 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3447,-97.9416) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.941550,36.344700?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725086.168 OSRM get_route_legs OK dist_m=11501 steps=8 elapsed=0.192 attempt=0
+[ORT] 1781725086.168 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.9678) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.967770,36.395557?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725086.396 OSRM get_route_legs OK dist_m=8548 steps=5 elapsed=0.228 attempt=0
+[ORT] 1781725086.396 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4464,-97.9416) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.941633,36.446447?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725086.572 OSRM get_route_legs OK dist_m=11329 steps=10 elapsed=0.176 attempt=0
+[ORT] 1781725086.572 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.5305,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.530488?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725086.765 OSRM get_route_legs OK dist_m=16699 steps=5 elapsed=0.192 attempt=0
+[ORT] 1781725086.765 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4909,-97.7597) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.759742,36.490919?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725086.928 OSRM get_route_legs OK dist_m=21831 steps=5 elapsed=0.164 attempt=0
+[ORT] 1781725086.928 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3955,-97.7108) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.710802,36.395473?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725087.175 OSRM get_route_legs OK dist_m=15918 steps=5 elapsed=0.246 attempt=0
+[ORT] 1781725087.175 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3001,-97.7600) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.760033,36.300144?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725087.376 OSRM get_route_legs OK dist_m=24010 steps=7 elapsed=0.201 attempt=0
+[ORT] 1781725087.376 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.2607,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.260692?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725087.590 OSRM get_route_legs OK dist_m=17143 steps=7 elapsed=0.214 attempt=0
+[ORT] 1781725087.590 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3001,-97.9967) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.996747,36.300144?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725087.772 OSRM get_route_legs OK dist_m=20824 steps=10 elapsed=0.182 attempt=0
+[ORT] 1781725087.772 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3955,-98.0460) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.045978,36.395473?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725087.955 OSRM get_route_legs OK dist_m=16505 steps=7 elapsed=0.184 attempt=0
+[ORT] 1781725087.955 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4909,-97.9970) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.997038,36.490919?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725088.159 OSRM get_route_legs OK dist_m=21005 steps=12 elapsed=0.204 attempt=0
+[ORT] 1781725088.159 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.6204,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.620420?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725088.353 OSRM get_route_legs OK dist_m=25960 steps=5 elapsed=0.194 attempt=0
+[ORT] 1781725088.353 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.5544,-97.6805) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.680481,36.554406?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725088.533 OSRM get_route_legs OK dist_m=36282 steps=7 elapsed=0.180 attempt=0
+[ORT] 1781725088.533 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3953,-97.5991) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.599077,36.395265?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725088.768 OSRM get_route_legs OK dist_m=25748 steps=4 elapsed=0.235 attempt=0
+[ORT] 1781725088.768 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.2364,-97.6813) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.681288,36.236449?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725088.946 OSRM get_route_legs OK dist_m=36708 steps=6 elapsed=0.178 attempt=0
+[ORT] 1781725088.946 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.1708,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.170760?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725089.164 OSRM get_route_legs OK dist_m=26703 steps=7 elapsed=0.219 attempt=0
+[ORT] 1781725089.164 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.2364,-98.0755) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.075492,36.236449?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725089.369 OSRM get_route_legs OK dist_m=37716 steps=10 elapsed=0.204 attempt=0
+[ORT] 1781725089.369 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3953,-98.1577) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.157703,36.395265?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725089.541 OSRM get_route_legs OK dist_m=26126 steps=9 elapsed=0.172 attempt=0
+[ORT] 1781725089.541 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.5544,-98.0763) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.076299,36.554406?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725089.758 OSRM get_route_legs OK dist_m=36511 steps=11 elapsed=0.217 attempt=0
+[ORT] 1781725089.758 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.7553,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.755319?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725090.001 OSRM get_route_legs OK dist_m=40436 steps=5 elapsed=0.243 attempt=0
+[ORT] 1781725090.001 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.6495,-97.5613) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.561344,36.649538?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725090.195 OSRM get_route_legs OK dist_m=57482 steps=8 elapsed=0.194 attempt=0
+[ORT] 1781725090.195 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3948,-97.4315) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.431492,36.394758?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725090.393 OSRM get_route_legs OK dist_m=40784 steps=4 elapsed=0.198 attempt=0
+[ORT] 1781725090.393 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.1408,-97.5634) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.563413,36.140809?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725090.570 OSRM get_route_legs OK dist_m=57480 steps=9 elapsed=0.176 attempt=0
+[ORT] 1781725090.570 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.0359,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.035861?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725090.798 OSRM get_route_legs OK dist_m=43691 steps=12 elapsed=0.228 attempt=0
+[ORT] 1781725090.798 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.1408,-98.1934) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.193367,36.140809?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725090.976 OSRM get_route_legs OK dist_m=56290 steps=12 elapsed=0.177 attempt=0
+[ORT] 1781725090.976 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3948,-98.3253) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.325288,36.394758?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725091.177 OSRM get_route_legs OK dist_m=40632 steps=8 elapsed=0.202 attempt=0
+[ORT] 1781725091.177 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.6495,-98.1954) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.195436,36.649538?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725091.355 OSRM get_route_legs OK dist_m=60769 steps=9 elapsed=0.177 attempt=0
+[ORT] 1781725091.355 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4226,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.422570?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725091.533 OSRM get_route_legs OK dist_m=3007 steps=5 elapsed=0.178 attempt=0
+[ORT] 1781725091.533 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4147,-97.8547) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.854684,36.414665?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725091.727 OSRM get_route_legs OK dist_m=5387 steps=6 elapsed=0.193 attempt=0
+[ORT] 1781725091.727 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.8449) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.844872,36.395585?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725091.923 OSRM get_route_legs OK dist_m=3020 steps=3 elapsed=0.196 attempt=0
+[ORT] 1781725091.923 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3765,-97.8547) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.854695,36.376510?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725092.092 OSRM get_route_legs OK dist_m=4277 steps=6 elapsed=0.169 attempt=0
+[ORT] 1781725092.092 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3686,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.368610?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725092.276 OSRM get_route_legs OK dist_m=3250 steps=6 elapsed=0.184 attempt=0
+[ORT] 1781725092.276 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3765,-97.9021) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.902085,36.376510?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725092.472 OSRM get_route_legs OK dist_m=4269 steps=7 elapsed=0.196 attempt=0
+[ORT] 1781725092.472 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.9119) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.911908,36.395585?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725092.680 OSRM get_route_legs OK dist_m=4053 steps=7 elapsed=0.207 attempt=0
+[ORT] 1781725092.680 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4147,-97.9021) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.902096,36.414665?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725092.883 OSRM get_route_legs OK dist_m=4008 steps=15 elapsed=0.203 attempt=0
+[ORT] 1781725092.883 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4675,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.467536?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725093.056 OSRM get_route_legs OK dist_m=8899 steps=6 elapsed=0.174 attempt=0
+[ORT] 1781725093.056 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4464,-97.8151) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.815147,36.446447?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725093.275 OSRM get_route_legs OK dist_m=11572 steps=8 elapsed=0.219 attempt=0
+[ORT] 1781725093.275 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.7890) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.789010,36.395557?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725093.457 OSRM get_route_legs OK dist_m=8700 steps=3 elapsed=0.181 attempt=0
+[ORT] 1781725093.457 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3447,-97.8152) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.815230,36.344700?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725093.682 OSRM get_route_legs OK dist_m=11359 steps=8 elapsed=0.225 attempt=0
+[ORT] 1781725093.682 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3236,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.323644?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725093.860 OSRM get_route_legs OK dist_m=8446 steps=6 elapsed=0.178 attempt=0
+[ORT] 1781725093.860 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3447,-97.9416) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.941550,36.344700?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725094.020 OSRM get_route_legs OK dist_m=11501 steps=8 elapsed=0.161 attempt=0
+[ORT] 1781725094.020 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3956,-97.9678) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.967770,36.395557?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725094.216 OSRM get_route_legs OK dist_m=8548 steps=5 elapsed=0.196 attempt=0
+[ORT] 1781725094.216 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4464,-97.9416) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.941633,36.446447?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725094.375 OSRM get_route_legs OK dist_m=11329 steps=10 elapsed=0.159 attempt=0
+[ORT] 1781725094.375 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.5305,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.530488?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725094.568 OSRM get_route_legs OK dist_m=16699 steps=5 elapsed=0.193 attempt=0
+[ORT] 1781725094.568 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4909,-97.7597) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.759742,36.490919?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725094.730 OSRM get_route_legs OK dist_m=21831 steps=5 elapsed=0.162 attempt=0
+[ORT] 1781725094.730 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3955,-97.7108) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.710802,36.395473?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725094.907 OSRM get_route_legs OK dist_m=15918 steps=5 elapsed=0.177 attempt=0
+[ORT] 1781725094.907 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3001,-97.7600) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.760033,36.300144?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725095.100 OSRM get_route_legs OK dist_m=24010 steps=7 elapsed=0.193 attempt=0
+[ORT] 1781725095.100 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.2607,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.260692?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725095.263 OSRM get_route_legs OK dist_m=17143 steps=7 elapsed=0.163 attempt=0
+[ORT] 1781725095.263 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3001,-97.9967) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.996747,36.300144?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725095.482 OSRM get_route_legs OK dist_m=20824 steps=10 elapsed=0.219 attempt=0
+[ORT] 1781725095.482 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3955,-98.0460) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.045978,36.395473?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725095.669 OSRM get_route_legs OK dist_m=16505 steps=7 elapsed=0.187 attempt=0
+[ORT] 1781725095.669 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.4909,-97.9970) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.997038,36.490919?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725095.871 OSRM get_route_legs OK dist_m=21005 steps=12 elapsed=0.202 attempt=0
+[ORT] 1781725095.871 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.6204,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.620420?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725096.065 OSRM get_route_legs OK dist_m=25960 steps=5 elapsed=0.194 attempt=0
+[ORT] 1781725096.065 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.5544,-97.6805) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.680481,36.554406?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725096.243 OSRM get_route_legs OK dist_m=36282 steps=7 elapsed=0.178 attempt=0
+[ORT] 1781725096.243 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3953,-97.5991) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.599077,36.395265?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725096.420 OSRM get_route_legs OK dist_m=25748 steps=4 elapsed=0.177 attempt=0
+[ORT] 1781725096.420 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.2364,-97.6813) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.681288,36.236449?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725096.622 OSRM get_route_legs OK dist_m=36708 steps=6 elapsed=0.202 attempt=0
+[ORT] 1781725096.622 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.1708,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.170760?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725096.810 OSRM get_route_legs OK dist_m=26703 steps=7 elapsed=0.188 attempt=0
+[ORT] 1781725096.810 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.2364,-98.0755) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.075492,36.236449?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725097.003 OSRM get_route_legs OK dist_m=37716 steps=10 elapsed=0.194 attempt=0
+[ORT] 1781725097.003 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3953,-98.1577) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.157703,36.395265?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725097.226 OSRM get_route_legs OK dist_m=26126 steps=9 elapsed=0.222 attempt=0
+[ORT] 1781725097.226 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.5544,-98.0763) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.076299,36.554406?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725097.394 OSRM get_route_legs OK dist_m=36511 steps=11 elapsed=0.168 attempt=0
+[ORT] 1781725097.394 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.7553,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.755319?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725097.597 OSRM get_route_legs OK dist_m=40436 steps=5 elapsed=0.204 attempt=0
+[ORT] 1781725097.597 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.6495,-97.5613) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.561344,36.649538?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725097.817 OSRM get_route_legs OK dist_m=57482 steps=8 elapsed=0.220 attempt=0
+[ORT] 1781725097.817 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3948,-97.4315) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.431492,36.394758?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725098.022 OSRM get_route_legs OK dist_m=40784 steps=4 elapsed=0.204 attempt=0
+[ORT] 1781725098.022 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.1408,-97.5634) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.563413,36.140809?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725098.206 OSRM get_route_legs OK dist_m=57480 steps=9 elapsed=0.184 attempt=0
+[ORT] 1781725098.206 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.0359,-97.8784) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-97.878390,36.035861?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725098.409 OSRM get_route_legs OK dist_m=43691 steps=12 elapsed=0.203 attempt=0
+[ORT] 1781725098.409 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.1408,-98.1934) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.193367,36.140809?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725098.603 OSRM get_route_legs OK dist_m=56290 steps=12 elapsed=0.194 attempt=0
+[ORT] 1781725098.603 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.3948,-98.3253) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.325288,36.394758?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725098.806 OSRM get_route_legs OK dist_m=40632 steps=8 elapsed=0.203 attempt=0
+[ORT] 1781725098.806 OSRM get_route_legs start from=(36.3956,-97.8784) to=(36.6495,-98.1954) url=https://router.project-osrm.org/route/v1/driving/-97.878390,36.395590;-98.195436,36.649538?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725099.034 OSRM get_route_legs OK dist_m=60769 steps=9 elapsed=0.228 attempt=0
+[ORT] snapped o/d to state highway: origin=True dest=True
+[ORT] 1781725099.034 optimize_route parsed avoided=[] included=0 num_stops=2
+[ORT] 1781725099.034 _build_distance_matrix start n=2 avoided=[]
+[ORT] 1781725099.263 OSRM get_table_matrix start url=https://router.project-osrm.org/table/v1/driving/-97.878322,36.390866;-97.878322,36.390866?annotations=distance,duration
+[ORT] 1781725099.830 OSRM get_table_matrix OK dists=2x2 elapsed=0.567 attempt=0
+[ORT] 1781725099.830 _build_distance_matrix done checks=0 penalties=0 used_real=True elapsed=0.796
+[ORT] 1781725099.830 VRP setup start n=2
+[ORT] 1781725099.830 VRP search_params: first=PATH_CHEAPEST_ARC, time_limit=120s, solution_limit=100
+[ORT] 1781725099.830 VRP SolveWithParameters (primary) START
+[ORT] 1781725099.830 VRP SolveWithParameters (primary) DONE assignment=True elapsed=0.000
+[ORT] 1781725099.830 _build_route_info_from_order (primary) START order=[0, 1]
+[ORT] 1781725100.058 _build_route_info per-leg get_route_legs i=0 a=0->b=1
+[ORT] 1781725100.058 OSRM get_route_legs start from=(36.3909,-97.8783) to=(36.3909,-97.8783) url=https://router.project-osrm.org/route/v1/driving/-97.878322,36.390866;-97.878322,36.390866?overview=full&geometries=geojson&steps=true&alternatives=false
+[ORT] 1781725100.707 OSRM get_route_legs OK dist_m=0 steps=2 elapsed=0.649 attempt=0
+[ORT] 1781725100.707 _build_route_info per-leg get DONE elapsed=0.649 has_route=True
+[ORT] 1781725100.707 BORDER_EXTRACT + CORRIDOR_WALK START steps=2 order=[0, 1] (detailed for abort debugging)
+[ORT] 1781725100.707 BORDER_EXTRACT + CORRIDOR_WALK DONE crossings=0 corridor=['OK'] elapsed=0.000
+[ORT] 1781725100.707 _build_route_info_from_order (primary) DONE elapsed=0.877
+[ORT] 1781725100.707 optimize_route END total_elapsed=18.076 status=ok meta_num_stops=2 used_real=True
+Enid->Enid: distance=0mi corridor=['OK']
+ALL TESTS PASSED

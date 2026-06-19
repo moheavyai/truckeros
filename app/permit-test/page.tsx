@@ -6,6 +6,36 @@ import { useRouter } from 'next/navigation'
 import VehicleDiagram from '@/components/VehicleDiagram'
 import type { RigConfiguration, Tractor, Trailer } from '@/types/equipment'
 import { computeRigDimensions } from '@/types/equipment'
+import {
+  fetchGeocodeWithRetry,
+  isAddressReadyForGeocode,
+  GEOCODE_BUSY_MESSAGE,
+  isGeocodeFailure,
+} from '@/lib/geocode-client'
+import { formatHighwayForDisplay, formatHighwaysForDisplay } from '@/lib/format-highway-display'
+
+type PermitPrimary = {
+  permitReady?: boolean
+  permitRequiredStates?: string[]
+  permitWarnings?: string[]
+  message?: string
+}
+
+/** OR-Tools permitReady=true means permits ARE required (oversize / review needed). */
+function routeRequiresPermit(primary: PermitPrimary | null | undefined): boolean {
+  if (!primary) return false
+  if (primary.permitReady === true) return true
+  if ((primary.permitRequiredStates?.length || 0) > 0) return true
+  if (Array.isArray(primary.permitWarnings) && primary.permitWarnings.length > 0) return true
+  return false
+}
+
+function stateRequiresPermit(primary: PermitPrimary | null | undefined, state: string): boolean {
+  if (!primary) return false
+  if (primary.permitReady === true) return true
+  if (Array.isArray(primary.permitWarnings) && primary.permitWarnings.length > 0) return true
+  return primary.permitRequiredStates?.includes(state) ?? false
+}
 
 export default function PermitTestPage() {
   const [user, setUser] = useState<any>(null)
@@ -66,24 +96,24 @@ export default function PermitTestPage() {
   const [formData, setFormData] = useState({
     origin: {
       street: '',
-      city: 'Calvert',
-      state: 'AL',
+      city: '',
+      state: '',
       zip: '',
     },
     destination: {
       street: '',
-      city: 'Lincoln',
-      state: 'NE',
+      city: '',
+      state: '',
       zip: '',
     },
     weight: 80000,
     length: 60,
     width: 9.67,
     height: 13.5,
-    originLat: 31.85,
-    originLon: -86.85,
-    destinationLat: 40.81,
-    destinationLon: -96.68,
+    originLat: undefined as number | undefined,
+    originLon: undefined as number | undefined,
+    destinationLat: undefined as number | undefined,
+    destinationLon: undefined as number | undefined,
 
     // NEW (Intake Form v2): equipment rig + cargo details per task + migration 009.
     // Use '' for optional text/numeric fields (avoids "Year: 0" display bugs). Numbers only where they have real defaults.
@@ -119,10 +149,13 @@ export default function PermitTestPage() {
   const [loading, setLoading] = useState(false)
   const [geocodeStatus, setGeocodeStatus] = useState('')
   const [isGeocoding, setIsGeocoding] = useState({ origin: false, destination: false })
+  const [showManualCoords, setShowManualCoords] = useState({ origin: false, destination: false })
 
   // Per-field cooldown to protect against Nominatim rate limits
   const lastGeocodeAttempt = useRef<{ origin: number; destination: number }>({ origin: 0, destination: 0 })
   const GEOCODE_COOLDOWN_MS = 5000 // 5 seconds between geocoding attempts per field (helps with Nominatim limits)
+
+  const ORTOOLS_TIMEOUT_MS = 300000 // 300 seconds (5 minutes) for OR-Tools calls (longer routes + solver can take time; fixes "This operation was aborted" when proxy/backend is slow)
 
   // Always keep the latest formData in a ref to avoid stale closures in debounced functions
   const formDataRef = useRef(formData)
@@ -149,9 +182,12 @@ export default function PermitTestPage() {
   // Tier selector for cost estimation (temporary for testing)
   const [selectedTier, setSelectedTier] = useState<'Free' | 'Starter' | 'Pro'>('Starter')
 
-  // NEW: Routing engine selector (GraphHopper = truck profile, OSRM = baseline)
+  // Routing engine (kept for payload shape + quick mode force + voice; selector UI replaced by optimizationMode toggle)
   const [routingEngine, setRoutingEngine] = useState<'osrm' | 'graphhopper'>('osrm')
-  const [routingStatus, setRoutingStatus] = useState<{ graphhopper: { enabled: boolean; label: string } } | null>(null)
+
+  // NEW: Optimization mode toggle for OR-Tools integration (quick = existing /api/analyze-permit flow; ortools = /api/optimize-route + normalize)
+  // v0.3: default to 'ortools' (World-Class path with hard avoid enforcement + practical corridors)
+  const [optimizationMode, setOptimizationMode] = useState<'quick' | 'ortools'>('ortools')
 
   // NEW (Intake v2): equipment profile selector + Quick Route Glance state (declared early so helpers below can reference safely)
   const [equipmentProfiles, setEquipmentProfiles] = useState<any[]>([])
@@ -333,7 +369,8 @@ export default function PermitTestPage() {
 
   // Voice confirmation: reads back the current form values
   function confirmWithVoice() {
-    const summary = `Origin: ${formData.origin.city} ${formData.origin.state}. Destination: ${formData.destination.city} ${formData.destination.state}. Weight: ${formData.weight} pounds. Length: ${formData.length} feet. Axles: ${formData.axles}. Gross: ${formData.grossLoadedWeight}. Routing engine: ${routingEngine}.`
+    const engineLabel = optimizationMode === 'ortools' ? 'Full OR-Tools Optimization' : routingEngine
+    const summary = `Origin: ${formData.origin.city} ${formData.origin.state}. Destination: ${formData.destination.city} ${formData.destination.state}. Weight: ${formData.weight} pounds. Length: ${formData.length} feet. Axles: ${formData.axles}. Gross: ${formData.grossLoadedWeight}. Routing: ${engineLabel}.`
     speak(summary)
     setVoiceStatus('Load Pilot is reading back your details...')
     setTimeout(() => setVoiceStatus(''), 6000)
@@ -628,14 +665,6 @@ export default function PermitTestPage() {
   // Ref for scrolling to results after submission
   const resultsRef = useRef<HTMLDivElement>(null)
 
-  // Fetch routing engine availability (so we can show "Live" vs "Fallback" for GraphHopper)
-  useEffect(() => {
-    fetch('/api/routing/status')
-      .then(r => r.json())
-      .then(setRoutingStatus)
-      .catch(() => setRoutingStatus(null))
-  }, [])
-
   // Debounced geocoding with cooldown protection (uses ref to avoid stale formData)
   const debouncedGeocode = useCallback((type: 'origin' | 'destination') => {
     const currentForm = formDataRef.current
@@ -644,8 +673,8 @@ export default function PermitTestPage() {
     // Prevent concurrent geocoding for the same field
     if (isGeocoding[type]) return
 
-    // Only geocode when we have both city and state
-    if (!address.city?.trim() || !address.state?.trim()) return
+    // Only geocode when city+state (or full address) is complete
+    if (!isAddressReadyForGeocode(address)) return
 
     // Enforce client-side cooldown to protect Nominatim rate limits
     const now = Date.now()
@@ -659,51 +688,44 @@ export default function PermitTestPage() {
     lastGeocodeAttempt.current[type] = now
 
     // Clear any previous timeout for this field
-    if (geocodeTimeoutRef.current) {
-      clearTimeout(geocodeTimeoutRef.current)
+    if (geocodeTimeoutRef.current[type]) {
+      clearTimeout(geocodeTimeoutRef.current[type])
     }
 
-    geocodeTimeoutRef.current = setTimeout(async () => {
+    geocodeTimeoutRef.current[type] = setTimeout(async () => {
       setIsGeocoding(prev => ({ ...prev, [type]: true }))
       setGeocodeStatus(`Geocoding ${type}...`)
 
       // Always read the latest values at execution time
       const latestAddress = formDataRef.current[type]
-      const query = `${latestAddress.city}, ${latestAddress.state}, USA`
+      if (!isAddressReadyForGeocode(latestAddress)) {
+        setIsGeocoding(prev => ({ ...prev, [type]: false }))
+        return
+      }
 
       try {
-        const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}&limit=1`)
+        const result = await fetchGeocodeWithRetry(latestAddress)
 
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}))
-          const message = errorData.error || `Geocoding failed: ${res.status}`
-          throw new Error(message)
-        }
-
-        const data = await res.json()
-
-        if (data && data.length > 0) {
-          const lat = parseFloat(data[0].lat)
-          const lon = parseFloat(data[0].lon)
-
+        if (result.ok) {
           setFormData((prev) => ({
             ...prev,
-            [`${type}Lat`]: lat,
-            [`${type}Lon`]: lon,
+            [`${type}Lat`]: result.lat,
+            [`${type}Lon`]: result.lon,
           }))
+          setShowManualCoords((prev) => ({ ...prev, [type]: false }))
           setGeocodeStatus(`${type} geocoded successfully`)
-        } else {
-          setGeocodeStatus(`No location found for ${query}`)
+          if (errors['geocode']) {
+            const { geocode: _, ...rest } = errors
+            setErrors(rest)
+          }
+        } else if (isGeocodeFailure(result)) {
+          setShowManualCoords((prev) => ({ ...prev, [type]: true }))
+          setGeocodeStatus(result.userMessage)
         }
       } catch (error: any) {
         console.error('Geocoding error:', error)
-        const msg = error?.message || 'Geocoding failed'
-
-        if (msg.toLowerCase().includes('rate limit')) {
-          setGeocodeStatus('Nominatim rate limit — please wait 5–10 seconds then retry')
-        } else {
-          setGeocodeStatus(msg.length > 80 ? 'Geocoding temporarily unavailable — please wait and retry' : msg)
-        }
+        setShowManualCoords((prev) => ({ ...prev, [type]: true }))
+        setGeocodeStatus(GEOCODE_BUSY_MESSAGE)
       } finally {
         setIsGeocoding(prev => ({ ...prev, [type]: false }))
       }
@@ -711,7 +733,7 @@ export default function PermitTestPage() {
   }, []) // No formData dependency — we use the ref instead
 
   // Ref to store the timeout ID for debouncing
-  const geocodeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const geocodeTimeoutRef = useRef<{ origin?: NodeJS.Timeout; destination?: NodeJS.Timeout }>({})
 
   // Client-side validation (can accept external data for last-chance geocoding)
   function validateForm(data: any = formData): boolean {
@@ -730,12 +752,12 @@ export default function PermitTestPage() {
     if (!data.width || data.width <= 0) newErrors['width'] = 'Width must be greater than 0'
     if (!data.height || data.height <= 0) newErrors['height'] = 'Height must be greater than 0'
 
-    // Recommend coordinates for best results
-    if (!data.originLat || !data.destinationLat) {
+    // Require coordinates (from geocode or manual entry)
+    if (!data.originLat || !data.originLon || !data.destinationLat || !data.destinationLon) {
       const missing = []
-      if (!data.originLat) missing.push('Origin')
-      if (!data.destinationLat) missing.push('Destination')
-      newErrors['geocode'] = `Please geocode ${missing.join(' and ')} for accurate corridor routing`
+      if (!data.originLat || !data.originLon) missing.push('Origin')
+      if (!data.destinationLat || !data.destinationLon) missing.push('Destination')
+      newErrors['geocode'] = `Please geocode ${missing.join(' and ')} or enter coordinates manually below`
     }
 
     setErrors(newErrors)
@@ -745,6 +767,28 @@ export default function PermitTestPage() {
   // Wrapper used by the last-chance logic
   function validateFormWithData(data: any): boolean {
     return validateForm(data)
+  }
+
+  // Small helper for uniform primary derivation (addresses Issue 7 suggestion for maintainability across render/approve sites; no behavior change)
+  const getPrimary = (ar: any, r: any) => ar?.options?.[0] || ar || r?.agent
+
+  /** Map /api/optimize-route JSON to the agentResult shape (including OSRM fallback). */
+  function normalizeOrToolsToAgentData(optData: any) {
+    const primaryOpt = optData.primary || optData
+    const altsOpt = Array.isArray(optData.alternatives) ? optData.alternatives : []
+    const isFallback = !!optData.fallback
+    return {
+      status: 'pending_review',
+      message: optData.message || (isFallback
+        ? 'Optimization timed out - falling back to OSRM'
+        : 'Full OR-Tools optimization complete.'),
+      options: [primaryOpt, ...altsOpt].filter(Boolean),
+      _source: isFallback ? 'osrm-fallback' : 'or-tools',
+      fallback: isFallback,
+      fallbackReason: optData.fallbackReason || null,
+      meta: optData.meta || null,
+      loadDetails: optData.loadDetails || null,
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -767,20 +811,13 @@ export default function PermitTestPage() {
       if (needsOriginGeocode) {
         geocodePromises.push(
           (async () => {
-            try {
-              const query = `${currentData.origin.city}, ${currentData.origin.state}, USA`
-              const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}&limit=1`)
-              if (res.ok) {
-                const data = await res.json()
-                if (data?.length > 0) {
-                  currentData = {
-                    ...currentData,
-                    originLat: parseFloat(data[0].lat),
-                    originLon: parseFloat(data[0].lon),
-                  }
-                }
-              }
-            } catch (_) {}
+            const result = await fetchGeocodeWithRetry(currentData.origin)
+            if (result.ok) {
+              currentData = { ...currentData, originLat: result.lat, originLon: result.lon }
+            } else if (isGeocodeFailure(result)) {
+              setShowManualCoords((prev) => ({ ...prev, origin: true }))
+              setGeocodeStatus(result.userMessage)
+            }
           })()
         )
       }
@@ -788,20 +825,13 @@ export default function PermitTestPage() {
       if (needsDestGeocode) {
         geocodePromises.push(
           (async () => {
-            try {
-              const query = `${currentData.destination.city}, ${currentData.destination.state}, USA`
-              const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}&limit=1`)
-              if (res.ok) {
-                const data = await res.json()
-                if (data?.length > 0) {
-                  currentData = {
-                    ...currentData,
-                    destinationLat: parseFloat(data[0].lat),
-                    destinationLon: parseFloat(data[0].lon),
-                  }
-                }
-              }
-            } catch (_) {}
+            const result = await fetchGeocodeWithRetry(currentData.destination)
+            if (result.ok) {
+              currentData = { ...currentData, destinationLat: result.lat, destinationLon: result.lon }
+            } else if (isGeocodeFailure(result)) {
+              setShowManualCoords((prev) => ({ ...prev, destination: true }))
+              setGeocodeStatus(result.userMessage)
+            }
           })()
         )
       }
@@ -824,30 +854,70 @@ export default function PermitTestPage() {
       // Only send the original known LoadDetails keys + routing choice to the agent.
       // New rig/cargo fields are intentionally omitted here (they are extra context for snapshots only).
       const analyzePayload = {
-        origin: formData.origin,
-        destination: formData.destination,
-        weight: formData.weight,
-        length: formData.length,
-        width: formData.width,
-        height: formData.height,
-        originLat: formData.originLat,
-        originLon: formData.originLon,
-        destinationLat: formData.destinationLat,
-        destinationLon: formData.destinationLon,
+        origin: currentData.origin,
+        destination: currentData.destination,
+        weight: currentData.weight,
+        length: currentData.length,
+        width: currentData.width,
+        height: currentData.height,
+        originLat: currentData.originLat,
+        originLon: currentData.originLon,
+        destinationLat: currentData.destinationLat,
+        destinationLon: currentData.destinationLon,
         routingEngine,
         specialInstructions: manualRoute,
       }
-      const agentResponse = await fetch('/api/analyze-permit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(analyzePayload),
-      })
 
-      const agentData = await agentResponse.json()
+      let agentData: any
+      if (optimizationMode === 'ortools') {
+        // OR-Tools fetch - no abort, long timeout, timing logs
+        console.log('OR-Tools fetch started');
+        const startTime = Date.now();
 
-      if (!agentResponse.ok) {
-        const errorMessage = agentData.error || agentData.message || 'Agent failed'
-        throw new Error(errorMessage)
+        const optResponse = await fetch('/api/optimize-route', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...analyzePayload,
+            optimizationMode: 'ortools'
+          }),
+          // No signal / AbortController
+        });
+
+        const elapsed = Date.now() - startTime;
+        console.log(`OR-Tools fetch completed in ${elapsed} ms`);
+
+        const optData = await optResponse.json()
+        if (!optResponse.ok) {
+          console.error(`[or-tools] HTTP ${optResponse.status} error:`, optData)
+          throw new Error(
+            optData.error || optData.message || `OR-Tools optimization failed (HTTP ${optResponse.status}).`
+          )
+        }
+        if (optData.status && optData.status !== 'ok') {
+          console.error('[or-tools] submit non-ok:', optData)
+          throw new Error(optData.error || optData.message || 'OR-Tools optimization failed.')
+        }
+        if (optData.fallback) {
+          console.warn('[or-tools] OSRM fallback used:', optData.fallbackReason, optData.meta?.originalError)
+        }
+        agentData = normalizeOrToolsToAgentData(optData)
+      } else {
+        // Existing quick path (OSRM/GraphHopper via agent) — untouched.
+        const agentResponse = await fetch('/api/analyze-permit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(analyzePayload),
+        })
+
+        const quickData = await agentResponse.json()
+
+        if (!agentResponse.ok) {
+          const rawError = quickData.error || quickData.message || 'Agent failed'
+          console.error('[quick] analyze-permit error details:', rawError, quickData) // full for debug; user-facing is friendly (parity with or-tools sanitization)
+          throw new Error('Permit analysis failed. Please check your inputs or try again.')
+        }
+        agentData = quickData
       }
 
       // Store agent result for review (do not save yet)
@@ -881,7 +951,7 @@ export default function PermitTestPage() {
     if (!agentResult) return;
 
     // Always derive the primary option correctly (supports both single and multi-option shapes)
-    const primary = agentResult?.options?.[0] || agentResult
+    const primary = getPrimary(agentResult, null)
 
     setLoading(true)
 
@@ -1104,25 +1174,85 @@ export default function PermitTestPage() {
     setShowChangeRouteInput(false)
 
     try {
-      // Re-run the agent with the manual route (preserve current engine choice)
-      const response = await fetch('/api/analyze-permit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          manualRoute: states,
+      // Re-run — if OR-Tools mode, hit /api/optimize-route (same payload shape); else existing analyze-permit. Normalize for or-tools.
+      if (optimizationMode === 'ortools') {
+        const changePayload = {
+          origin: formData.origin,
+          destination: formData.destination,
+          weight: formData.weight,
+          length: formData.length,
+          width: formData.width,
+          height: formData.height,
+          originLat: formData.originLat,
+          originLon: formData.originLon,
+          destinationLat: formData.destinationLat,
+          destinationLon: formData.destinationLon,
           routingEngine,
-        }),
-      })
+          manualRoute: states,
+        }
+        const startTime = Date.now()
+        console.log('OR-Tools fetch started')
+        const optResponse = await fetch('/api/optimize-route', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(changePayload),
+        })
+        const elapsed = Date.now() - startTime
+        console.log('OR-Tools fetch completed in', elapsed, 'ms')
+        const optData = await optResponse.json()
+        if (!optResponse.ok) {
+          console.error('[or-tools] change-route error details:', optData.error || optData.message, optData)
+          throw new Error(optData.error || optData.message || 'OR-Tools failed on change route.')
+        }
+        if (optData.status && optData.status !== 'ok') {
+          console.error('[or-tools] change-route non-ok:', optData)
+          throw new Error(optData.error || optData.message || 'OR-Tools failed on change route.')
+        }
+        if (optData.fallback) {
+          console.warn('[or-tools] change-route OSRM fallback:', optData.fallbackReason)
+        }
+        setAgentResult(normalizeOrToolsToAgentData({
+          ...optData,
+          message: optData.message || (optData.fallback
+            ? 'Optimization timed out - falling back to OSRM'
+            : 'Full OR-Tools optimization (changed route).'),
+        }))
+      } else {
+        // Existing quick path unchanged. Use explicit payload subset (parity with or-tools changePayload + submit analyzePayload; Issue 11).
+        const response = await fetch('/api/analyze-permit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            origin: formData.origin,
+            destination: formData.destination,
+            weight: formData.weight,
+            length: formData.length,
+            width: formData.width,
+            height: formData.height,
+            originLat: formData.originLat,
+            originLon: formData.originLon,
+            destinationLat: formData.destinationLat,
+            destinationLon: formData.destinationLon,
+            routingEngine,
+            manualRoute: states,
+          }),
+        })
 
-      const newAgentData = await response.json()
+        const newAgentData = await response.json()
 
-      if (!response.ok) throw new Error(newAgentData.error || 'Agent failed on new route')
+        if (!response.ok) {
+          const rawError = newAgentData.error || 'Agent failed on new route'
+          console.error('[quick] change-route analyze-permit error details:', rawError, newAgentData)
+          throw new Error('Permit analysis failed on new route. Please check your inputs or try again.')
+        }
 
-      setAgentResult(newAgentData)
+        setAgentResult(newAgentData)
+      }
+      setResult(null) // clear any prior error banner (mirrors submit at 892; addresses Issue 2 + 6)
       setSavedToDatabase(false)
       setManualRoute('')
     } catch (error: any) {
+      setResult({ error: error.message }) // make change-route errors (incl or-tools) surface in nice banner like submit; keep alert secondary for immediate feedback
       alert('Failed to analyze the new route: ' + error.message)
       setShowChangeRouteInput(true) // keep input open on error
     } finally {
@@ -1319,6 +1449,12 @@ export default function PermitTestPage() {
           )}
         </div>
 
+        {geocodeStatus && (
+          <div className={`text-sm px-3 py-2 rounded-lg border ${geocodeStatus.includes('successfully') ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
+            {geocodeStatus}
+          </div>
+        )}
+
         {/* Origin (Route section will follow Load in a future polish; Rig + Load now lead the flow) */}
         <div>
           <div className="flex items-center gap-2 mb-2">
@@ -1346,12 +1482,19 @@ export default function PermitTestPage() {
             <input
               placeholder="Street (optional)"
               value={formData.origin.street}
-              onChange={(e) =>
+              onChange={(e) => {
+                const street = e.target.value
                 setFormData({
                   ...formData,
-                  origin: { ...formData.origin, street: e.target.value },
+                  origin: { ...formData.origin, street },
+                  originLat: undefined,
+                  originLon: undefined,
                 })
-              }
+                const latest = { ...formDataRef.current.origin, street }
+                if (isAddressReadyForGeocode(latest)) {
+                  debouncedGeocode('origin')
+                }
+              }}
               className="border p-2 rounded col-span-2"
             />
             <div>
@@ -1369,14 +1512,14 @@ export default function PermitTestPage() {
                     const { ['origin.city']: _, ...rest } = errors
                     setErrors(rest)
                   }
-                  const latestState = formDataRef.current.origin.state;
-                  if (e.target.value.trim().length >= 3 && latestState?.length === 2) {
+                  const latest = { ...formDataRef.current.origin, city: e.target.value };
+                  if (isAddressReadyForGeocode(latest)) {
                     debouncedGeocode('origin')
                   }
                 }}
                 onBlur={() => {
                   const latest = formDataRef.current.origin;
-                  if (latest.city?.trim().length >= 3 && latest.state?.length === 2) {
+                  if (isAddressReadyForGeocode(latest)) {
                     debouncedGeocode('origin')
                   }
                 }}
@@ -1400,14 +1543,14 @@ export default function PermitTestPage() {
                     const { ['origin.state']: _, ...rest } = errors
                     setErrors(rest)
                   }
-                  const latestCity = formDataRef.current.origin.city;
-                  if (val.length === 2 && latestCity?.trim().length >= 3) {
+                  const latest = { ...formDataRef.current.origin, state: val };
+                  if (isAddressReadyForGeocode(latest)) {
                     debouncedGeocode('origin')
                   }
                 }}
                 onBlur={() => {
                   const latest = formDataRef.current.origin;
-                  if (latest.city?.trim().length >= 3 && latest.state?.length === 2) {
+                  if (isAddressReadyForGeocode(latest)) {
                     debouncedGeocode('origin')
                   }
                 }}
@@ -1433,6 +1576,56 @@ export default function PermitTestPage() {
               }
               className="border p-2 rounded"
             />
+            {(showManualCoords.origin || (formData.origin.city && formData.origin.state && !formData.originLat)) && (
+              <div className="col-span-2 mt-1 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-xs text-gray-600 mb-2">Enter coordinates manually (latitude, longitude)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Latitude (e.g. 36.3956)"
+                    value={formData.originLat ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setFormData((prev) => ({
+                        ...prev,
+                        originLat: v === '' ? undefined : parseFloat(v),
+                      }))
+                      if (errors['geocode']) {
+                        const { geocode: _, ...rest } = errors
+                        setErrors(rest)
+                      }
+                    }}
+                    className="border p-2 rounded text-sm"
+                  />
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Longitude (e.g. -97.8784)"
+                    value={formData.originLon ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setFormData((prev) => ({
+                        ...prev,
+                        originLon: v === '' ? undefined : parseFloat(v),
+                      }))
+                      if (errors['geocode']) {
+                        const { geocode: _, ...rest } = errors
+                        setErrors(rest)
+                      }
+                    }}
+                    className="border p-2 rounded text-sm"
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="text-xs text-blue-700 underline mt-2"
+                  onClick={() => setShowManualCoords((p) => ({ ...p, origin: !p.origin }))}
+                >
+                  {showManualCoords.origin ? 'Hide manual coordinates' : 'Enter coordinates manually'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1463,12 +1656,19 @@ export default function PermitTestPage() {
             <input
               placeholder="Street (optional)"
               value={formData.destination.street}
-              onChange={(e) =>
+              onChange={(e) => {
+                const street = e.target.value
                 setFormData({
                   ...formData,
-                  destination: { ...formData.destination, street: e.target.value },
+                  destination: { ...formData.destination, street },
+                  destinationLat: undefined,
+                  destinationLon: undefined,
                 })
-              }
+                const latest = { ...formDataRef.current.destination, street }
+                if (isAddressReadyForGeocode(latest)) {
+                  debouncedGeocode('destination')
+                }
+              }}
               className="border p-2 rounded col-span-2"
             />
             <div>
@@ -1486,14 +1686,14 @@ export default function PermitTestPage() {
                     const { ['destination.city']: _, ...rest } = errors
                     setErrors(rest)
                   }
-                  const latestState = formDataRef.current.destination.state;
-                  if (e.target.value.trim().length >= 3 && latestState?.length === 2) {
+                  const latest = { ...formDataRef.current.destination, city: e.target.value };
+                  if (isAddressReadyForGeocode(latest)) {
                     debouncedGeocode('destination')
                   }
                 }}
                 onBlur={() => {
                   const latest = formDataRef.current.destination;
-                  if (latest.city?.trim().length >= 3 && latest.state?.length === 2) {
+                  if (isAddressReadyForGeocode(latest)) {
                     debouncedGeocode('destination')
                   }
                 }}
@@ -1517,14 +1717,14 @@ export default function PermitTestPage() {
                     const { ['destination.state']: _, ...rest } = errors
                     setErrors(rest)
                   }
-                  const latestCity = formDataRef.current.destination.city;
-                  if (val.length === 2 && latestCity?.trim().length >= 3) {
+                  const latest = { ...formDataRef.current.destination, state: val };
+                  if (isAddressReadyForGeocode(latest)) {
                     debouncedGeocode('destination')
                   }
                 }}
                 onBlur={() => {
                   const latest = formDataRef.current.destination;
-                  if (latest.city?.trim().length >= 3 && latest.state?.length === 2) {
+                  if (isAddressReadyForGeocode(latest)) {
                     debouncedGeocode('destination')
                   }
                 }}
@@ -1550,6 +1750,56 @@ export default function PermitTestPage() {
               }
               className="border p-2 rounded"
             />
+            {(showManualCoords.destination || (formData.destination.city && formData.destination.state && !formData.destinationLat)) && (
+              <div className="col-span-2 mt-1 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-xs text-gray-600 mb-2">Enter coordinates manually (latitude, longitude)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Latitude"
+                    value={formData.destinationLat ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setFormData((prev) => ({
+                        ...prev,
+                        destinationLat: v === '' ? undefined : parseFloat(v),
+                      }))
+                      if (errors['geocode']) {
+                        const { geocode: _, ...rest } = errors
+                        setErrors(rest)
+                      }
+                    }}
+                    className="border p-2 rounded text-sm"
+                  />
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Longitude"
+                    value={formData.destinationLon ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setFormData((prev) => ({
+                        ...prev,
+                        destinationLon: v === '' ? undefined : parseFloat(v),
+                      }))
+                      if (errors['geocode']) {
+                        const { geocode: _, ...rest } = errors
+                        setErrors(rest)
+                      }
+                    }}
+                    className="border p-2 rounded text-sm"
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="text-xs text-blue-700 underline mt-2"
+                  onClick={() => setShowManualCoords((p) => ({ ...p, destination: !p.destination }))}
+                >
+                  {showManualCoords.destination ? 'Hide manual coordinates' : 'Enter coordinates manually'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1773,7 +2023,7 @@ export default function PermitTestPage() {
                 <span className="font-medium text-blue-900">Est. Major Highways:</span>
                 <div className="flex flex-wrap gap-1.5 mt-1">
                   {glance.highways.map((h: string, i: number) => (
-                    <span key={i} className="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium border bg-white text-blue-800 border-blue-200">{h}</span>
+                    <span key={i} className="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium border bg-white text-blue-800 border-blue-200">{formatHighwayForDisplay(h)}</span>
                   ))}
                 </div>
               </div>
@@ -1834,76 +2084,61 @@ export default function PermitTestPage() {
           </div>
         </div>
 
-        {/* NEW: Routing Engine Selector — makes the "easy to switch" requirement explicit */}
+        {/* Routing Optimization toggle — Quick OSRM (existing agent path) vs Full OR-Tools (new backend /optimize-route) */}
         <div>
-          <h2 className="font-semibold mb-2">Routing Engine</h2>
+          <h2 className="font-semibold mb-2">Routing Optimization</h2>
           <div className="flex gap-3">
             <button
               type="button"
-              onClick={() => setRoutingEngine('osrm')}
+              onClick={() => { setOptimizationMode('quick'); setRoutingEngine('osrm') }}
               className={`flex-1 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
-                routingEngine === 'osrm'
+                optimizationMode === 'quick'
                   ? 'bg-black text-white border-black'
                   : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
               }`}
             >
-              <div className="font-semibold">OSRM (Default)</div>
-              <div className="text-[10px] opacity-70 mt-0.5">Reliable baseline • No API key required</div>
+              <div className="font-semibold">Quick OSRM</div>
+              <div className="text-[10px] opacity-70 mt-0.5">Fast baseline routing • Instant analysis</div>
             </button>
             <button
               type="button"
-              onClick={() => setRoutingEngine('graphhopper')}
-              disabled={routingStatus && !routingStatus.graphhopper?.enabled}
+              onClick={() => setOptimizationMode('ortools')}
               className={`flex-1 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
-                routingEngine === 'graphhopper'
+                optimizationMode === 'ortools'
                   ? 'bg-emerald-600 text-white border-emerald-700'
                   : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-              } ${routingStatus && !routingStatus.graphhopper?.enabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+              }`}
             >
-              <div className="font-semibold flex items-center justify-center gap-2">
-                GraphHopper (Truck Profile)
-                {routingStatus && (
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded ${routingStatus.graphhopper?.enabled ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'}`}>
-                    {routingStatus.graphhopper?.enabled ? 'LIVE' : 'FALLBACK'}
-                  </span>
-                )}
-              </div>
-              <div className="text-[10px] opacity-70 mt-0.5">
-                {routingStatus?.graphhopper?.enabled 
-                  ? 'Real truck profile + bridge/weight awareness (key configured)' 
-                  : 'Better truck routing • Respects height/weight/bridge data (key missing → OSRM)'}
-              </div>
+              <div className="font-semibold">World-Class OR-Tools Optimization</div>
+              <div className="text-[10px] opacity-70 mt-0.5">Full VRP + hard avoid enforcement • OSOW corridors • entry/exit + permitReady</div>
             </button>
           </div>
           <p className="text-[11px] text-gray-500 mt-1.5">
-            GraphHopper uses real truck dimensions (length/width/height/weight) and avoids low bridges / weight-restricted roads that basic OSRM ignores.
-            {routingStatus?.graphhopper?.enabled 
-              ? ' ✓ Live key detected — truck profile is active.' 
-              : ' Add GRAPHHOPPER_API_KEY to .env.local to enable real truck-aware routing.'}
+            Quick OSRM: existing fast path via Permit Agent (backward-compatible). World-Class OR-Tools Optimization: dedicated VRP solver with *hard* special-instructions enforcement (avoids in matrix), intelligent OSOW-friendly corridor selection (practical vias), robust state extraction, accurate permit-ready output.
           </p>
         </div>
 
         {/* Route Preferences + Voice Input */}
         <div>
           <h2 className="font-semibold mb-2 flex items-center gap-2">
-            Special Instructions / Route Preferences
+            Special route instructions (avoid AR,IL; include Corinth MS; prefer southern on I-40...)
             <button
               type="button"
               onClick={() => startVoiceInput('preferences')}
               disabled={isListening}
               className="text-base hover:bg-gray-100 p-1 rounded transition disabled:opacity-50"
-              title="Speak route preferences (e.g. 'prefer I-40 avoid tolls')"
+              title="Speak route preferences (e.g. 'avoid AR, avoid IL, include Corinth MS')"
             >
               🎤
             </button>
           </h2>
           <textarea
-            placeholder="E.g. Prefer I-40, avoid toll roads, need night travel only..."
+            placeholder="E.g. avoid AR, avoid IL, include Corinth MS, prefer I-40 southern, stay on interstates..."
             value={manualRoute}
             onChange={(e) => setManualRoute(e.target.value)}
             className="border p-3 rounded w-full text-sm min-h-[60px] resize-y"
           />
-          <p className="text-[10px] text-gray-500 mt-1">Voice input or type. Affects route ranking and suggestions.</p>
+          <p className="text-[10px] text-gray-500 mt-1">For Full OR-Tools: hard-enforced (avoids in matrix). For Quick: ranking bias. Voice or type.</p>
         </div>
         </div> {/* End form card */}
 
@@ -1914,10 +2149,10 @@ export default function PermitTestPage() {
         >
           {loading ? (
             <>
-              <span className="animate-spin">⏳</span> Analyzing Route with Permit Agent...
+              <span className="animate-spin">⏳</span> {optimizationMode === 'ortools' ? 'Optimizing with OR-Tools...' : 'Analyzing Route with Permit Agent...'}
             </>
           ) : (
-            'Submit to Permit Agent'
+            optimizationMode === 'ortools' ? 'Optimize with OR-Tools' : 'Submit to Permit Agent'
           )}
         </button>
       </form>
@@ -1925,6 +2160,24 @@ export default function PermitTestPage() {
       {/* Results */}
       {(agentResult || result) && (
         <div ref={resultsRef} className="mt-8 space-y-6">
+          {/* Note: richer or-tools sections (Permit Readiness, per-leg highways) may cause minor vertical layout shift vs quick results when present (expected per richer data; Issue 10) */}
+          {/* Error display (reused by both quick and or-tools paths on fetch failure) */}
+          {result?.error && (
+            <div className="p-4 rounded-lg border bg-red-50 border-red-200 text-red-800">
+              <div className="font-semibold">Analysis failed</div>
+              <div className="text-sm mt-1">{result.error}</div>
+            </div>
+          )}
+
+          {agentResult?.fallback && !result?.error && (
+            <div className="p-4 rounded-lg border bg-amber-50 border-amber-200 text-amber-900">
+              <div className="font-semibold">OR-Tools unavailable — OSRM route shown</div>
+              <div className="text-sm mt-1">
+                {agentResult.message || 'Optimization timed out - falling back to OSRM'}
+              </div>
+            </div>
+          )}
+
           {/* Edit Request - allows user to go back to the form */}
           <div className="flex justify-end">
             <button
@@ -1942,7 +2195,7 @@ export default function PermitTestPage() {
             </button>
           </div>
           {(() => {
-            const primary = agentResult?.options?.[0] || agentResult || result?.agent
+            const primary = getPrimary(agentResult, result)
             if (!primary) return null
 
             const isSaved = savedToDatabase || !!result?.savedToDatabase
@@ -1950,23 +2203,25 @@ export default function PermitTestPage() {
 
             return (
               <>
-                {/* Status Banner - derived from actual permitRequiredStates on the primary option */}
+                {/* Status Banner - routeRequiresPermit unifies OR-Tools permitReady vs quick-path permitRequiredStates */}
                 {(() => {
-                  const requiresPermit = (primary.permitRequiredStates?.length || 0) > 0
+                  const requiresPermit = routeRequiresPermit(primary)
                   const bannerMessage = primary.message ||
-                    (requiresPermit
-                      ? `Permit requirements detected for this route.`
-                      : 'No permit requirements flagged for this route.')
+                    (primary.permitReady !== undefined
+                      ? (primary.permitReady
+                        ? 'OR-Tools flags permit review needed; see Readiness card.'
+                        : 'OR-Tools reports route is permit ready.')
+                      : (requiresPermit
+                        ? 'Permit requirements detected for this route.'
+                        : 'No permit requirements flagged for this route.'))
 
                   return (
                     <div className={`p-4 rounded-lg border ${requiresPermit ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800'}`}>
                       <div className="flex items-center gap-3">
-                        <span className="text-2xl">{requiresPermit ? '🚨' : '✅'}</span>
+                        <span className={`text-2xl ${requiresPermit ? 'text-red-600' : 'text-emerald-600'}`}>✅</span>
                         <div>
                           <div className="font-semibold text-lg">
-                            {requiresPermit
-                              ? `Permit Required in ${primary.permitRequiredStates.length} State(s)`
-                              : 'No Permit Required'}
+                            {requiresPermit ? 'Permit Required' : 'No Permit Required'}
                           </div>
                           <div className="text-sm opacity-90">{bannerMessage}</div>
                         </div>
@@ -1974,6 +2229,7 @@ export default function PermitTestPage() {
                     </div>
                   )
                 })()}
+                {process.env.NODE_ENV !== 'production' && (() => { console.log('[border-coords-prefill]', { borderCrossings: primary?.borderCrossings, legsEntryExit: primary?.legs?.map((l: any) => ({ from: l.from, to: l.to, highways: l.highways })), routeCorridor: primary?.routeCorridor }); return null; })()}
 
                 {/* Approval Gate Buttons + Change Route (only before saving) */}
                 {agentResult && !isSaved && (
@@ -2058,7 +2314,7 @@ export default function PermitTestPage() {
                         </p>
                       </div>
                       <div className="text-xs px-3 py-1 bg-gray-100 rounded-full text-gray-600 self-start">
-                        {primary.routingEngine === 'graphhopper' ? 'GraphHopper Truck' : 'OSRM'} + Nominatim + State DOT
+                        {primary.routingEngine === 'graphhopper' ? 'GraphHopper Truck' : agentResult?.fallback ? 'OSRM (fallback)' : (primary.routingEngine?.includes('or-tools') || agentResult?._source === 'or-tools') ? 'Full OR-Tools Optimization' : 'OSRM'} + Nominatim + State DOT
                       </div>
                     </div>
 
@@ -2067,8 +2323,8 @@ export default function PermitTestPage() {
                       <div className="absolute top-1/2 left-4 right-4 h-1 bg-gradient-to-r from-blue-200 via-blue-300 to-blue-200 rounded-full -translate-y-1/2" />
                       <div className="relative flex justify-between items-center">
                         {primary.routeCorridor.map((state: string, index: number) => {
-                          const requires = primary.permitRequiredStates?.includes(state)
-                          const needsEscort = primary.escortRequiredStates?.includes(state)
+                          const requires = stateRequiresPermit(primary, state)
+                          const needsEscort = primary.permitReady !== undefined ? false : primary.escortRequiredStates?.includes(state)
                           const isFirst = index === 0
                           const isLast = index === primary.routeCorridor.length - 1
                           return (
@@ -2104,14 +2360,67 @@ export default function PermitTestPage() {
                         <div className="w-3 h-3 bg-orange-500 rounded-full" /> <span className="text-gray-600">Escort required</span>
                       </div>
                     </div>
+                    <div className="mt-2 flex flex-wrap gap-1 text-[10px]">{primary.routeCorridor.map((state:string,idx:number)=>{const requires=stateRequiresPermit(primary,state);return <span key={idx} className={`px-1.5 py-0.5 rounded font-mono ${requires?'bg-red-500 text-white':'bg-gray-200 text-gray-700'}`}>{state}{requires?' needed':''}</span>})}</div>
                   </div>
                 )}
 
-                {/* Major Highways */}
+                {/* v0.3 World-Class OR-Tools enforcement (small targeted update): display "Avoids enforced: AR, IL", corridor rationale when present.
+                    Only for ortools path (uses the new primary.specialInstructionsEnforced / avoidedStates / chosenCorridorRationale).
+                    Makes the recommended Full path visibly superior for real hauls. */}
+                {(agentResult?._source === 'or-tools' || (primary.routingEngine || '').includes('or-tools') || primary.specialInstructionsEnforced) &&
+                 (primary.avoidedStates?.length > 0 || primary.chosenCorridorRationale) && (
+                  <div className="p-3 border border-emerald-200 bg-emerald-50 rounded-lg text-sm">
+                    <div className="font-medium text-emerald-800">World-Class OR-Tools: hard enforcement + OSOW-friendly corridor</div>
+                    {primary.avoidedStates && primary.avoidedStates.length > 0 && (
+                      <div>Avoids enforced: <span className="font-semibold">{primary.avoidedStates.join(', ')}</span></div>
+                    )}
+                    {primary.chosenCorridorRationale && (
+                      <div className="text-[11px] text-emerald-700 mt-0.5">{primary.chosenCorridorRationale}</div>
+                    )}
+                  </div>
+                )}
+
+                {/* Major Highways — richer entry/exit + per-leg when legs provided by OR-Tools; fallback for quick path */}
                 {primary.highways && primary.highways.length > 0 && (
                   <div className="p-4 border rounded-lg bg-white">
                     <h3 className="font-semibold mb-2 text-gray-700">Major Highways</h3>
-                    <p className="text-sm text-gray-800 break-words">{primary.highways.join(" → ")}</p>
+                    {primary.legs && Array.isArray(primary.legs) && primary.legs.length > 0 ? (
+                      <div className="space-y-1 text-sm text-gray-800">
+                        {primary.legs.map((leg: any, i: number) => {
+                          const fromName = leg.from?.name || 'Start'
+                          const toName = leg.to?.name || 'End'
+                          const legHighways = Array.isArray(leg.highways) && leg.highways.length ? leg.highways : (primary.highways || [])
+                          const hw = formatHighwaysForDisplay(legHighways, leg.distance_m != null ? leg.distance_m / 1609.34 : undefined)
+                          return (
+                            <div key={i} className="break-words">
+                              {fromName} → <span className="font-medium">{hw}</span> → {toName}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-800 break-words">{primary.highways.map((h: string) => formatHighwayForDisplay(h)).join(" → ")}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Permit Readiness + Warnings (OR-Tools richer fields; only when present for backward compat) */}
+                {primary.permitReady !== undefined && (
+                  <div className="p-4 border rounded-lg bg-white">
+                    <h3 className="font-semibold mb-2 text-gray-700">Permit Readiness</h3>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${routeRequiresPermit(primary) ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                        {routeRequiresPermit(primary) ? '✅ Permit Required' : '✅ Permit Ready'}
+                      </span>
+                    </div>
+                    {Array.isArray(primary.permitWarnings) && primary.permitWarnings.length > 0 && (
+                      <div>
+                        <div className="text-xs font-medium text-amber-700 mb-1">Warnings</div>
+                        <ul className="text-sm text-amber-700 list-disc list-inside space-y-0.5">
+                          {primary.permitWarnings.map((w: string, i: number) => <li key={i}>{w}</li>)}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -2359,7 +2668,7 @@ export default function PermitTestPage() {
                 {/* Raw Data (collapsible) */}
                 <details className="border rounded-lg bg-gray-50 p-4">
                   <summary className="cursor-pointer font-medium text-gray-700 hover:text-gray-900">
-                    Show raw agent + database response (for debugging)
+                    Show raw agent + database response (for debugging; or-tools results include _source/meta/loadDetails for richer data)
                   </summary>
                   <div className="mt-4 grid md:grid-cols-2 gap-4">
                     <div>
