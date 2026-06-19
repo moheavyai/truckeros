@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "safety:backup": "powershell -ExecutionPolicy Bypass -File ./scripts/backup-and-push.ps1"
+    "safety:backup": "powershell -File ./scripts/backup-and-push.ps1",
+    "test:safety": "powershell -Command \"if (-not (Get-Module -ListAvailable -Name Pester)) { Write-Error 'Pester not installed. Run: Install-Module Pester -Scope CurrentUser -Force'; exit 1 }; $r = Invoke-Pester -Path ./scripts/backup-and-push.Tests.ps1 -PassThru; if ($r.FailedCount -gt 0) { exit 1 }\""
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

@@ -9,6 +9,84 @@
 $ErrorActionPreference = "Stop"
 
 # ---------------------------------------------------------------------------
+# Configuration (exported for Pester via dot-sourcing)
+# ---------------------------------------------------------------------------
+
+$script:ExcludeDirNames = @(
+    "node_modules",
+    ".next",
+    ".git",
+    "backups",
+    "out",
+    "build",
+    ".vercel",
+    "__pycache__",
+    ".venv",
+    "dist",
+    "coverage",
+    ".turbo",
+    ".pnp",
+    "agent-tools",
+    ".supabase"
+)
+
+$script:ExcludeFilePatterns = @(
+    "*.pem",
+    "*.key",
+    "*.p12",
+    "*.pfx",
+    "*.crt",
+    "*.cer"
+)
+
+$script:ExcludeFileNames = @(
+    "id_rsa",
+    "id_rsa.pub",
+    "id_ed25519",
+    "id_ed25519.pub",
+    "credentials.json",
+    ".npmrc"
+)
+
+$script:SecretNamePatterns = @(
+    '\.env',
+    '\.pem$',
+    '\.key$',
+    'credentials\.json$',
+    '^id_rsa$',
+    '^id_ed25519$',
+    '\.p12$',
+    '\.pfx$'
+)
+
+$script:SecretContentPatterns = @(
+    '(?i)-----BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY-----',
+    '(?i)SUPABASE_SERVICE_ROLE_KEY\s*=\s*\S{20,}',
+    '(?i)SUPABASE_JWT_SECRET\s*=\s*\S{20,}',
+    '(?i)DATABASE_URL\s*=\s*postgres(?:ql)?://\S+',
+    '(?i)AWS_SECRET_ACCESS_KEY\s*=\s*\S{16,}',
+    '(?i)GITHUB_TOKEN\s*=\s*(?:ghp_|github_pat_)\S+',
+    '(?i)api[_-]?key\s*[:=]\s*[''"][^''"]{20,}[''"]'
+)
+
+$script:SecretScanSkipPaths = @(
+    'scripts/backup-and-push.ps1',
+    'scripts/backup-and-push.Tests.ps1',
+    'SAFETY-CHECKLIST.md'
+)
+
+$script:SupabaseBenignErrorPatterns = @(
+    'project is not linked',
+    'not linked to a remote',
+    'Cannot find project ref',
+    'Run supabase link',
+    'Access token not provided',
+    'not logged in',
+    'You are not logged in',
+    'Login required'
+)
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -65,62 +143,34 @@ function Invoke-External {
     try {
         $output = & $Command[0] @($Command[1..($Command.Length - 1)]) 2>&1
         $exitCode = $LASTEXITCODE
-
-        if (-not $Quiet -and $null -ne $output) {
-            @($output) | ForEach-Object {
-                $line = if ($_ -is [System.Management.Automation.ErrorRecord]) {
+        $lines = @()
+        if ($null -ne $output) {
+            $lines = @($output | ForEach-Object {
+                if ($_ -is [System.Management.Automation.ErrorRecord]) {
                     $_.ToString()
                 }
                 else {
                     "$_"
                 }
-                Write-Host "  $line" -ForegroundColor DarkGray
+            })
+        }
+
+        if (-not $Quiet -and $lines.Count -gt 0) {
+            $lines | ForEach-Object {
+                Write-Host "  $_" -ForegroundColor DarkGray
             }
         }
 
-        return $exitCode
+        return [pscustomobject]@{
+            ExitCode   = $exitCode
+            Output     = $lines
+            OutputText = ($lines -join "`n")
+        }
     }
     finally {
         $ErrorActionPreference = $previousErrorAction
     }
 }
-
-# ---------------------------------------------------------------------------
-# Project root detection
-# ---------------------------------------------------------------------------
-
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ProjectRoot = (Resolve-Path (Join-Path $ScriptDir "..")).Path
-
-if (-not (Test-Path (Join-Path $ProjectRoot "package.json"))) {
-    Write-Fail "Could not detect project root (package.json not found)."
-    Write-Host "  Script dir: $ScriptDir" -ForegroundColor DarkGray
-    Write-Host "  Resolved root: $ProjectRoot" -ForegroundColor DarkGray
-    exit 1
-}
-
-Set-Location $ProjectRoot
-Write-Ok "Project root: $ProjectRoot"
-
-$Timestamp = Get-Date -Format "yyyy-MM-dd_HHmmss"
-
-# Directories and file patterns excluded from zip backups
-$ExcludeDirNames = @(
-    "node_modules",
-    ".next",
-    ".git",
-    "backups",
-    "out",
-    "build",
-    ".vercel",
-    "__pycache__",
-    ".venv",
-    "dist",
-    "coverage",
-    ".turbo",
-    ".pnp",
-    "agent-tools"
-)
 
 function Test-BackupExcluded {
     param([string]$RelativePath)
@@ -129,7 +179,7 @@ function Test-BackupExcluded {
     $segments = $normalized -split '/'
 
     foreach ($segment in $segments) {
-        if ($ExcludeDirNames -contains $segment) {
+        if ($script:ExcludeDirNames -contains $segment) {
             return $true
         }
     }
@@ -139,39 +189,256 @@ function Test-BackupExcluded {
         return $true
     }
 
+    foreach ($pattern in $script:ExcludeFilePatterns) {
+        if ($leaf -like $pattern) {
+            return $true
+        }
+    }
+
+    if ($script:ExcludeFileNames -contains $leaf) {
+        return $true
+    }
+
     return $false
 }
 
-# ---------------------------------------------------------------------------
-# Step 1: Zip backup
-# ---------------------------------------------------------------------------
+function Get-SafeRelativePath {
+    param(
+        [string]$FullPath,
+        [string]$Root
+    )
 
-$BackupPath = $null
+    try {
+        $normalizedRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+        $normalizedFile = [System.IO.Path]::GetFullPath($FullPath)
 
-Invoke-Step "Step 1/4: Create zip backup" {
-    $BackupsDir = Join-Path $ProjectRoot "backups"
-    if (-not (Test-Path $BackupsDir)) {
-        New-Item -ItemType Directory -Path $BackupsDir | Out-Null
-        Write-Ok "Created backups/ folder"
+        if (-not $normalizedFile.StartsWith($normalizedRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            return $null
+        }
+
+        return $normalizedFile.Substring($normalizedRoot.Length)
+    }
+    catch {
+        return $null
+    }
+}
+
+function Test-SupabaseBenignError {
+    param([string]$OutputText)
+
+    foreach ($pattern in $script:SupabaseBenignErrorPatterns) {
+        if ($OutputText.IndexOf($pattern, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            return $true
+        }
     }
 
-    $ZipName = "truckeros-backup-$Timestamp.zip"
-    $ZipPath = Join-Path $BackupsDir $ZipName
+    return $false
+}
 
+function Write-SupabaseSetupInstructions {
+    Write-Warn "To enable automatic migrations:"
+    Write-Host '    1. npx supabase init' -ForegroundColor DarkGray
+    Write-Host '    2. npx supabase login' -ForegroundColor DarkGray
+    Write-Host '    3. npx supabase link --project-ref YOUR_PROJECT_REF' -ForegroundColor DarkGray
+    Write-Host '    4. Re-run: npm run safety:backup' -ForegroundColor DarkGray
+}
+
+function Protect-BackupsDirectory {
+    param([string]$BackupsDir)
+
+    $icacls = Get-Command icacls -ErrorAction SilentlyContinue
+    if (-not $icacls) {
+        Write-Warn "icacls not available; skipping backups/ ACL hardening."
+        return
+    }
+
+    $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $aclResult = Invoke-External -Command @(
+        "icacls",
+        $BackupsDir,
+        "/inheritance:r",
+        "/grant:r",
+        "${currentUser}:(OI)(CI)F"
+    ) -Quiet
+
+    if ($aclResult.ExitCode -ne 0) {
+        Write-Warn "Could not restrict backups/ ACL (exit $($aclResult.ExitCode))."
+        return
+    }
+
+    Write-Ok "Restricted backups/ folder ACL to $currentUser"
+}
+
+function Get-ChangedGitPaths {
+    param([string]$StatusText)
+
+    $paths = New-Object System.Collections.Generic.List[string]
+    foreach ($line in ($StatusText -split "`n")) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
+        $path = $null
+        if ($line.Length -ge 4) {
+            $path = $line.Substring(3).Trim()
+            if ($path -match ' -> ') {
+                $path = ($path -split ' -> ')[-1].Trim()
+            }
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($path)) {
+            $paths.Add($path)
+        }
+    }
+
+    return $paths.ToArray()
+}
+
+function Test-ChangedFilesForSecrets {
+    param(
+        [string]$ProjectRoot,
+        [string[]]$ChangedPaths
+    )
+
+    $findings = New-Object System.Collections.Generic.List[string]
+
+    foreach ($relativePath in $ChangedPaths) {
+        $normalizedForSkip = $relativePath -replace '\\', '/'
+        if ($script:SecretScanSkipPaths -contains $normalizedForSkip) {
+            continue
+        }
+
+        $normalized = $relativePath -replace '/', '\'
+        foreach ($pattern in $script:SecretNamePatterns) {
+            if ($normalized -match $pattern) {
+                $findings.Add("sensitive filename: $relativePath")
+                break
+            }
+        }
+
+        $fullPath = Join-Path $ProjectRoot $normalized
+        if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+            continue
+        }
+
+        try {
+            $content = Get-Content -LiteralPath $fullPath -Raw -ErrorAction Stop
+            foreach ($pattern in $script:SecretContentPatterns) {
+                if ($content -match $pattern) {
+                    $findings.Add("sensitive content in: $relativePath")
+                    break
+                }
+            }
+        }
+        catch {
+            $findings.Add("could not scan: $relativePath ($($_.Exception.Message))")
+        }
+    }
+
+    return $findings.ToArray()
+}
+
+function Get-BackupCandidateFiles {
+    param(
+        [string]$Directory,
+        [string]$ProjectRoot
+    )
+
+    $files = New-Object System.Collections.Generic.List[System.IO.FileInfo]
+    $errors = New-Object System.Collections.Generic.List[string]
+
+    try {
+        $children = Get-ChildItem -LiteralPath $Directory -Force -ErrorAction Stop
+    }
+    catch {
+        $errors.Add("Enumeration failed for ${Directory}: $($_.Exception.Message)")
+        return [pscustomobject]@{
+            Files  = @()
+            Errors = $errors.ToArray()
+        }
+    }
+
+    foreach ($item in $children) {
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            continue
+        }
+
+        $relative = Get-SafeRelativePath -FullPath $item.FullName -Root $ProjectRoot
+        if ($null -eq $relative) {
+            $errors.Add("Skipped path outside project root: $($item.FullName)")
+            continue
+        }
+
+        if (Test-BackupExcluded -RelativePath $relative) {
+            if ($item.PSIsContainer) {
+                continue
+            }
+            continue
+        }
+
+        if ($item.PSIsContainer) {
+            $nested = Get-BackupCandidateFiles -Directory $item.FullName -ProjectRoot $ProjectRoot
+            foreach ($nestedFile in $nested.Files) {
+                $files.Add($nestedFile)
+            }
+            foreach ($nestedError in $nested.Errors) {
+                $errors.Add($nestedError)
+            }
+        }
+        else {
+            $canonicalRelative = Get-SafeRelativePath -FullPath $item.FullName -Root $ProjectRoot
+            if ($null -eq $canonicalRelative) {
+                $errors.Add("Skipped file outside project root: $($item.FullName)")
+                continue
+            }
+            $files.Add($item)
+        }
+    }
+
+    return [pscustomobject]@{
+        Files  = $files.ToArray()
+        Errors = $errors.ToArray()
+    }
+}
+
+function New-ProjectBackupZip {
+    param(
+        [string]$ProjectRoot,
+        [string]$ZipPath
+    )
+
+    $partialPath = "$ZipPath.partial"
+    if (Test-Path $partialPath) {
+        Remove-Item -LiteralPath $partialPath -Force
+    }
     if (Test-Path $ZipPath) {
-        Remove-Item $ZipPath -Force
+        Remove-Item -LiteralPath $ZipPath -Force
     }
 
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-    $zip = [System.IO.Compression.ZipFile]::Open($ZipPath, [System.IO.Compression.ZipArchiveMode]::Create)
+    $zip = $null
     try {
-        $files = Get-ChildItem -Path $ProjectRoot -Recurse -File -Force -ErrorAction SilentlyContinue
+        $candidateResult = Get-BackupCandidateFiles -Directory $ProjectRoot -ProjectRoot $ProjectRoot
+        foreach ($enumError in $candidateResult.Errors) {
+            Write-Warn $enumError
+        }
+
+        if ($candidateResult.Files.Count -eq 0) {
+            throw "No files were eligible for backup."
+        }
+
+        $zip = [System.IO.Compression.ZipFile]::Open($partialPath, [System.IO.Compression.ZipArchiveMode]::Create)
         $added = 0
 
-        foreach ($file in $files) {
-            $relative = $file.FullName.Substring($ProjectRoot.Length).TrimStart('\', '/')
+        foreach ($file in $candidateResult.Files) {
+            $relative = Get-SafeRelativePath -FullPath $file.FullName -Root $ProjectRoot
+            if ($null -eq $relative) {
+                Write-Warn "Skipped file outside project root during zip: $($file.FullName)"
+                continue
+            }
+
             if (Test-BackupExcluded -RelativePath $relative) {
                 continue
             }
@@ -189,187 +456,242 @@ Invoke-Step "Step 1/4: Create zip backup" {
         if ($added -eq 0) {
             throw "No files were added to the backup archive."
         }
-
-        $sizeMb = [math]::Round((Get-Item $ZipPath).Length / 1MB, 2)
-        Write-Ok "Backup created: backups/$ZipName ($added files, ${sizeMb} MB)"
-        $script:BackupPath = $ZipPath
+    }
+    catch {
+        if ($null -ne $zip) {
+            $zip.Dispose()
+            $zip = $null
+        }
+        if (Test-Path $partialPath) {
+            Remove-Item -LiteralPath $partialPath -Force -ErrorAction SilentlyContinue
+        }
+        throw
     }
     finally {
-        $zip.Dispose()
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Step 2: Git commit (only if changes exist)
-# ---------------------------------------------------------------------------
-
-$CommitMessage = "chore: safety backup $Timestamp"
-
-Invoke-Step "Step 2/4: Git commit" {
-    $gitCmd = Get-Command git -ErrorAction SilentlyContinue
-    if (-not $gitCmd) {
-        throw "git is not installed or not on PATH."
-    }
-
-    if (-not (Test-Path (Join-Path $ProjectRoot ".git"))) {
-        throw "Not a git repository (.git not found)."
-    }
-
-    $previousErrorAction = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    $status = git status --porcelain 2>&1 | Out-String
-    $ErrorActionPreference = $previousErrorAction
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "git status failed: $status"
-    }
-
-    if ([string]::IsNullOrWhiteSpace($status)) {
-        Write-Skip "No changes to commit."
-        return
-    }
-
-    $addExit = Invoke-External -Command @("git", "add", "-A")
-    if ($addExit -ne 0) {
-        throw "git add failed."
-    }
-
-    $commitExit = Invoke-External -Command @("git", "commit", "-m", $CommitMessage)
-    if ($commitExit -ne 0) {
-        throw "git commit failed."
-    }
-
-    Write-Ok "Committed: $CommitMessage"
-}
-
-# ---------------------------------------------------------------------------
-# Step 3: Git push to main
-# ---------------------------------------------------------------------------
-
-Invoke-Step "Step 3/4: Git push to main" {
-    $previousErrorAction = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    $currentBranch = (git rev-parse --abbrev-ref HEAD 2>&1 | Out-String).Trim()
-    $branchExit = $LASTEXITCODE
-    $ErrorActionPreference = $previousErrorAction
-
-    if ($branchExit -ne 0) {
-        throw "Could not determine current branch: $currentBranch"
-    }
-
-    if ($currentBranch -ne "main") {
-        Write-Warn "Current branch is '$currentBranch', not 'main'. Pushing current branch to origin."
-        $pushExit = Invoke-External -Command @("git", "push", "origin", $currentBranch)
-        if ($pushExit -ne 0) {
-            throw "git push origin $currentBranch failed."
+        if ($null -ne $zip) {
+            $zip.Dispose()
         }
-        Write-Ok "Pushed branch '$currentBranch' to origin."
-        return
     }
 
-    $pushMainExit = Invoke-External -Command @("git", "push", "origin", "main")
-    if ($pushMainExit -ne 0) {
-        throw "git push origin main failed."
-    }
-
-    Write-Ok "Pushed to origin/main."
+    Move-Item -LiteralPath $partialPath -Destination $ZipPath -Force
+    return $added
 }
 
 # ---------------------------------------------------------------------------
-# Step 4: Supabase migrations
+# Main workflow
 # ---------------------------------------------------------------------------
 
-Write-Step "Step 4/4: Supabase migrations"
-
-$SupabaseFailed = $false
-
-try {
-    $MigrationsDir = Join-Path $ProjectRoot "supabase\migrations"
-    if (-not (Test-Path $MigrationsDir)) {
-        Write-Skip "No supabase/migrations folder found."
+function Invoke-SafetyBackupWorkflow {
+    $ScriptDir = $PSScriptRoot
+    if ([string]::IsNullOrWhiteSpace($ScriptDir)) {
+        $ScriptDir = Split-Path -Parent $PSCommandPath
     }
-    else {
-        $migrationCount = (Get-ChildItem -Path $MigrationsDir -Filter "*.sql" -ErrorAction SilentlyContinue).Count
-        Write-Ok "Found $migrationCount migration file(s) in supabase/migrations/"
+    $ProjectRoot = (Resolve-Path (Join-Path $ScriptDir "..")).Path
 
-        $ConfigToml = Join-Path $ProjectRoot "supabase\config.toml"
-        if (-not (Test-Path $ConfigToml)) {
-            Write-Warn "supabase/config.toml not found - Supabase CLI project not initialized."
-            Write-Warn "To enable automatic migrations:"
-            Write-Host '    1. npx supabase init' -ForegroundColor DarkGray
-            Write-Host '    2. npx supabase link --project-ref YOUR_PROJECT_REF' -ForegroundColor DarkGray
-            Write-Host "    3. Re-run: npm run safety:backup" -ForegroundColor DarkGray
-            Write-Warn "Skipping db push. Apply migrations manually in the Supabase SQL editor if needed."
+    if (-not (Test-Path (Join-Path $ProjectRoot "package.json"))) {
+        Write-Fail "Could not detect project root (package.json not found)."
+        Write-Host "  Script dir: $ScriptDir" -ForegroundColor DarkGray
+        Write-Host "  Resolved root: $ProjectRoot" -ForegroundColor DarkGray
+        exit 1
+    }
+
+    Set-Location $ProjectRoot
+    Write-Ok "Project root: $ProjectRoot"
+
+    $Timestamp = Get-Date -Format "yyyy-MM-dd_HHmmss"
+    $CommitMessage = "chore: safety backup $Timestamp"
+
+    $script:BackupPath = $null
+    $script:BackupOutcome = "failed"
+    $script:CommitOutcome = "skipped"
+    $script:PushOutcome = "failed"
+    $script:MigrationOutcome = "skipped"
+    $script:SupabaseHardFailure = $false
+
+    # Step 1: Zip backup
+    Invoke-Step "Step 1/4: Create zip backup" {
+        $BackupsDir = Join-Path $ProjectRoot "backups"
+        if (-not (Test-Path $BackupsDir)) {
+            New-Item -ItemType Directory -Path $BackupsDir | Out-Null
+            Write-Ok "Created backups/ folder"
+        }
+
+        Protect-BackupsDirectory -BackupsDir $BackupsDir
+
+        $ZipName = "truckeros-backup-$Timestamp.zip"
+        $ZipPath = Join-Path $BackupsDir $ZipName
+
+        $added = New-ProjectBackupZip -ProjectRoot $ProjectRoot -ZipPath $ZipPath
+        $sizeMb = [math]::Round((Get-Item -LiteralPath $ZipPath).Length / 1MB, 2)
+        Write-Ok "Backup created: backups/$ZipName ($added files, ${sizeMb} MB)"
+        $script:BackupPath = $ZipPath
+        $script:BackupOutcome = "created ($added files, ${sizeMb} MB)"
+    }
+
+    # Step 2: Git commit
+    Invoke-Step "Step 2/4: Git commit" {
+        $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+        if (-not $gitCmd) {
+            throw "git is not installed or not on PATH."
+        }
+
+        if (-not (Test-Path (Join-Path $ProjectRoot ".git"))) {
+            throw "Not a git repository (.git not found)."
+        }
+
+        $statusResult = Invoke-External -Command @("git", "status", "--porcelain") -Quiet
+        if ($statusResult.ExitCode -ne 0) {
+            throw "git status failed: $($statusResult.OutputText)"
+        }
+
+        if ([string]::IsNullOrWhiteSpace($statusResult.OutputText)) {
+            Write-Skip "No changes to commit."
+            $script:CommitOutcome = "skipped (clean working tree)"
+            return
+        }
+
+        Write-Host "  Pending changes:" -ForegroundColor DarkGray
+        $shortStatus = Invoke-External -Command @("git", "status", "--short")
+        if ($shortStatus.ExitCode -ne 0) {
+            throw "git status --short failed."
+        }
+
+        $changedPaths = Get-ChangedGitPaths -StatusText $statusResult.OutputText
+        $secretFindings = Test-ChangedFilesForSecrets -ProjectRoot $ProjectRoot -ChangedPaths $changedPaths
+        if ($secretFindings.Count -gt 0) {
+            Write-Fail "Aborting commit: potential secrets detected in changed files."
+            foreach ($finding in $secretFindings) {
+                Write-Host "    - $finding" -ForegroundColor Red
+            }
+            throw "Remove or gitignore sensitive files before running safety backup."
+        }
+
+        $addResult = Invoke-External -Command @("git", "add", "-A")
+        if ($addResult.ExitCode -ne 0) {
+            throw "git add failed."
+        }
+
+        $commitResult = Invoke-External -Command @("git", "commit", "-m", $CommitMessage)
+        if ($commitResult.ExitCode -ne 0) {
+            throw "git commit failed."
+        }
+
+        Write-Ok "Committed: $CommitMessage"
+        $script:CommitOutcome = "committed ($CommitMessage)"
+    }
+
+    # Step 3: Git push to main
+    Invoke-Step "Step 3/4: Git push to main" {
+        $branchResult = Invoke-External -Command @("git", "rev-parse", "--abbrev-ref", "HEAD") -Quiet
+        if ($branchResult.ExitCode -ne 0) {
+            throw "Could not determine current branch: $($branchResult.OutputText)"
+        }
+
+        $currentBranch = $branchResult.OutputText.Trim()
+        if ($currentBranch -eq "HEAD") {
+            throw "Detached HEAD detected. Checkout branch 'main' before running safety backup."
+        }
+
+        if ($currentBranch -ne "main") {
+            throw "Safety backup requires branch 'main'. Current branch: '$currentBranch'. Run: git checkout main"
+        }
+
+        $pushResult = Invoke-External -Command @("git", "push", "origin", "main")
+        if ($pushResult.ExitCode -ne 0) {
+            throw "git push origin main failed."
+        }
+
+        Write-Ok "Pushed to origin/main."
+        $script:PushOutcome = "pushed to origin/main"
+    }
+
+    # Step 4: Supabase migrations
+    Write-Step "Step 4/4: Supabase migrations"
+
+    try {
+        $MigrationsDir = Join-Path $ProjectRoot (Join-Path "supabase" "migrations")
+        if (-not (Test-Path $MigrationsDir)) {
+            Write-Skip "No supabase/migrations folder found."
+            $script:MigrationOutcome = "skipped (no migrations folder)"
         }
         else {
-            $npxCmd = Get-Command npx -ErrorAction SilentlyContinue
-            if (-not $npxCmd) {
-                Write-Warn "npx not found. Install Node.js/npm to run Supabase CLI."
-                Write-Warn "Skipping db push."
+            $migrationCount = (Get-ChildItem -Path $MigrationsDir -Filter "*.sql" -ErrorAction Stop).Count
+            Write-Ok "Found $migrationCount migration file(s) in supabase/migrations/"
+
+            $ConfigToml = Join-Path $ProjectRoot (Join-Path "supabase" "config.toml")
+            if (-not (Test-Path $ConfigToml)) {
+                Write-Warn "supabase/config.toml not found - Supabase CLI project not initialized."
+                Write-Warn "Migrations are deferred until the CLI is linked."
+                Write-SupabaseSetupInstructions
+                Write-Warn "Skipping db push. Apply migrations manually in the Supabase SQL editor if needed."
+                $script:MigrationOutcome = "deferred (run npx supabase init, login, link)"
             }
             else {
-                Write-Host "  Running: npx supabase db push" -ForegroundColor DarkGray
-                $previousErrorAction = $ErrorActionPreference
-                $ErrorActionPreference = "Continue"
-                $pushOutput = npx supabase db push 2>&1
-                $pushExit = $LASTEXITCODE
-                $ErrorActionPreference = $previousErrorAction
-
-                @($pushOutput) | ForEach-Object {
-                    $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() } else { "$_" }
-                    Write-Host "  $line" -ForegroundColor DarkGray
-                }
-
-                if ($pushExit -ne 0) {
-                    $outputText = (@($pushOutput) | ForEach-Object {
-                        if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() } else { "$_" }
-                    }) -join "`n"
-
-                    if ($outputText -match "not linked|project ref|login|access token|not authenticated") {
-                        Write-Warn "Supabase project is not linked or you are not logged in."
-                        Write-Warn "Run: npx supabase login"
-                        Write-Warn 'Then: npx supabase link --project-ref YOUR_PROJECT_REF'
-                        Write-Warn "Skipping db push (backup and git steps completed)."
-                    }
-                    else {
-                        throw "npx supabase db push failed (exit $pushExit)."
-                    }
+                $npxCmd = Get-Command npx -ErrorAction SilentlyContinue
+                if (-not $npxCmd) {
+                    Write-Warn "npx not found. Install Node.js/npm to run Supabase CLI."
+                    Write-Warn "Skipping db push."
+                    $script:MigrationOutcome = "skipped (npx not found)"
                 }
                 else {
-                    Write-Ok "Supabase migrations pushed successfully."
+                    Write-Host "  Running: npx supabase db push" -ForegroundColor DarkGray
+                    $pushResult = Invoke-External -Command @("npx", "supabase", "db", "push")
+
+                    if ($pushResult.ExitCode -ne 0) {
+                        if (Test-SupabaseBenignError -OutputText $pushResult.OutputText) {
+                            Write-Warn "Supabase project is not linked or you are not logged in."
+                            Write-SupabaseSetupInstructions
+                            Write-Warn "Skipping db push (backup and git steps completed)."
+                            $script:MigrationOutcome = "deferred (not linked or not logged in)"
+                        }
+                        else {
+                            throw "npx supabase db push failed (exit $($pushResult.ExitCode)). $($pushResult.OutputText)"
+                        }
+                    }
+                    else {
+                        Write-Ok "Supabase migrations pushed successfully."
+                        $script:MigrationOutcome = "pushed successfully"
+                    }
                 }
             }
         }
     }
-}
-catch {
-    $SupabaseFailed = $true
-    Write-Fail "Supabase migration step failed."
-    Write-Host $_.Exception.Message -ForegroundColor Red
+    catch {
+        $script:SupabaseHardFailure = $true
+        Write-Fail "Supabase migration step failed."
+        Write-Host $_.Exception.Message -ForegroundColor Red
+        $script:MigrationOutcome = "failed ($($_.Exception.Message))"
+    }
+
+    # Summary
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Green
+    if ($script:SupabaseHardFailure) {
+        Write-Host "  Safety backup failed during Supabase migrations" -ForegroundColor Red
+    }
+    else {
+        Write-Host "  Safety backup workflow complete" -ForegroundColor Green
+    }
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host "  Command   : npm run safety:backup"
+    Write-Host "  Timestamp : $Timestamp"
+    if ($script:BackupPath) {
+        Write-Host "  Backup    : $($script:BackupPath)"
+    }
+    Write-Host "  Step 1    : $($script:BackupOutcome)"
+    Write-Host "  Step 2    : $($script:CommitOutcome)"
+    Write-Host "  Step 3    : $($script:PushOutcome)"
+    Write-Host "  Step 4    : $($script:MigrationOutcome)"
+    Write-Host "  Confirm   : Complete SAFETY-CHECKLIST.md step 5 before major changes"
+    Write-Host ""
+
+    if ($script:SupabaseHardFailure) {
+        exit 1
+    }
+
+    exit 0
 }
 
-# ---------------------------------------------------------------------------
-# Summary
-# ---------------------------------------------------------------------------
-
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Green
-if ($SupabaseFailed) {
-    Write-Host "  Safety backup completed with warnings" -ForegroundColor Yellow
+if ($MyInvocation.InvocationName -ne '.') {
+    Invoke-SafetyBackupWorkflow
 }
-else {
-    Write-Host "  Safety backup workflow complete" -ForegroundColor Green
-}
-Write-Host "========================================" -ForegroundColor Green
-Write-Host "  Timestamp : $Timestamp"
-if ($BackupPath) {
-    Write-Host "  Backup    : $BackupPath"
-}
-Write-Host "  Next      : Review SAFETY-CHECKLIST.md before major changes"
-Write-Host ""
-
-if ($SupabaseFailed) {
-    exit 1
-}
-
-exit 0
