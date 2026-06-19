@@ -26,6 +26,11 @@
 # misc
 .DS_Store
 *.pem
+*.key
+
+# secrets / local CLI state
+secrets.json
+.supabase/
 
 # debug
 npm-debug.log*
@@ -51,8 +56,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+or-tools-service/lib/
+or-tools-service/lib64/
 parts/
 sdist/
 var/
