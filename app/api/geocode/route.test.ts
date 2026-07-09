@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
-import { __testResetGeocodeState, handleGeocodeGet } from './route'
+import { GET } from './route'
+import { __testResetGeocodeState } from '@/lib/geocode-route-handler'
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(async () => ({
@@ -29,13 +30,13 @@ describe('GET /api/geocode', () => {
     } as never)
 
     const req = new NextRequest('http://localhost/api/geocode?q=Chicago,IL')
-    const res = await handleGeocodeGet(req)
+    const res = await GET(req)
     expect(res.status).toBe(401)
   })
 
   it('returns 400 for invalid zip', async () => {
     const req = new NextRequest('http://localhost/api/geocode?zip=abcde')
-    const res = await handleGeocodeGet(req)
+    const res = await GET(req)
     const body = await res.json()
     expect(res.status).toBe(400)
     expect(body.userMessage).toContain('Invalid zip')
@@ -43,7 +44,7 @@ describe('GET /api/geocode', () => {
 
   it('returns 400 when query missing', async () => {
     const req = new NextRequest('http://localhost/api/geocode')
-    const res = await handleGeocodeGet(req)
+    const res = await GET(req)
     expect(res.status).toBe(400)
   })
 
@@ -72,13 +73,13 @@ describe('GET /api/geocode', () => {
     )
 
     const req = new NextRequest('http://localhost/api/geocode?q=Case%20IH%20plant,%20Grand%20Island,%20NE')
-    const res1 = await handleGeocodeGet(req)
+    const res1 = await GET(req)
     const body1 = await res1.json()
     expect(res1.status).toBe(200)
     expect(body1[0]).toMatchObject({ lat: '40.9264', lon: '-98.342' })
     expect(body1[0].extraneous).toBeUndefined()
 
-    const res2 = await handleGeocodeGet(req)
+    const res2 = await GET(req)
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1)
     expect(res2.status).toBe(200)
   })
@@ -90,7 +91,7 @@ describe('GET /api/geocode', () => {
     )
 
     const req = new NextRequest('http://localhost/api/geocode?q=nowhereville,ZZ')
-    const res = await handleGeocodeGet(req)
+    const res = await GET(req)
     expect(res.status).toBe(404)
   })
 
@@ -101,7 +102,7 @@ describe('GET /api/geocode', () => {
     )
 
     const req = new NextRequest('http://localhost/api/geocode?q=secret-evil-input')
-    const res = await handleGeocodeGet(req)
+    const res = await GET(req)
     const body = await res.json()
 
     expect(res.status).toBe(404)
@@ -120,10 +121,10 @@ describe('GET /api/geocode', () => {
         headers: { 'x-forwarded-for': '1.2.3.4' },
       })
 
-    await handleGeocodeGet(makeReq())
-    await handleGeocodeGet(makeReq())
-    await handleGeocodeGet(makeReq())
-    const res = await handleGeocodeGet(makeReq())
+    await GET(makeReq())
+    await GET(makeReq())
+    await GET(makeReq())
+    const res = await GET(makeReq())
     expect(res.status).toBe(429)
     expect(res.headers.get('Retry-After')).toBeTruthy()
   })
