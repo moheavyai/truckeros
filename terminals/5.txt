@@ -1,0 +1,21 @@
+---
+pid: 22096
+cwd: "C:\Users\andre\truckeros"
+command: "cd C:\\Users\\andre\\truckeros; $env:LIVE_GEOCODE='1'; npx vitest run lib/geocode-live.integration.test.ts"
+started_at: 2026-07-04T04:12:00.918Z
+running_for_ms: 119997   
+---
+
+ RUN  v3.2.6 C:/Users/andre/truckeros
+
+ ✓ lib/geocode-live.integration.test.ts (4 tests) 28613ms
+   ✓ live geocode integration > resolves Case IH plant pickup in Grand Island, NE  4968ms
+   ✓ live geocode integration > resolves Northern Plains Equipment / US-2 in Minot, ND  538ms
+   ✓ live geocode integration > resolves West Plains on I-94 Business Loop in Dickinson, ND  22590ms
+   ✓ live geocode integration > resolves partial Drop 2 near Dickinson, ND  514ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  00:12:02
+   Duration  29.55s (transform 105ms, setup 0ms, collect 134ms, tests 28.61s, environment 0ms, prepare 219ms)
+

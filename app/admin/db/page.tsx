@@ -4,19 +4,52 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
+type MigrationStatus = {
+  hasAdmin?: boolean
+  columnsExist?: boolean | null
+  needsMigration?: boolean
+  missingColumns?: string[]
+  inconclusiveChecks?: string[]
+  migration002Sql?: string
+  migration014Sql?: string
+  migration017Sql?: string
+  migration031Sql?: string
+  migration033Sql?: string
+  /** Targeted 035: carrier_connection_invites (Carriers page) */
+  migration035Sql?: string
+  migration036Sql?: string
+  /** Phase 1b: membership SELECT restore + SM helper Permit Clerk only */
+  migration037Sql?: string
+  /** Phase 1 PE: self-Clerk triggers + accept inviter Clerk */
+  migration038Sql?: string
+  /** Phase 1 PE: self-INSERT Clerk block + team invite accept GUC */
+  migration039Sql?: string
+  /** Phase 1 PE: team_invites self-Clerk on UPDATE */
+  migration040Sql?: string
+  /** Phase 1 PE: team_invites self-Clerk session contact match */
+  migration041Sql?: string
+  sql?: string
+  applied?: boolean
+  needsManualRun?: boolean
+  success?: boolean
+  message?: string
+  error?: string
+  correlationId?: string
+  adminAccessDenied?: boolean
+  authRequired?: boolean
+  carrierConnectionInvitesMigrationAttempted?: boolean
+  carrierConnectionInvitesMigrationApplied?: boolean
+}
+
 export default function AdminDatabasePage() {
   const [user, setUser] = useState<any>(null)
   const [loadingAuth, setLoadingAuth] = useState(true)
   const router = useRouter()
 
-  const [migrationStatus, setMigrationStatus] = useState<any>(null)
+  const [migrationStatus, setMigrationStatus] = useState<MigrationStatus | null>(null)
   const [checking, setChecking] = useState(false)
+  const [applying, setApplying] = useState(false)
   const [stateRulesStatus, setStateRulesStatus] = useState<any>(null)
-
-  const MIGRATION_SQL = `ALTER TABLE IF EXISTS permit_requests
-  ADD COLUMN IF NOT EXISTS cost_breakdown JSONB,
-  ADD COLUMN IF NOT EXISTS distance_miles NUMERIC(8,2),
-  ADD COLUMN IF NOT EXISTS duration_hours NUMERIC(6,2);`
 
   useEffect(() => {
     const supabase = createClient()
@@ -41,7 +74,6 @@ export default function AdminDatabasePage() {
     return () => listener.subscription.unsubscribe()
   }, [router])
 
-  // Auto-check on load
   useEffect(() => {
     if (!loadingAuth && user) {
       checkMigrationStatus()
@@ -53,10 +85,24 @@ export default function AdminDatabasePage() {
     setChecking(true)
     try {
       const res = await fetch('/api/admin/migrate')
+      if (res.status === 401) {
+        setMigrationStatus({
+          authRequired: true,
+          error: 'Admin access required. Sign in with an admin account.',
+        })
+        return
+      }
+      if (res.status === 403) {
+        setMigrationStatus({
+          adminAccessDenied: true,
+          error: 'Admin access required. Your account is not authorized for schema management.',
+        })
+        return
+      }
       const data = await res.json()
       setMigrationStatus(data)
     } catch (e: any) {
-      setMigrationStatus({ hasAdmin: false, error: e.message })
+      setMigrationStatus({ error: e.message })
     } finally {
       setChecking(false)
     }
@@ -79,19 +125,223 @@ export default function AdminDatabasePage() {
     }
   }
 
-  async function showMigrationSQL() {
-    const res = await fetch('/api/admin/migrate', { method: 'POST' })
-    const data = await res.json()
+  async function applyMigration() {
+    setApplying(true)
+    try {
+      const res = await fetch('/api/admin/migrate', { method: 'POST' })
+      if (res.status === 401 || res.status === 403) {
+        alert('Admin access required to apply migrations.')
+        return
+      }
+      const data = await res.json()
+      setMigrationStatus(data)
 
-    const fullInstructions = `Run this SQL in Supabase SQL Editor:
-
-${data.sql || MIGRATION_SQL}
-
-After running, click "Refresh Status" above.`
-
-    navigator.clipboard.writeText(data.sql || MIGRATION_SQL)
-    alert(fullInstructions + '\n\n✅ SQL has been copied to your clipboard.')
+      if (data.applied && data.success) {
+        alert('Migration applied successfully. All required columns are now available.')
+      } else if (data.needsManualRun && data.sql) {
+        navigator.clipboard.writeText(data.sql)
+        alert(
+          'Live apply unavailable or incomplete. SQL copied to clipboard — run it in Supabase SQL Editor, then refresh status.'
+        )
+      } else if (data.error) {
+        alert(`Migration failed: ${data.error}`)
+      }
+    } catch (e: any) {
+      setMigrationStatus({ error: e.message })
+    } finally {
+      setApplying(false)
+      setTimeout(checkMigrationStatus, 1500)
+    }
   }
+
+  function getCachedMigrationSql(status: MigrationStatus | null = migrationStatus): string {
+    if (!status) return ''
+    return (
+      status.sql ||
+      status.migration017Sql ||
+      status.migration014Sql ||
+      status.migration002Sql ||
+      ''
+    )
+  }
+
+  function carrierConnectionInvitesNeedsRepair(status: MigrationStatus | null): boolean {
+    if (!status) return false
+    const missing = status.missingColumns ?? []
+    const inconclusive = status.inconclusiveChecks ?? []
+    return (
+      missing.some((c) => c.startsWith('carrier_connection_invites.')) ||
+      inconclusive.includes('carrier_connection_invites')
+    )
+  }
+
+  async function copyMigrationSql() {
+    let sql = getCachedMigrationSql()
+
+    if (!sql) {
+      const res = await fetch('/api/admin/migrate')
+      if (res.status === 401 || res.status === 403) {
+        alert('Admin access required to copy migration SQL.')
+        return
+      }
+      const data = await res.json()
+      setMigrationStatus((prev) => ({ ...prev, ...data }))
+      sql = getCachedMigrationSql(data)
+    }
+
+    if (!sql) {
+      alert('No migration SQL available. Refresh status first.')
+      return
+    }
+
+    navigator.clipboard.writeText(sql)
+    alert('Migration SQL copied to clipboard. Run it in Supabase SQL Editor, then refresh status.')
+  }
+
+  async function copyCarrierConnectionInvitesSql() {
+    let sql = migrationStatus?.migration035Sql
+    if (!sql) {
+      const res = await fetch('/api/admin/migrate')
+      if (res.status === 401 || res.status === 403) {
+        alert('Admin access required to copy migration SQL.')
+        return
+      }
+      const data = await res.json()
+      setMigrationStatus((prev) => ({ ...prev, ...data }))
+      sql = data.migration035Sql
+    }
+    if (!sql) {
+      alert('migration035Sql not available. Refresh status first.')
+      return
+    }
+    navigator.clipboard.writeText(sql)
+    alert(
+      'Migration 035 (carrier_connection_invites) copied. Run in Supabase SQL Editor, then refresh status.'
+    )
+  }
+
+  async function copyMigration037Sql() {
+    let sql = migrationStatus?.migration037Sql
+    if (!sql) {
+      const res = await fetch('/api/admin/migrate')
+      if (res.status === 401 || res.status === 403) {
+        alert('Admin access required to copy migration SQL.')
+        return
+      }
+      const data = await res.json()
+      setMigrationStatus((prev) => ({ ...prev, ...data }))
+      sql = data.migration037Sql
+    }
+    if (!sql) {
+      alert('migration037Sql not available. Refresh status first.')
+      return
+    }
+    navigator.clipboard.writeText(sql)
+    alert(
+      'Migration 037 (Phase 1b membership SELECT + SM Clerk helper) copied. Run in Supabase SQL Editor, then refresh status.'
+    )
+  }
+
+  async function copyMigration038Sql() {
+    let sql = migrationStatus?.migration038Sql
+    if (!sql) {
+      const res = await fetch('/api/admin/migrate')
+      if (res.status === 401 || res.status === 403) {
+        alert('Admin access required to copy migration SQL.')
+        return
+      }
+      const data = await res.json()
+      setMigrationStatus((prev) => ({ ...prev, ...data }))
+      sql = data.migration038Sql
+    }
+    if (!sql) {
+      alert('migration038Sql not available. Refresh status first.')
+      return
+    }
+    navigator.clipboard.writeText(sql)
+    alert(
+      'Migration 038 (self-Clerk PE triggers + accept inviter Clerk) copied. Run in Supabase SQL Editor, then refresh status.'
+    )
+  }
+
+  async function copyMigration039Sql() {
+    let sql = migrationStatus?.migration039Sql
+    if (!sql) {
+      const res = await fetch('/api/admin/migrate')
+      if (res.status === 401 || res.status === 403) {
+        alert('Admin access required to copy migration SQL.')
+        return
+      }
+      const data = await res.json()
+      setMigrationStatus((prev) => ({ ...prev, ...data }))
+      sql = data.migration039Sql
+    }
+    if (!sql) {
+      alert('migration039Sql not available. Refresh status first.')
+      return
+    }
+    navigator.clipboard.writeText(sql)
+    alert(
+      'Migration 039 (self-INSERT Clerk block + invite accept GUC) copied. Run in Supabase SQL Editor, then refresh status.'
+    )
+  }
+
+  async function copyMigration040Sql() {
+    let sql = migrationStatus?.migration040Sql
+    if (!sql) {
+      const res = await fetch('/api/admin/migrate')
+      if (res.status === 401 || res.status === 403) {
+        alert('Admin access required to copy migration SQL.')
+        return
+      }
+      const data = await res.json()
+      setMigrationStatus((prev) => ({ ...prev, ...data }))
+      sql = data.migration040Sql
+    }
+    if (!sql) {
+      alert('migration040Sql not available. Refresh status first.')
+      return
+    }
+    navigator.clipboard.writeText(sql)
+    alert(
+      'Migration 040 (team invite self-Clerk on UPDATE) copied. Run in Supabase SQL Editor, then refresh status.'
+    )
+  }
+
+  async function copyMigration041Sql() {
+    let sql = migrationStatus?.migration041Sql
+    if (!sql) {
+      const res = await fetch('/api/admin/migrate')
+      if (res.status === 401 || res.status === 403) {
+        alert('Admin access required to copy migration SQL.')
+        return
+      }
+      const data = await res.json()
+      setMigrationStatus((prev) => ({ ...prev, ...data }))
+      sql = data.migration041Sql
+    }
+    if (!sql) {
+      alert('migration041Sql not available. Refresh status first.')
+      return
+    }
+    navigator.clipboard.writeText(sql)
+    alert(
+      'Migration 041 (team invite self-Clerk session match) copied. Run in Supabase SQL Editor, then refresh status.'
+    )
+  }
+
+  const showPhase1SqlTools =
+    Boolean(migrationStatus?.hasAdmin) &&
+    !migrationStatus?.authRequired &&
+    !migrationStatus?.adminAccessDenied
+
+  const displaySql =
+    migrationStatus?.migration035Sql && carrierConnectionInvitesNeedsRepair(migrationStatus)
+      ? migrationStatus.migration035Sql
+      : migrationStatus?.migration017Sql ||
+        migrationStatus?.migration014Sql ||
+        migrationStatus?.migration002Sql ||
+        ''
 
   if (loadingAuth) {
     return <div className="p-8">Loading...</div>
@@ -110,12 +360,13 @@ After running, click "Refresh Status" above.`
         <p className="mt-1 text-sm text-gray-600">Signed in as {user?.email}</p>
       </div>
 
-      {/* permit_requests Migration */}
       <div className="mb-8 rounded-xl border bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-xl font-semibold">permit_requests Table</h2>
-            <p className="text-sm text-gray-500">Phase I columns for cost breakdown + route metadata</p>
+            <h2 className="text-xl font-semibold">Schema Migrations</h2>
+            <p className="text-sm text-gray-500">
+              permit_requests, equipment_profiles, and rig_configurations columns
+            </p>
           </div>
           <button
             onClick={checkMigrationStatus}
@@ -127,44 +378,146 @@ After running, click "Refresh Status" above.`
         </div>
 
         {migrationStatus ? (
-          migrationStatus.hasAdmin && migrationStatus.columnsExist ? (
+          migrationStatus.authRequired || migrationStatus.adminAccessDenied ? (
+            <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-red-700">
+              <strong>Admin access required</strong>
+              <div className="mt-1 text-sm">{migrationStatus.error}</div>
+            </div>
+          ) : !migrationStatus.hasAdmin ? (
+            <div className="rounded-lg bg-gray-100 border border-gray-200 p-4 text-gray-700">
+              <strong>Service role not configured</strong>
+              <div className="mt-1 text-sm">
+                Add <code>SUPABASE_SERVICE_ROLE_KEY</code> to <code>.env.local</code> on the server to
+                enable schema checks.
+              </div>
+            </div>
+          ) : migrationStatus.columnsExist ? (
             <div className="rounded-lg bg-green-50 border border-green-200 p-4 text-green-700">
-              ✅ <strong>All columns present</strong><br />
-              <span className="text-sm">cost_breakdown (JSONB), distance_miles, duration_hours are available.</span>
+              ✅ <strong>All required columns present</strong>
+              <div className="mt-1 text-sm">
+                Includes permit_requests route fields, equipment_profiles license plates, and
+                rig_configurations.is_default.
+              </div>
             </div>
           ) : (
             <div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
               <div className="mb-3 text-amber-700">
-                <strong>Migration required</strong> — The following columns are missing:
+                <strong>Migration required</strong>
+                {migrationStatus.missingColumns && migrationStatus.missingColumns.length > 0 ? (
+                  <span> — missing columns:</span>
+                ) : (
+                  <span> — schema check reported gaps.</span>
+                )}
               </div>
-              <ul className="mb-4 list-inside list-disc text-sm text-amber-800">
-                <li>cost_breakdown JSONB</li>
-                <li>distance_miles NUMERIC(8,2)</li>
-                <li>duration_hours NUMERIC(6,2)</li>
-              </ul>
+              {migrationStatus.missingColumns && migrationStatus.missingColumns.length > 0 && (
+                <ul className="mb-4 list-inside list-disc text-sm text-amber-800">
+                  {migrationStatus.missingColumns.map((col) => (
+                    <li key={col}>{col}</li>
+                  ))}
+                </ul>
+              )}
 
-              <button
-                onClick={showMigrationSQL}
-                className="rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-amber-700"
-              >
-                Copy SQL &amp; Show Instructions
-              </button>
+              {carrierConnectionInvitesNeedsRepair(migrationStatus) && (
+                <div className="mb-4 rounded border border-amber-300 bg-amber-100/60 p-3 text-sm text-amber-900">
+                  <strong>Carriers page:</strong> <code>carrier_connection_invites</code> is missing
+                  or inconclusive. Prefer full Apply Migration, or run targeted{' '}
+                  <code>migration035Sql</code> /{' '}
+                  <code className="whitespace-nowrap">node scripts/apply-migration-035.mjs</code>.
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={applyMigration}
+                  disabled={applying}
+                  className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:bg-emerald-300"
+                >
+                  {applying ? 'Applying...' : 'Apply Migration'}
+                </button>
+                <button
+                  onClick={copyMigrationSql}
+                  className="rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-amber-700"
+                >
+                  Copy SQL &amp; Show Instructions
+                </button>
+                {carrierConnectionInvitesNeedsRepair(migrationStatus) &&
+                  migrationStatus.migration035Sql && (
+                    <button
+                      onClick={copyCarrierConnectionInvitesSql}
+                      className="rounded-lg border border-amber-600 bg-white px-5 py-2.5 text-sm font-medium text-amber-800 hover:bg-amber-50"
+                    >
+                      Copy 035 (carrier invites)
+                    </button>
+                  )}
+              </div>
               <p className="mt-2 text-xs text-amber-600">
-                Run the SQL in Supabase Dashboard → SQL Editor, then refresh status.
+                Live apply requires DATABASE_URL or SUPABASE_DB_PASSWORD on the server. Otherwise copy
+                SQL and run in Supabase Dashboard → SQL Editor.
               </p>
+              {migrationStatus.needsManualRun && migrationStatus.applied === false && migrationStatus.message && (
+                <p className="mt-2 text-xs text-amber-700">{migrationStatus.message}</p>
+              )}
             </div>
           )
         ) : (
-          <p className="text-gray-500">Click "Refresh Status" to check the current schema.</p>
+          <p className="text-gray-500">Click &quot;Refresh Status&quot; to check the current schema.</p>
         )}
 
-        <details className="mt-4 text-sm">
-          <summary className="cursor-pointer font-medium text-gray-600">Show raw migration SQL</summary>
-          <pre className="mt-2 overflow-auto rounded bg-gray-900 p-3 text-xs text-gray-100">{MIGRATION_SQL}</pre>
-        </details>
+        {showPhase1SqlTools && (
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h3 className="text-sm font-semibold text-slate-800">Phase 1 SQL tools</h3>
+            <p className="mt-1 text-xs text-slate-600">
+              Always available when admin schema check succeeds (healthy or needs migration). Run in
+              Supabase SQL Editor if targeted apply scripts are not used.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={copyMigration037Sql}
+                className="rounded-lg border border-slate-600 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+              >
+                Copy 037 (Phase 1b RLS)
+              </button>
+              <button
+                type="button"
+                onClick={copyMigration038Sql}
+                className="rounded-lg border border-slate-600 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+              >
+                Copy 038 (self-Clerk PE)
+              </button>
+              <button
+                type="button"
+                onClick={copyMigration039Sql}
+                className="rounded-lg border border-slate-600 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+              >
+                Copy 039 (self-INSERT Clerk)
+              </button>
+              <button
+                type="button"
+                onClick={copyMigration040Sql}
+                className="rounded-lg border border-slate-600 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+              >
+                Copy 040 (invite UPDATE PE)
+              </button>
+              <button
+                type="button"
+                onClick={copyMigration041Sql}
+                className="rounded-lg border border-slate-600 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+              >
+                Copy 041 (session match PE)
+              </button>
+            </div>
+          </div>
+        )}
+
+        {displaySql && (
+          <details className="mt-4 text-sm">
+            <summary className="cursor-pointer font-medium text-gray-600">Show migration SQL from API</summary>
+            <pre className="mt-2 overflow-auto rounded bg-gray-900 p-3 text-xs text-gray-100">{displaySql}</pre>
+          </details>
+        )}
       </div>
 
-      {/* state_permit_rules Status */}
       <div className="mb-8 rounded-xl border bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -198,7 +551,6 @@ After running, click "Refresh Status" above.`
         )}
       </div>
 
-      {/* Quick Actions */}
       <div className="rounded-xl border bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-xl font-semibold">Quick Actions</h2>
         <div className="grid gap-3 md:grid-cols-2">
@@ -211,14 +563,11 @@ After running, click "Refresh Status" above.`
           </a>
 
           <button
-            onClick={() => {
-              navigator.clipboard.writeText(MIGRATION_SQL)
-              alert('Migration SQL copied to clipboard!')
-            }}
+            onClick={copyMigrationSql}
             className="rounded-lg border p-4 text-left hover:bg-gray-50"
           >
-            <div className="font-medium">📋 Copy permit_requests Migration SQL</div>
-            <div className="text-sm text-gray-500">For manual execution in Supabase SQL Editor</div>
+            <div className="font-medium">📋 Copy consolidated migration SQL</div>
+            <div className="text-sm text-gray-500">Includes rig-builder columns (017) for manual execution</div>
           </button>
 
           <a

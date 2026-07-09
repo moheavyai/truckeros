@@ -5,9 +5,10 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import AppHeader from '@/components/AppHeader'
 import BrandedLoader from '@/components/BrandedLoader'
-import ErrorDisplay from '@/components/ErrorDisplay'
+
 import { getRestrictionsForCorridor } from '@/lib/dot-corridor-restrictions'
 import { formatHighwayForDisplay } from '@/lib/format-highway-display'
+import { formatLoadDisplay } from '@/lib/parse-dimension'
 
 interface PermitRequest {
   id: string
@@ -109,12 +110,6 @@ export default function HistoryPage() {
     return () => listener.subscription.unsubscribe()
   }, [router])
 
-  const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
-
   // Branded loading state (consistent across app)
   if (loading) {
     return (
@@ -163,9 +158,18 @@ export default function HistoryPage() {
     return `${corridor.slice(0, 3).join(' → ')} → ... (${corridor.length} states)`
   }
 
+  const selectedLoad = selectedRequest
+    ? formatLoadDisplay({
+        weightLbs: selectedRequest.weight,
+        lengthFt: selectedRequest.length,
+        widthFt: selectedRequest.width,
+        heightFt: selectedRequest.height,
+      })
+    : null
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <AppHeader user={user} activePage="history" />
+      <AppHeader user={user} />
 
       <main className="max-w-7xl mx-auto px-6 py-10">
         <div className="mb-8">
@@ -207,6 +211,12 @@ export default function HistoryPage() {
                   {requests.map((req) => {
                     const status = getPermitStatus(req)
                     const corridor = formatCorridor(req.route_corridor)
+                    const load = formatLoadDisplay({
+                      weightLbs: req.weight,
+                      lengthFt: req.length,
+                      widthFt: req.width,
+                      heightFt: req.height,
+                    })
 
                     return (
                       <tr key={req.id} className="hover:bg-gray-50 transition-colors">
@@ -219,10 +229,10 @@ export default function HistoryPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 text-gray-600">
-                          {req.weight?.toLocaleString()} lbs<br />
-                          <span className="text-xs">
-                            {req.length}' × {req.width}' × {req.height}'
-                          </span>
+                          <div className="font-medium text-gray-900">{load.weight}</div>
+                          <div className="text-xs text-gray-500 mt-0.5 font-mono tabular-nums">
+                            {load.dimensionsLine}
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-gray-600" title={corridor}>
                           <div className="flex flex-wrap gap-0.5">
@@ -256,12 +266,6 @@ export default function HistoryPage() {
                           >
                             View
                           </button>
-                          <a
-                            href={`/portal-assist?requestId=${req.id}`}
-                            className="text-sm px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition"
-                          >
-                            Portal Assist
-                          </a>
                         </td>
                       </tr>
                     )
@@ -307,10 +311,26 @@ export default function HistoryPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="text-gray-500 text-xs mb-1">LOAD DIMENSIONS</div>
-                  <div className="font-medium">
-                    {selectedRequest.weight?.toLocaleString()} lbs<br />
-                    {selectedRequest.length}' × {selectedRequest.width}' × {selectedRequest.height}'
-                  </div>
+                  {selectedLoad && (
+                    <dl className="space-y-1 font-mono tabular-nums">
+                      <div className="flex gap-3">
+                        <dt className="text-gray-500 w-14 shrink-0">Weight</dt>
+                        <dd className="font-medium text-gray-900">{selectedLoad.weight}</dd>
+                      </div>
+                      <div className="flex gap-3">
+                        <dt className="text-gray-500 w-14 shrink-0">Length</dt>
+                        <dd className="font-medium text-gray-900">{selectedLoad.length}</dd>
+                      </div>
+                      <div className="flex gap-3">
+                        <dt className="text-gray-500 w-14 shrink-0">Width</dt>
+                        <dd className="font-medium text-gray-900">{selectedLoad.width}</dd>
+                      </div>
+                      <div className="flex gap-3">
+                        <dt className="text-gray-500 w-14 shrink-0">Height</dt>
+                        <dd className="font-medium text-gray-900">{selectedLoad.height}</dd>
+                      </div>
+                    </dl>
+                  )}
                 </div>
                 <div>
                   <div className="text-gray-500 text-xs mb-1">ESTIMATED</div>
@@ -459,16 +479,22 @@ export default function HistoryPage() {
               )}
             </div>
 
-            <div className="border-t px-6 py-4 flex justify-end gap-3">
+            <div className="border-t px-6 py-4 flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-3">
               <button
                 onClick={() => setSelectedRequest(null)}
-                className="px-5 py-2 text-sm border rounded-lg hover:bg-gray-50"
+                className="w-full sm:w-auto px-5 py-2 text-sm border rounded-lg hover:bg-gray-50"
               >
                 Close
               </button>
               <a
+                href={`/portal-assist?requestId=${selectedRequest.id}`}
+                className="w-full sm:w-auto px-5 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-center"
+              >
+                Launch Portal Assist
+              </a>
+              <a
                 href="/permit-test"
-                className="px-5 py-2 text-sm bg-black text-white rounded-lg hover:bg-gray-900"
+                className="w-full sm:w-auto px-5 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 text-center"
               >
                 Run New Analysis
               </a>

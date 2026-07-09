@@ -1,0 +1,13 @@
+---
+pid: 20964
+cwd: "C:\Users\andre\truckeros"
+command: "Start-Sleep -Seconds 30"
+started_at: 2026-07-04T04:15:12.350Z
+running_for_ms: 87203983 
+---
+
+---
+exit_code: -1
+elapsed_ms: 87203983
+ended_at: 2026-07-05T04:28:51.433Z
+---

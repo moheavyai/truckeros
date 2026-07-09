@@ -1,0 +1,7 @@
+---
+pid: 29600
+cwd: "C:\Users\andre\truckeros"
+command: "Start-Sleep -Seconds 15"
+started_at: 2026-07-07T20:07:24.705Z
+running_for_ms: 54997    
+---

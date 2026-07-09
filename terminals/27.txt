@@ -1,0 +1,156 @@
+---
+pid: 13428
+cwd: "C:\Users\andre\truckeros"
+command: "Set-Location C:\\Users\\andre\\truckeros; npx vitest run"
+started_at: 2026-07-07T19:43:41.843Z
+running_for_ms: 189961   
+---
+
+ RUN  v3.2.6 C:/Users/andre/truckeros
+
+ ✓ lib/parse-dimension.test.ts (4 tests) 57ms
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] non-ok HTTP 503 from http://127.0.0.1:8000/health
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] responded in 2ms status=200
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] connected service=or-tools version=1.0.0 buildId=abc123def456
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] responded in 0ms status=503
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] responded in 1ms status=200
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on connection refused
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on timeout
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+ ✓ app/api/ortools-health/route.test.ts (5 tests) 36ms
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] unexpected body status=degraded service=undefined
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on connection refused
+[ortools-health] probe failed after 0ms: fetch failed
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on timeout
+[ortools-health] probe failed after 0ms: The operation was aborted
+
+ ✓ app/api/geocode/route.test.ts (7 tests) 50ms
+ ✓ app/api/analyze-permit/route.test.ts (2 tests) 27ms
+stderr | app/api/admin/migrate/route.test.ts > GET /api/admin/migrate > flags missing equipment_profiles license plate columns
+[admin/migrate] schema check failed for equipment_profiles: column equipment_profiles.license_plate does not exist
+
+stderr | app/api/admin/migrate/route.test.ts > GET /api/admin/migrate > flags missing rig_configurations table as needsMigration
+[admin/migrate] schema check failed for rig_configurations: relation "rig_configurations" does not exist
+
+ ✓ app/api/admin/migrate/route.test.ts (16 tests) 68ms
+ ✓ app/api/profile-change-requests/route.test.ts (7 tests) 61ms
+stderr | app/api/admin/migrate/route.test.ts > POST /api/admin/migrate > returns needsManualRun when runMigrationSql throws
+[admin/migrate] POST live migration: connection refused { correlationId: 'd2195045-4168-43bb-ab67-d028dca971da' }
+
+stderr | app/api/admin/migrate/route.test.ts > POST /api/admin/migrate > returns partial success when SQL applies but columns remain missing
+[admin/migrate] schema check failed for rig_configurations: column rig_configurations.is_default does not exist
+
+stderr | app/api/profile-change-requests/route.test.ts > /api/profile-change-requests > GET maps forbidden errors to 403
+[profile-change-requests] GET error: Error: Forbidden – only primary owners can list org change requests
+    at C:\Users\andre\truckeros\app\api\profile-change-requests\route.test.ts:40:7
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at file:///C:/Users/andre/truckeros/node_modules/@vitest/runner/dist/chunk-hooks.js:752:20
+
+stderr | app/api/profile-change-requests/route.test.ts > /api/profile-change-requests > POST maps forbidden errors to 403
+[profile-change-requests] POST error: Error: Forbidden – only driver accounts use profile change requests
+    at C:\Users\andre\truckeros\app\api\profile-change-requests\route.test.ts:101:7
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at file:///C:/Users/andre/truckeros/node_modules/@vitest/runner/dist/chunk-hooks.js:752:20
+
+ ✓ lib/geocode-query.test.ts (18 tests) 23ms
+ ✓ lib/portal-assistant.test.ts (14 tests) 39ms
+ ✓ app/profile/profile-ui.test.ts (33 tests) 52ms
+stdout | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > spawns detached restart script on Windows for authenticated users
+[restart-ortools] restart initiated by user user-123
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when restart script is missing
+[restart-ortools] restart script not found: C:\Users\andre\truckeros\restart-ortools.ps1
+
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when spawn throws synchronously
+[restart-ortools] failed to spawn restart script: spawn EACCES
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when child emits an error event
+[restart-ortools] failed to spawn restart script: ENOENT: powershell.exe not found
+
+stdout | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 429 when restart is requested within 60 seconds
+[restart-ortools] restart initiated by user user-123
+
+ ✓ app/api/restart-ortools/route.test.ts (8 tests) 39ms
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > falls back to OSRM with query and normalized drops when OR-Tools is unreachable
+[optimize-route] calling OR-Tools url=http://127.0.0.1:8000/optimize-route timeout_ms=180000
+
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > post-processes successful OR-Tools response with escort enrichment
+[optimize-route] calling OR-Tools url=http://127.0.0.1:8000/optimize-route timeout_ms=180000
+
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > post-processes successful OR-Tools response with escort enrichment
+[optimize-route] OR-Tools responded in 0ms status=200
+
+ ✓ app/api/optimize-route/route.test.ts (5 tests) 43ms
+ ✓ lib/profile-change-requests.test.ts (19 tests) 42ms
+stderr | app/api/optimize-route/route.test.ts > POST /api/optimize-route > falls back to OSRM with query and normalized drops when OR-Tools is unreachable
+[optimize-route] OR-Tools fetch failed after 7ms: ECONNREFUSED 127.0.0.1:8000
+[optimize-route] OR-Tools unreachable, falling back to OSRM: unreachable ECONNREFUSED 127.0.0.1:8000
+
+ ✓ app/equipment/default-rig-button.test.ts (3 tests) 35ms
+ ✓ lib/geocode-client.test.ts (11 tests) 1537ms
+   ✓ fetchGeocodeWithRetry > retries 429 then succeeds  508ms
+   ✓ fetchGeocodeWithRetry > retries 500 then fails  504ms
+   ✓ fetchGeocodeWithRetry > retries network throw then fails retryable  505ms
+ ✓ lib/site-wide-cleanup.test.ts (1 test) 29ms
+ ✓ lib/migrations.test.ts (10 tests) 28ms
+ ✓ lib/team-member-profiles-api.test.ts (16 tests) 25ms
+ ✓ lib/carrier-link-requests.test.ts (3 tests) 13ms
+ ✓ lib/location-stop.test.ts (23 tests) 31ms
+ ✓ lib/member-profile.test.ts (70 tests) 54ms
+ ✓ lib/admin-auth.test.ts (9 tests) 47ms
+ ✓ lib/db-migrate.test.ts (9 tests) 26ms
+ ✓ lib/profile-field-permissions.test.ts (11 tests) 18ms
+ ✓ components/LicensePlateFields.test.ts (3 tests) 10ms
+ ✓ lib/routing-envelope-display.test.ts (7 tests) 14ms
+ ✓ lib/escort-analysis.test.ts (13 tests) 18ms
+ ✓ agents/permit-agent.test.ts (4 tests) 27ms
+ ✓ lib/build-corridor.test.ts (10 tests) 22ms
+ ✓ lib/organization-context.test.ts (8 tests) 38ms
+ ✓ lib/profile-persistence.test.ts (11 tests) 17ms
+ ✓ lib/geocode-server.test.ts (9 tests) 15ms
+ ✓ lib/member-profile-permissions.test.ts (15 tests) 25ms
+ ✓ lib/ortools-config.test.ts (15 tests) 14ms
+ ✓ lib/enrich-route-escorts.test.ts (3 tests) 11ms
+ ✓ components/OverhangFeetInput.test.ts (4 tests) 14ms
+ ✓ components/AppHeader.test.ts (4 tests) 10ms
+ ✓ lib/license-plate.test.ts (7 tests) 10ms
+ ✓ lib/permit-requests.test.ts (3 tests) 31ms
+ ✓ app/history/history-ui.test.ts (3 tests) 10ms
+ ✓ lib/permit-length.test.ts (9 tests) 8ms
+ ✓ app/carriers/carriers-ui.test.ts (3 tests) 8ms
+ ✓ components/DimensionInput.test.ts (1 test) 6ms
+ ✓ types/equipment.test.ts (6 tests) 8ms
+ ✓ types/member-profile.test.ts (1 test) 8ms
+ ↓ lib/geocode-live.integration.test.ts (3 tests | 3 skipped)
+ ↓ scripts/geocode-report.integration.test.ts (1 test | 1 skipped)
+
+ Test Files  44 passed | 2 skipped (46)
+      Tests  443 passed | 4 skipped (447)
+   Start at  15:43:47
+   Duration  10.43s (transform 6.71s, setup 0ms, collect 12.24s, tests 2.70s, environment 22ms, prepare 15.33s)
+

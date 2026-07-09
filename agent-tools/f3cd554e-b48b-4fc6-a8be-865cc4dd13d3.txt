@@ -1,0 +1,2087 @@
+
+ RUN  v3.2.6 C:/Users/andre/truckeros
+
+ ❯ app/profile/profile-ui.test.ts (35 tests | 2 failed) 92ms
+   ✓ Profile page UI > documents source-only inspection as accepted RTL limitation without a render harness 5ms
+   ✓ Profile page UI > uses AppHeader with profile activePage 1ms
+   ✓ Profile page UI > guards auth and always clears loading state 1ms
+   ✓ Profile page UI > allows save on first visit when no profile row exists yet 2ms
+   ✓ Profile page UI > renders landing sections with carrier card and team roster 1ms
+   ✓ Profile page UI > orders driver identity fields before CDL state and date of birth in member edit card 1ms
+   ✓ Profile page UI > caps date of birth at today and announces save feedback 1ms
+   ✓ Profile page UI > renders team roster with add, edit, and delete actions 1ms
+   × Profile page UI > shows member edit card with top-right save and team-member-only roles 34ms
+     → expected '{showMemberEditCard && (\n        <fo…' to contain 'editingTarget.kind !== \'self\''
+   × Profile page UI > hides standalone User Roles section on own profile and shows Owner / Admin badge on landing 12ms
+     → expected '\'use client\'\n\nimport { useCallbac…' not to contain '{showUserRolesSection && ('
+   ✓ Profile page UI > auto-assigns bootstrap Owner / Admin roles on mount and carrier save 2ms
+   ✓ Profile page UI > updates carrier bootstrap copy for implicit Owner / Admin setup 1ms
+   ✓ Profile page UI > routes all profile saves through the team-member-profiles API 1ms
+   ✓ Profile page UI > shows editing banner from list display name and fetches profile on cache miss 1ms
+   ✓ Profile page UI > highlights active editing row and uses contextual save labels 1ms
+   ✓ Profile page UI > confirms delete, refreshes team list, and shows update success for others 1ms
+   ✓ Profile page UI > shows read-only carrier summary after first save with edit toggle for carrier managers 2ms
+   ✓ Profile page UI > places Save Carrier Info inside the carrier card with carrier-only payload and scoped feedback 2ms
+   ✓ Profile page UI > shows read-only org carrier block with expand collapse in member edit card 1ms
+   ✓ Profile page UI > enforces viewer write restrictions and role edit permissions in UI 1ms
+   ✓ Profile page UI > implements driver restricted field permissions and change request flow 2ms
+   ✓ Profile page UI > uses showLandingView for roster spacing and delegates isFieldDisabled to canEditProfileField 1ms
+   ✓ Profile page UI > shows driver pending changes list with withdraw action 1ms
+   ✓ Profile page UI > uses shouldShowLandingProfileView for editingLabel and avoids undefined helper typo 1ms
+   ✓ Profile page UI > shows global save feedback banner outside member edit card 1ms
+   ✓ Profile page UI > shows driver edit-my-profile action and admin pending profile changes UI 1ms
+   ✓ Profile page UI > shows account link requests for primary owners with approve and reject actions 1ms
+   ✓ Profile page UI > resets carrier form expansion when switching edit targets or saving 2ms
+   ✓ Profile page UI > uses separate saving flags with mutual exclusion across save actions 4ms
+   ✓ Profile page UI > refreshes own profile from API response on self-save 1ms
+   ✓ Profile page UI > persists bootstrap roles in carrier-only save and guides profile completion 2ms
+   ✓ Profile page UI > keeps editing team member after save instead of always resetting to self 1ms
+   ✓ Profile page UI > prompts before discarding unsaved edits when switching members 1ms
+   ✓ Profile page UI > snapshots save payload from prior target before any await in handleSave 1ms
+   ✓ Profile page UI > disables cancel editing while save is in flight 1ms
+ ✓ lib/profile-persistence.test.ts (11 tests) 12ms
+ ✓ lib/member-profile.test.ts (91 tests) 48ms
+ ✓ lib/team-member-profiles-api.test.ts (16 tests) 19ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  app/profile/profile-ui.test.ts > Profile page UI > shows member edit card with top-right save and team-member-only roles
+AssertionError: expected '{showMemberEditCard && (\n        <fo…' to contain 'editingTarget.kind !== \'self\''
+
+- Expected
++ Received
+
+- editingTarget.kind !== 'self'
++ {showMemberEditCard && (
++         <form onSubmit={handleSave} className="space-y-6 mb-6">
++           <section className="bg-white border rounded-2xl p-6">
++             <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
++               <div>
++                 <h2 className="font-semibold text-lg tracking-tight text-gray-900">{memberCardTitle}</h2>
++                 <p className="text-sm text-gray-500 mt-1">{memberEditSubtitle}</p>
++               </div>
++               <button
++                 type="submit"
++                 disabled={isSaving || !canWriteProfile || isLoadingMember}
++                 className="rounded-lg bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-4 py-2 text-sm font-semibold transition whitespace-nowrap"
++               >
++                 {saveButtonLabel}
++               </button>
++             </div>
++
++             {showDriverRestrictedWarning && (
++               <div
++                 role="status"
++                 aria-live="polite"
++                 className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
++               >
++                 <p className="font-medium">Requires Admin approval</p>
++                 <p className="mt-1">
++                   Changes to name, CDL, or date of birth will be submitted for review when you save. Contact
++                   fields save immediately.
++                 </p>
++               </div>
++             )}
++
++             {showTeamSectionCarrier && (
++               <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
++                 <div className="flex flex-wrap items-center justify-between gap-3">
++                   <div>
++                     <p className="text-xs font-medium text-gray-500">Carrier</p>
++                     <p className="text-sm font-medium text-gray-900 mt-0.5">{carrierNameSummary}</p>
++                   </div>
++                   {hasCarrierData(teamSectionCarrierSource) && (
++                     <button
++                       type="button"
++                       onClick={() => setCarrierFormExpanded((prev) => !prev)}
++                       className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 transition"
++                     >
++                       {carrierFormExpanded ? 'Collapse' : 'Expand'}
++                     </button>
++                   )}
++                 </div>
++                 {showTeamSectionCarrierDetails && (
++                   <dl className="mt-4 grid sm:grid-cols-2 gap-x-6 gap-y-4">
++                     {teamSectionCarrierFields.map(({ label, value }) => (
++                       <div key={`team-carrier-${label}`} className={label === 'Address' ? 'sm:col-span-2' : ''}>
++                         <dt className="text-xs font-medium text-gray-500">{label}</dt>
++                         <dd className="mt-1 text-sm text-gray-900">{value}</dd>
++                       </div>
++                     ))}
++                   </dl>
++                 )}
++                 <p className="mt-2 text-xs text-gray-500">
++                   {teamMemberCarrierSummaryMode
++                     ? 'Carrier details are shared across your organization. Edit carrier info on your profile above.'
++                     : 'Carrier details are shared across your organization.'}
++                 </p>
++               </div>
++             )}
++
++             <div className="mt-5 grid sm:grid-cols-2 gap-4">
++               {DRIVER_IDENTITY_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
++                 <div key={key}>
++                   <label htmlFor={key} className="block text-xs font-medium text-gray-600 mb-1">
++                     {label}
++                     {isDriverRestrictedField(key) &&
++                       ownProfile &&
++                       isDriverSelfServiceActor(ownProfile) &&
++                       isEditingOwnProfileTarget() && (
++                         <span className="ml-1 text-amber-700">(requires approval)</span>
++                       )}
++                     {pendingFieldKeys.has(key) && (
++                       <span className="ml-1 text-blue-700">(pending approval)</span>
++                     )}
++                   </label>
++                   <input
++                     id={key}
++                     type={type}
++                     value={(form[key] as string) ?? ''}
++                     onChange={(e) => updateField(key, e.target.value)}
++                     placeholder={placeholder}
++                     className={inputClass}
++                     disabled={isFieldDisabled(key)}
++                   />
++                 </div>
++               ))}
++               <div>
++                 <label htmlFor="cdl_state" className="block text-xs font-medium text-gray-600 mb-1">
++                   CDL State
++                   {ownProfile && isDriverSelfServiceActor(ownProfile) && isEditingOwnProfileTarget() && (
++                     <span className="ml-1 text-amber-700">(requires approval)</span>
++                   )}
++                   {pendingFieldKeys.has('cdl_state') && (
++                     <span className="ml-1 text-blue-700">(pending approval)</span>
++                   )}
++                 </label>
++                 <select
++                   id="cdl_state"
++                   value={form.cdl_state ?? ''}
++                   onChange={(e) => updateField('cdl_state', e.target.value)}
++                   disabled={isFieldDisabled('cdl_state')}
++                   className={`${inputClass} min-h-[38px] disabled:opacity-50`}
++                 >
++                   <option value="">— Select state —</option>
++                   {US_STATE_OPTIONS.map(({ code, name }) => (
++                     <option key={code} value={code}>
++                       {code} — {name}
++                     </option>
++                   ))}
++                 </select>
++               </div>
++               <div>
++                 <label htmlFor="date_of_birth" className="block text-xs font-medium text-gray-600 mb-1">
++                   Date of Birth
++                   {ownProfile && isDriverSelfServiceActor(ownProfile) && isEditingOwnProfileTarget() && (
++                     <span className="ml-1 text-amber-700">(requires approval)</span>
++                   )}
++                   {pendingFieldKeys.has('date_of_birth') && (
++                     <span className="ml-1 text-blue-700">(pending approval)</span>
++                   )}
++                 </label>
++                 <input
++                   id="date_of_birth"
++                   type="date"
++                   max={maxDateOfBirth}
++                   value={form.date_of_birth ?? ''}
++                   onChange={(e) => updateField('date_of_birth', e.target.value)}
++                   className={inputClass}
++                   disabled={isFieldDisabled('date_of_birth')}
++                 />
++               </div>
++               {DRIVER_CONTACT_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
++                 <div key={key} className={key === 'emergency_contact' ? 'sm:col-span-2' : ''}>
++                   <label htmlFor={key} className="block text-xs font-medium text-gray-600 mb-1">
++                     {label}
++                   </label>
++                   <input
++                     id={key}
++                     type={type}
++                     value={(form[key] as string) ?? ''}
++                     onChange={(e) => updateField(key, e.target.value)}
++                     placeholder={placeholder}
++                     className={inputClass}
++                     disabled={isFieldDisabled(key)}
++                   />
++                 </div>
++               ))}
++             </div>
++
++             {showUserRolesSection && (
++               <div className="mt-6 pt-6 border-t border-gray-100">
++                 <UserRolesCheckboxGrid
++                   userRoles={(form.user_roles as string[]) || []}
++                   canEditRoles={canEditRoles}
++                   canWriteProfile={canWriteProfile}
++                   disabled={isLoadingMember || isSaving}
++                   helperText={getTeamMemberRolesHelperText(canEditRoles)}
++                   onToggleRole={toggleRole}
++                 />
++               </div>
++             )}
++           </section>
++
++           {showBootstrapProfilePrompt && editingTarget.kind === 'self' && (
++             <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
++               Carrier details are saved. Add your driver information here, then click Save Profile to finish
++               setup.
++             </p>
++           )}
++         </form>
++         )}
++
++         
+
+ ❯ app/profile/profile-ui.test.ts:177:24
+    175|     expect(memberCard).toContain('type="submit"')
+    176|     expect(memberCard).not.toContain('>User Roles</h2>')
+    177|     expect(memberCard).toContain("editingTarget.kind !== 'self'")
+       |                        ^
+    178|     expect(memberCard).toContain('UserRolesCheckboxGrid')
+    179|     expect(memberCard).toContain('Select all roles that apply to this …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  app/profile/profile-ui.test.ts > Profile page UI > hides standalone User Roles section on own profile and shows Owner / Admin badge on landing
+AssertionError: expected '\'use client\'\n\nimport { useCallbac…' not to contain '{showUserRolesSection && ('
+
+- Expected
++ Received
+
+- {showUserRolesSection && (
++ 'use client'
++
++ import { useCallback, useEffect, useRef, useState } from 'react'
++ import type { User } from '@supabase/supabase-js'
++ import { createClient } from '@/lib/supabase/client'
++ import { useRouter } from 'next/navigation'
++ import AppHeader from '@/components/AppHeader'
++ import { US_STATE_OPTIONS } from '@/lib/us-states'
++ import {
++   buildTeamMemberList,
++   canDeleteMember,
++   canEditMember,
++   canWriteTeamData,
++   isPrimaryOwner,
++   memberDisplayName,
++   roleBadgeClass,
++   shouldShowTeamSection,
++ } from '@/lib/member-profile-permissions'
++ import {
++   buildCarrierOnlyApiSavePayload,
++   canSaveCarrierInfo,
++   CARRIER_SAVE_FORBIDDEN_MESSAGE,
++   ensureBootstrapOwnerAdminRoles,
++   getLandingAssignedRoles,
++   getMemberEditCardSubtitle,
++   getTeamMemberRolesHelperText,
++   logCarrierSaveDebug,
++   logCarrierSaveWarn,
++   validateBootstrapCarrierSaveRoles,
++   buildMemberProfileSavePayloadWithoutCarrier,
++   buildSelfMemberSavePayload,
++   canSelfEditRoles,
++   isAnySaveInFlight,
++   memberEditCardTitle,
++   memberEditSaveButtonLabel,
++   resolvePersistedRosterId,
++   shouldShowBootstrapProfilePrompt,
++   emptyMemberProfileForm,
++   formatCarrierNameSummary,
++   formatCarrierSummaryDisplay,
++   hasCarrierData,
++   memberProfileFromRow,
++   carrierFieldsDiffer,
++   resetCarrierFieldsInForm,
++   resolveCarrierDataSource,
++   shouldShowCarrierForm,
++   shouldShowCarrierInformationCard,
++   shouldShowEditMyProfileOnLanding,
++   shouldShowLandingProfileView,
++   shouldShowMemberEditCard,
++   shouldShowAssignedRoleBadges,
++   shouldShowOwnerAdminBadge,
++   shouldShowTeamSectionCarrierBlock,
++   shouldShowUserRolesSection,
++   shouldShowTeamSectionCarrierDetails,
++   shouldUseCarrierSummaryMode,
++   shouldUseTeamMemberCarrierSummary,
++   teamMemberProfileFromRow,
++   type ProfileEditingTarget,
++ } from '@/lib/member-profile'
++ import {
++   applyDriverRestrictedFieldBaseline,
++   canEditProfileField,
++   detectRestrictedFieldChanges,
++   hasPendingRestrictedFieldEdits,
++   isDriverRestrictedField,
++   isDriverSelfServiceActor,
++   type ProfileFieldKey,
++ } from '@/lib/profile-field-permissions'
++ import {
++   buildRestrictedChangeRequestPayload,
++   pendingProfileChangeFieldKeys,
++   profileChangeFieldLabel,
++   type ProfileChangeRequestRow,
++ } from '@/lib/profile-change-requests'
++ import {
++   mergeCarrierFieldsOntoProfile,
++   profileFromSaveResponse,
++   resolveRefreshedOwnProfile,
++   teamMemberProfileFromSaveResponse,
++ } from '@/lib/profile-persistence'
++ import {
++   USER_ROLE_OPTIONS,
++   type MemberProfile,
++   type MemberProfileFormData,
++   type TeamMemberListItem,
++   type TeamMemberProfile,
++ } from '@/types/member-profile'
++ import type { CarrierLinkRequest } from '@/types/organization'
++
++ const inputClass =
++   'border border-gray-300 px-3 py-2 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-black/10'
++
++ type FieldConfig = {
++   key: keyof MemberProfileFormData
++   label: string
++   type?: string
++   placeholder?: string
++ }
++
++ const CARRIER_FIELDS: FieldConfig[] = [
++   { key: 'company_name', label: 'Company Name', placeholder: 'ABC Trucking LLC' },
++   { key: 'usdot_number', label: 'USDOT#', placeholder: '1234567' },
++   { key: 'mc_number', label: 'MC#', placeholder: 'MC-123456' },
++   { key: 'ein', label: 'EIN', placeholder: '12-3456789' },
++   { key: 'carrier_address', label: 'Address', placeholder: '123 Main St, City, ST 12345' },
++   { key: 'carrier_phone', label: 'Phone', type: 'tel', placeholder: '(555) 123-4567' },
++   { key: 'carrier_email', label: 'Email', type: 'email', placeholder: 'dispatch@company.com' },
++   { key: 'insurance_contact', label: 'Insurance Contact', placeholder: 'Agent name / phone / email' },
++ ]
++
++ const DRIVER_IDENTITY_FIELDS: FieldConfig[] = [
++   { key: 'driver_full_name', label: 'Full Name', placeholder: 'Jane Doe' },
++   { key: 'cdl_number', label: 'CDL#', placeholder: 'D1234567' },
++ ]
++
++ const DRIVER_CONTACT_FIELDS: FieldConfig[] = [
++   { key: 'driver_phone', label: 'Phone', type: 'tel', placeholder: '(555) 987-6543' },
++   { key: 'driver_email', label: 'Email', type: 'email', placeholder: 'driver@email.com' },
++   { key: 'emergency_contact', label: 'Emergency Contact', placeholder: 'Name, relationship, phone' },
++ ]
++
++ function todayIsoDate(): string {
++   return new Date().toISOString().slice(0, 10)
++ }
++
++ type UserRolesCheckboxGridProps = {
++   userRoles: string[]
++   canEditRoles: boolean
++   canWriteProfile: boolean
++   disabled: boolean
++   helperText: string
++   onToggleRole: (role: string) => void
++ }
++
++ function UserRolesCheckboxGrid({
++   userRoles,
++   canEditRoles,
++   canWriteProfile,
++   disabled,
++   helperText,
++   onToggleRole,
++ }: UserRolesCheckboxGridProps) {
++   return (
++     <>
++       <p className="text-sm text-gray-500 mb-4">{helperText}</p>
++       <div className="grid sm:grid-cols-2 gap-3">
++         {USER_ROLE_OPTIONS.map((role) => (
++           <label
++             key={role}
++             className={`flex items-center gap-2.5 text-sm text-gray-800 rounded-lg border border-gray-200 px-3 py-2.5 ${
++               canEditRoles && canWriteProfile ? 'cursor-pointer hover:bg-gray-50' : 'opacity-70'
++             }`}
++           >
++             <input
++               type="checkbox"
++               checked={userRoles.includes(role)}
++               onChange={() => onToggleRole(role)}
++               disabled={!canEditRoles || !canWriteProfile || disabled}
++               className="rounded border-gray-300"
++             />
++             {role}
++           </label>
++         ))}
++       </div>
++     </>
++   )
++ }
++
++ export default function ProfilePage() {
++   const [user, setUser] = useState<User | null>(null)
++   const [loading, setLoading] = useState(true)
++   const [savingProfile, setSavingProfile] = useState(false)
++   const [savingCarrier, setSavingCarrier] = useState(false)
++   const [deletingId, setDeletingId] = useState<string | null>(null)
++   const [form, setForm] = useState<MemberProfileFormData>(emptyMemberProfileForm())
++   const [ownProfile, setOwnProfile] = useState<MemberProfile | null>(null)
++   const [teamMembers, setTeamMembers] = useState<TeamMemberListItem[]>([])
++   const [orgMemberRows, setOrgMemberRows] = useState<MemberProfile[]>([])
++   const [teamRosterRows, setTeamRosterRows] = useState<TeamMemberProfile[]>([])
++   const [editingTarget, setEditingTarget] = useState<ProfileEditingTarget>
+({ kind: 'self' })
++   const [editingDisplayName, setEditingDisplayName] = useState<string | null>(null)
++   const [editingMemberKey, setEditingMemberKey] = useState<string | null>(null)
++   const [loadingMemberKey, setLoadingMemberKey] = useState<string | null>(null)
++   const [deleteCandidate, setDeleteCandidate] = useState<TeamMemberListItem | null>(null)
++   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
++   const [carrierMessage, setCarrierMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
++   const [carrierFormExpanded, setCarrierFormExpanded] = useState(false)
++   const [incomingLinkRequests, setIncomingLinkRequests] = useState<CarrierLinkRequest[]>([])
++   const [respondingRequestId, setRespondingRequestId] = useState<string | null>(null)
++   const [ownPendingChangeRequests, setOwnPendingChangeRequests] = useState<ProfileChangeRequestRow[]>([])
++   const [adminPendingChangeRequests, setAdminPendingChangeRequests] = useState<ProfileChangeRequestRow[]>([])
++   const [reviewingChangeRequestId, setReviewingChangeRequestId] = useState<string | null>(null)
++   const [withdrawingChangeRequestId, setWithdrawingChangeRequestId] = useState<string | null>(null)
++   const teamSectionRef = useRef<HTMLElement | null>(null)
++   const editRequestIdRef = useRef(0)
++   const formBaselineRef = useRef<string>(JSON.stringify(emptyMemberProfileForm()))
++   const router = useRouter()
++   const maxDateOfBirth = todayIsoDate()
++
++   const loadOwnPendingChangeRequests = useCallback(
++     async (supabase: ReturnType<typeof createClient>, userId: string) => {
++       const { data, error } = await supabase
++         .from('profile_change_requests')
++         .select('*')
++         .eq('target_user_id', userId)
++         .eq('status', 'pending')
++         .order('created_at', { ascending: true })
++
++       if (error) {
++         console.warn('profile_change_requests load', error)
++         setOwnPendingChangeRequests([])
++         return
++       }
++
++       setOwnPendingChangeRequests((data ?? []) as ProfileChangeRequestRow[])
++     },
++     []
++   )
++
++   const loadAdminPendingChangeRequests = useCallback(async (accessToken: string) => {
++     const response = await fetch('/api/profile-change-requests', {
++       headers: { Authorization: `Bearer ${accessToken}` },
++     })
++     const result = await response.json()
++     if (response.ok && result.success) {
++       setAdminPendingChangeRequests(result.data ?? [])
++     } else {
++       setAdminPendingChangeRequests([])
++     }
++   }, [])
++
++   const loadIncomingLinkRequests = useCallback(async (accessToken: string) => {
++     const response = await fetch('/api/carrier-link-requests?direction=incoming', {
++       headers: { Authorization: `Bearer ${accessToken}` },
++     })
++     const result = await response.json()
++     if (response.ok && result.success) {
++       setIncomingLinkRequests(result.data ?? [])
++     } else {
++       setIncomingLinkRequests([])
++     }
++   }, [])
++
++   const refreshTeamMembers = useCallback(
++     (profile: MemberProfile | null, members: MemberProfile[], roster: TeamMemberProfile[], userId: string) => {
++       setTeamMembers(buildTeamMemberList(profile, members, roster, userId))
++     },
++     []
++   )
++
++   const loadTeamData = useCallback(
++     async (
++       supabase: ReturnType<typeof createClient>,
++       userId: string,
++       profile: MemberProfile | null
++     ): Promise<{ members: MemberProfile[]; roster: TeamMemberProfile[] }> => {
++       let members: MemberProfile[] = profile ? [profile] : []
++       let roster: TeamMemberProfile[] = []
++
++       if (profile?.organization_id && isPrimaryOwner(profile)) {
++         const [{ data: orgMembers }, { data: rosterRows }] = await Promise.all([
++           supabase.from('member_profiles').select('*').eq('organization_id', profile.organization_id),
++           supabase
++             .from('team_member_profiles')
++             .select('*')
++             .eq('organization_id', profile.organization_id)
++             .order('created_at', { ascending: true }),
++         ])
++
++         if (orgMembers) members = orgMembers as MemberProfile[]
++         if (rosterRows) roster = rosterRows as TeamMemberProfile[]
++       }
++
++       setOrgMemberRows(members)
++       setTeamRosterRows(roster)
++       refreshTeamMembers(profile, members, roster, userId)
++       return { members, roster }
++     },
++     [refreshTeamMembers]
++   )
++
++   useEffect(() => {
++     const supabase = createClient()
++
++     supabase.auth.getSession().then(async ({ data: { session } }) => {
++       if (!session) {
++         router.push('/login')
++       } else {
++         setUser(session.user)
++
++         const { data, error } = await supabase
++           .from('member_profiles')
++           .select('*')
++           .eq('user_id', session.user.id)
++           .maybeSingle()
++
++         let loadedProfile: MemberProfile | null = null
++
++         if (error) {
++           console.warn('member_profiles load', error)
++         } else if (data) {
++           loadedProfile = data as MemberProfile
++           setOwnProfile(loadedProfile)
++           const loadedForm = memberProfileFromRow(loadedProfile)
++           setForm(loadedForm)
++           syncFormBaseline(loadedForm)
++           await loadTeamData(supabase, session.user.id, loadedProfile)
++           if (isDriverSelfServiceActor(loadedProfile)) {
++             await loadOwnPendingChangeRequests(supabase, session.user.id)
++           }
++         }
++
++         if (session.access_token) {
++           await loadIncomingLinkRequests(session.access_token)
++           if (loadedProfile && isPrimaryOwner(loadedProfile)) {
++             await loadAdminPendingChangeRequests(session.access_token)
++           }
++         }
++       }
++
++       setLoading(false)
++     })
++
++     const { data: listener } = supabase.auth.onAuthStateChange((_, session) => {
++       if (!session) {
++         router.push('/login')
++       } else {
++         setUser(session.user)
++       }
++     })
++
++     return () => listener.subscription.unsubscribe()
++   }, [router, loadTeamData, loadIncomingLinkRequests, loadOwnPendingChangeRequests, loadAdminPendingChangeRequests])
++
++   // First-visit implicit Owner/Admin is required for org bootstrap; invite/Driver-first flows need a separate entry path.
++   useEffect(() => {
++     if (!ownProfile && editingTarget.kind === 'self') {
++       setForm((prev) => ensureBootstrapOwnerAdminRoles(prev))
++     }
++   }, [ownProfile, editingTarget.kind])
++
++   async function withdrawOwnProfileChangeRequest(requestId: string) {
++     setWithdrawingChangeRequestId(requestId)
++     setSaveMessage(null)
++
++     try {
++       const supabase = createClient()
++       const { data: sessionData } = await supabase.auth.getSession()
++       if (!sessionData.session?.user) throw new Error('Session expired. Please sign in again.')
++
++       const { error } = await supabase
++         .from('profile_change_requests')
++         .delete()
++         .eq('id', requestId)
++         .eq('target_user_id', sessionData.session.user.id)
++         .eq('status', 'pending')
++
++       if (error) throw new Error(error.message)
++
++       await loadOwnPendingChangeRequests(supabase, sessionData.session.user.id)
++       setSaveMessage({ type: 'success', text: 'Pending profile change withdrawn.' })
++     } catch (error) {
++       setSaveMessage({
++         type: 'error',
++         text: error instanceof Error ? error.message : 'Failed to withdraw profile change request',
++       })
++     } finally {
++       setWithdrawingChangeRequestId(null)
++     }
++   }
++
++   async function respondToProfileChangeRequest(requestId: string, action: 'approve' | 'reject') {
++     setReviewingChangeRequestId(requestId)
++     setSaveMessage(null)
++
++     try {
++       const supabase = createClient()
++       const { data: sessionData } = await supabase.auth.getSession()
++       const accessToken = sessionData.session?.access_token
++       if (!accessToken) throw new Error('Session expired. Please sign in again.')
++
++       const response = await fetch('/api/profile-change-requests', {
++         method: 'PATCH',
++         headers: {
++           'Content-Type': 'application/json',
++           Authorization: `Bearer ${accessToken}`,
++         },
++         body: JSON.stringify({ id: requestId, action }),
++       })
++
++       const result = await response.json()
++       if (!response.ok || !result.success) {
++         throw new Error(result.error || 'Failed to review profile change request')
++       }
++
++       await loadAdminPendingChangeRequests(accessToken)
++       if (ownProfile?.organization_id) {
++         await loadTeamData(supabase, user!.id, ownProfile)
++       }
++       setSaveMessage({
++         type: 'success',
++         text:
++           action === 'approve'
++             ? 'Profile change approved and applied.'
++             : 'Profile change request rejected.',
++       })
++     } catch (error) {
++       setSaveMessage({
++         type: 'error',
++         text: error instanceof Error ? error.message : 'Failed to review profile change request',
++       })
++     } finally {
++       setReviewingChangeRequestId(null)
++     }
++   }
++
++   function handleEditMyProfile() {
++     const selfMember = teamMembers.find((member) => member.is_self)
++     if (!selfMember || !ownProfile || !canWriteProfile) return
++     if (!confirmDiscardIfDirty()) return
++     void handleEditMember(selfMember)
++   }
++
++   async function respondToLinkRequest(requestId: string, action: 'approve' | 'reject') {
++     setRespondingRequestId(requestId)
++     setSaveMessage(null)
++
++     try {
++       const supabase = createClient()
++       const { data: sessionData } = await supabase.auth.getSession()
++       const accessToken = sessionData.session?.access_token
++       if (!accessToken) throw new Error('Session expired. Please sign in again.')
++
++       const response = await fetch('/api/carrier-link-requests', {
++         method: 'PATCH',
++         headers: {
++           'Content-Type': 'application/json',
++           Authorization: `Bearer ${accessToken}`,
++         },
++         body: JSON.stringify({ id: requestId, action }),
++       })
++
++       const result = await response.json()
++       if (!response.ok || !result.success) {
++         throw new Error(result.error || 'Failed to update link request')
++       }
++
++       await loadIncomingLinkRequests(accessToken)
++       setSaveMessage({
++         type: 'success',
++         text: action === 'approve' ? 'Access approved. The user can now select your carrier.' : 'Link request rejected.',
++       })
++     } catch (error) {
++       setSaveMessage({
++         type: 'error',
++         text: error instanceof Error ? error.message : 'Failed to update link request',
++       })
++     } finally {
++       setRespondingRequestId(null)
++     }
++   }
++
++   function syncFormBaseline(nextForm: MemberProfileFormData) {
++     formBaselineRef.current = JSON.stringify(nextForm)
++   }
++
++   function getFormBaseline(): MemberProfileFormData {
++     return JSON.parse(formBaselineRef.current) as MemberProfileFormData
++   }
++
++   function isEditingOwnProfileTarget(): boolean {
++     if (editingTarget.kind === 'self') return true
++     if (editingTarget.kind === 'member_profile' && editingTarget.userId === user?.id) return true
++     return false
++   }
++
++   function isFormDirty(): boolean {
++     return JSON.stringify(form) !== formBaselineRef.current
++   }
++
++   function confirmDiscardIfDirty(): boolean {
++     if (!isFormDirty()) return true
++     return window.confirm('Discard unsaved changes?')
++   }
++
++   function confirmDiscardCarrierIfDirty(): boolean {
++     if (!carrierFieldsDiffer(form, ownProfile)) return true
++     return window.confirm('Discard unsaved carrier changes?')
++   }
++
++   function setFormState(nextForm: MemberProfileFormData, resetBaseline = true) {
++     setForm(nextForm)
++     if (resetBaseline) syncFormBaseline(nextForm)
++   }
++
++   function updateField(key: keyof MemberProfileFormData, value: string) {
++     setForm((prev) => ({ ...prev, [key]: value }))
++     if (saveMessage) setSaveMessage(null)
++     if (carrierMessage) setCarrierMessage(null)
++   }
++
++   function isFieldDisabled(key: ProfileFieldKey): boolean {
++     // Member/driver fields use global isSaving (not savingProfile alone) so edits stay
++     // locked during carrier save and avoid conflicting form-state races.
++     if (!canWriteProfile || isLoadingMember || isSaving) return true
++     if (editingTarget.kind === 'self' || isEditingOwnProfileTarget()) {
++       return !canEditProfileField(ownProfile, key)
++     }
++     return !primaryOwner
++   }
++
++   function toggleRole(role: string) {
++     if (!canSelfEditRoles(ownProfile)) return
++     setForm((prev) => {
++       const current = (prev.user_roles as string[]) || []
++       const next = current.includes(role) ? current.filter((r) => r !== role) : [...current, role]
++       return { ...prev, user_roles: next }
++     })
++     if (saveMessage) setSaveMessage(null)
++   }
++
++   function memberListKey(member: TeamMemberListItem): string {
++     return `${member.source}-${member.id}`
++   }
++
++   function resetToSelfForm() {
++     setEditingTarget({ kind: 'self' })
++     setEditingDisplayName(null)
++     setEditingMemberKey(null)
++     setLoadingMemberKey(null)
++     setFormState(memberProfileFromRow(ownProfile))
++     setCarrierFormExpanded(false)
++     setSaveMessage(null)
++     setCarrierMessage(null)
++   }
++
++   function handleCollapseCarrier() {
++     if (!confirmDiscardCarrierIfDirty()) return
++     setFormState(resetCarrierFieldsInForm(form, ownProfile), false)
++     setCarrierFormExpanded(false)
++     setCarrierMessage(null)
++   }
++
++   async function handleEditMember(member: TeamMemberListItem) {
++     if (!ownProfile || !canEditMember(ownProfile, member)) return
++
++     const requestId = ++editRequestIdRef.current
++     const memberKey = memberListKey(member)
++     const supabase = createClient()
++     const displayName = member.display_name?.trim() || 'team member'
++
++     setLoadingMemberKey(memberKey)
++     setEditingDisplayName(displayName)
++     setCarrierFormExpanded(false)
++     setSaveMessage(null)
++     setCarrierMessage(null)
++
++     try {
++       if (member.source === 'member_profile' && member.user_id) {
++         let row = orgMemberRows.find((entry) => entry.user_id === member.user_id)
++
++         if (!row) {
++           const { data, error } = await supabase
++             .from('member_profiles')
++             .select('*')
++             .eq('user_id', member.user_id)
++             .maybeSingle()
++
++           if (requestId !== editRequestIdRef.current) return
++
++           if (error) {
++             console.warn('member_profiles fetch for edit', error)
++             throw new Error('Could not load member profile. Please try again.')
++           }
++
++           if (!data) {
++             throw new Error('Member profile not found.')
++           }
++
++           row = data as MemberProfile
++           setOrgMemberRows((prev) => {
++             const exists = prev.some((entry) => entry.user_id === row!.user_id)
++             return exists ? prev.map((entry) => (entry.user_id === row!.user_id ? row! : entry)) : [...prev, row!]
++           })
++         }
++
++         if (requestId !== editRequestIdRef.current) return
++
++         const memberForm = buildMemberProfileSavePayloadWithoutCarrier(memberProfileFromRow(row), ownProfile)
++         setEditingTarget({ kind: 'member_profile', id: member.id, userId: member.user_id })
++         setEditingMemberKey(memberKey)
++         setFormState(memberForm)
++         window.scrollTo({ top: 0, behavior: 'smooth' })
++         return
++       }
++
++       let row = teamRosterRows.find((entry) => entry.id === member.id)
++
++       if (!row) {
++         const { data, error } = await supabase
++           .from('team_member_profiles')
++           .select('*')
++           .eq('id', member.id)
++           .maybeSingle()
++
++         if (requestId !== editRequestIdRef.current) return
++
++         if (error) {
++           console.warn('team_member_profiles fetch for edit', error)
++           throw new Error('Could not load team member. Please try again.')
++         }
++
++         if (!data) {
++           throw new Error('Team member not fou Test Files  1 failed | 3 passed (4)
+      Tests  2 failed | 151 passed (153)
+   Start at  16:11:52
+   Duration  1.37s (transform 521ms, setup 0ms, collect 1.08s, tests 171ms, environment 1ms, prepare 888ms)
+
+nd.')
++         }
++
++         row = data as TeamMemberProfile
++         setTeamRosterRows((prev) => {
++           const exists = prev.some((entry) => entry.id === row!.id)
++           return exists ? prev.map((entry) => (entry.id === row!.id ? row! : entry)) : [...prev, row!]
++         })
++       }
++
++       if (requestId !== editRequestIdRef.current) return
++
++       const rosterForm = buildMemberProfileSavePayloadWithoutCarrier(teamMemberProfileFromRow(row), ownProfile)
++       setEditingTarget({ kind: 'team_member_profile', id: member.id })
++       setEditingMemberKey(memberKey)
++       setFormState(rosterForm)
++       window.scrollTo({ top: 0, behavior: 'smooth' })
++     } catch (error) {
++       if (requestId !== editRequestIdRef.current) return
++       setSaveMessage({
++         type: 'error',
++         text: error instanceof Error ? error.message : 'Could not load team member.',
++       })
++       resetToSelfForm()
++     } finally {
++       if (requestId === editRequestIdRef.current) {
++         setLoadingMemberKey(null)
++       }
++     }
++   }
++
++   function handleAddTeamMember() {
++     if (!ownProfile || !isPrimaryOwner(ownProfile)) return
++     if (!confirmDiscardIfDirty()) return
++
++     setEditingTarget({ kind: 'team_member_profile', id: null })
++     setEditingDisplayName(null)
++     setEditingMemberKey(null)
++     setLoadingMemberKey(null)
++     setFormState(buildMemberProfileSavePayloadWithoutCarrier(emptyMemberProfileForm(), ownProfile))
++     setCarrierFormExpanded(false)
++     setSaveMessage(null)
++     setCarrierMessage(null)
++     window.scrollTo({ top: 0, behavior: 'smooth' })
++   }
++
++   async function submitRestrictedFieldChangeRequests(
++     accessToken: string,
++     formSnapshot: MemberProfileFormData
++   ): Promise<number> {
++     if (!ownProfile || !isDriverSelfServiceActor(ownProfile) || !isEditingOwnProfileTarget()) {
++       return 0
++     }
++
++     const persistedBaseline = memberProfileFromRow(ownProfile)
++     const changes = detectRestrictedFieldChanges(formSnapshot, persistedBaseline)
++     if (changes.length === 0) return 0
++
++     const response = await fetch('/api/profile-change-requests', {
++       method: 'POST',
++       headers: {
++         'Content-Type': 'application/json',
++         Authorization: `Bearer ${accessToken}`,
++       },
++       body: JSON.stringify(buildRestrictedChangeRequestPayload(changes)),
++     })
++
++     const result = await response.json()
++     if (!response.ok || !result.success) {
++       throw new Error(result.error || 'Failed to submit profile changes for review.')
++     }
++
++     return changes.length
++   }
++
++   async function saveViaApi(
++     accessToken: string,
++     payload: Record<string, unknown>
++   ): Promise<{
++     ok: boolean
++     error?: string
++     savedProfile?: MemberProfile | null
++     savedRoster?: TeamMemberProfile | null
++   }> {
++     const response = await fetch('/api/team-member-profiles', {
++       method: 'POST',
++       headers: {
++         'Content-Type': 'application/json',
++         Authorization: `Bearer ${accessToken}`,
++       },
++       body: JSON.stringify(payload),
++     })
++
++     let result: { success?: boolean; error?: string; data?: { source?: string; data?: unknown } }
++     try {
++       result = await response.json()
++     } catch {
++       return { ok: false, error: 'Invalid response from server.' }
++     }
++
++     if (!response.ok || !result.success) {
++       return { ok: false, error: result.error || 'Failed to save profile.' }
++     }
++     return {
++       ok: true,
++       savedProfile: profileFromSaveResponse(result),
++       savedRoster: teamMemberProfileFromSaveResponse(result),
++     }
++   }
++
++   async function refreshOwnProfileAfterSave(
++     supabase: ReturnType<typeof createClient>,
++     userId: string,
++     savedProfile: MemberProfile | null | undefined
++   ): Promise<MemberProfile> {
++     const { data: refreshedProfile, error } = await supabase
++       .from('member_profiles')
++       .select('*')
++       .eq('user_id', userId)
++       .maybeSingle()
++
++     return resolveRefreshedOwnProfile(
++       userId,
++       savedProfile,
++       (refreshedProfile as MemberProfile | null) ?? null,
++       error
++     )
++   }
++
++   function restoreEditingTargetAfterSave(
++     priorTarget: ProfileEditingTarget,
++     priorMemberKey: string | null,
++     priorDisplayName: string | null,
++     profile: MemberProfile,
++     teamData: { members: MemberProfile[]; roster: TeamMemberProfile[] },
++     savedRosterId?: string | null
++   ) {
++     if (priorTarget.kind === 'member_profile') {
++       const row = teamData.members.find((entry) => entry.user_id === priorTarget.userId)
++       if (!row) {
++         setEditingTarget({ kind: 'self' })
++         setEditingDisplayName(null)
++         setEditingMemberKey(null)
++         setFormState(memberProfileFromRow(profile))
++         return
++       }
++
++       setEditingTarget({ kind: 'member_profile', id: priorTarget.id, userId: priorTarget.userId })
++       setEditingMemberKey(priorMemberKey)
++       setEditingDisplayName(priorDisplayName)
++       setFormState(buildMemberProfileSavePayloadWithoutCarrier(memberProfileFromRow(row), profile))
++       return
++     }
++
++     if (priorTarget.kind === 'team_member_profile') {
++       const rosterId = resolvePersistedRosterId(priorTarget.id, savedRosterId)
++       const row = rosterId ? teamData.roster.find((entry) => entry.id === rosterId) : null
++       if (!row) {
++         setEditingTarget({ kind: 'self' })
++         setEditingDisplayName(null)
++         setEditingMemberKey(null)
++         setFormState(memberProfileFromRow(profile))
++         return
++       }
++
++       const memberKey = `team_member_profile-${row.id}`
++       setEditingTarget({ kind: 'team_member_profile', id: row.id })
++       setEditingMemberKey(memberKey)
++       setEditingDisplayName(priorDisplayName ?? memberDisplayName(row))
++       setFormState(buildMemberProfileSavePayloadWithoutCarrier(teamMemberProfileFromRow(row), profile))
++     }
++   }
++
++   function buildSavePayloadForTarget(
++     target: ProfileEditingTarget = editingTarget,
++     formSnapshot: MemberProfileFormData = form,
++     profileSnapshot: MemberProfile | null = ownProfile
++   ): Record<string, unknown> {
++     if (target.kind === 'team_member_profile') {
++       return {
++         source: 'team_member_profile',
++         id: target.id ?? undefined,
++         ...buildMemberProfileSavePayloadWithoutCarrier(formSnapshot, profileSnapshot),
++       }
++     }
++
++     if (target.kind === 'member_profile') {
++       return {
++         source: 'member_profile',
++         target_user_id: target.userId,
++         ...buildMemberProfileSavePayloadWithoutCarrier(formSnapshot, profileSnapshot),
++       }
++     }
++
++     const isDriverSelf = Boolean(profileSnapshot && isDriverSelfServiceActor(profileSnapshot))
++     const excludeCarrier = Boolean(isPrimaryOwner(profileSnapshot)) || isDriverSelf
++     const selfPayload = buildSelfMemberSavePayload(formSnapshot, profileSnapshot, { excludeCarrier })
++
++     return {
++       source: 'member_profile',
++       save_scope: excludeCarrier ? 'member_only' : 'full',
++       ...selfPayload,
++     }
++   }
++
++   async function handleSaveCarrierInfo(e: React.SyntheticEvent) {
++     e.preventDefault()
++     const formSnapshot = ensureBootstrapOwnerAdminRoles({
++       ...form,
++       user_roles: [...form.user_roles],
++     })
++     if (!user || editingTarget.kind !== 'self' || !canWriteTeamData(ownProfile)) return
++     if (!canSaveCarrierInfo(ownProfile, formSnapshot)) {
++       setCarrierMessage({ type: 'error', text: CARRIER_SAVE_FORBIDDEN_MESSAGE })
++       return
++     }
++     if (savingCarrier || savingProfile) return
++
++     const roleCheck = validateBootstrapCarrierSaveRoles(formSnapshot, ownProfile)
++     if (roleCheck.ok === false) {
++       setCarrierMessage({ type: 'error', text: roleCheck.message })
++       return
++     }
++
++     const wasProfileBootstrap = !ownProfile
++
++     setSavingCarrier(true)
++     setCarrierMessage(null)
++     setSaveMessage(null)
++
++     const supabase = createClient()
++     const { data: sessionData } = await supabase.auth.getSession()
++     const accessToken = sessionData.session?.access_token
++
++     try {
++       if (!accessToken) throw new Error('Session expired. Please sign in again.')
++
++       const carrierPayload = buildCarrierOnlyApiSavePayload(formSnapshot, ownProfile)
++       const apiPayload = {
++         source: 'member_profile',
++         save_scope: 'carrier_only' as const,
++         ...carrierPayload,
++       }
++       logCarrierSaveDebug('client before', {
++         keys: Object.keys(apiPayload),
++         organization_id: apiPayload.organization_id ?? null,
++         company_name: apiPayload.company_name,
++         save_scope: apiPayload.save_scope,
++       })
++
++       const result = await saveViaApi(accessToken, apiPayload)
++       logCarrierSaveDebug('client after', {
++         ok: result.ok,
++         error: result.error ?? null,
++         payloadOrgId: apiPayload.organization_id ?? null,
++         savedOrgId: result.savedProfile?.organization_id ?? null,
++         orgMatch: wasProfileBootstrap
++           ? null
++           : (apiPayload.organization_id ?? null) ===
++             (result.savedProfile?.organization_id ?? null),
++         savedCompanyName: result.savedProfile?.company_name ?? null,
++       })
++       if (!result.ok) {
++         throw new Error(result.error?.trim() || 'Failed to save carrier information.')
++       }
++
++       const refreshed = await refreshOwnProfileAfterSave(supabase, user.id, result.savedProfile)
++       const profile = mergeCarrierFieldsOntoProfile(refreshed, result.savedProfile)
++       setOwnProfile(profile)
++       setFormState(memberProfileFromRow(profile))
++       setCarrierFormExpanded(false)
++       await loadTeamData(supabase, user.id, profile)
++       setCarrierMessage({
++         type: 'success',
++         text: wasProfileBootstrap
++           ? 'Carrier information saved. Complete your driver details below, then click Save Profile.'
++           : 'Carrier information saved.',
++       })
++     } catch (error) {
++       logCarrierSaveWarn('client error', error)
++       setCarrierMessage({
++         type: 'error',
++         text: error instanceof Error ? error.message : 'Failed to save carrier information.',
++       })
++     } finally {
++       setSavingCarrier(false)
++     }
++   }
++
++   async function handleSave(e: React.FormEvent) {
++     e.preventDefault()
++     if (!user || !canWriteTeamData(ownProfile)) return
++     if (savingCarrier || savingProfile) return
++
++     if (editingTarget.kind === 'member_profile') {
++       const targetMember = teamMembers.find(
++         (member) => member.source === 'member_profile' && member.user_id === editingTarget.userId
++       )
++       if (!ownProfile || !targetMember || !canEditMember(ownProfile, targetMember)) {
++         setSaveMessage({ type: 'error', text: 'You do not have permission to edit this team member.' })
++         return
++       }
++     }
++
++     const priorTarget = editingTarget
++     const priorMemberKey = editingMemberKey
++     const priorDisplayName = editingDisplayName
++     let formForSave = form
++     if (ownProfile && isDriverSelfServiceActor(ownProfile) && isEditingOwnProfileTarget()) {
++       formForSave = applyDriverRestrictedFieldBaseline(form, memberProfileFromRow(ownProfile))
++     }
++     const savePayload = buildSavePayloadForTarget(priorTarget, formForSave, ownProfile)
++
++     setSavingProfile(true)
++     setSaveMessage(null)
++     setCarrierMessage(null)
++
++     const supabase = createClient()
++     const { data: sessionData } = await supabase.auth.getSession()
++     const accessToken = sessionData.session?.access_token
++
++     try {
++       let savedOwnProfile: MemberProfile | null = null
++
++       if (!accessToken) throw new Error('Session expired. Please sign in again.')
++
++       const result = await saveViaApi(accessToken, savePayload)
++       if (!result.ok) throw new Error(result.error)
++       if (priorTarget.kind === 'self') {
++         savedOwnProfile = result.savedProfile ?? null
++       }
++
++       let submittedChangeCount = 0
++       let changeRequestError: string | null = null
++       try {
++         submittedChangeCount = await submitRestrictedFieldChangeRequests(accessToken, form)
++       } catch (changeError) {
++         changeRequestError =
++           changeError instanceof Error
++             ? changeError.message
++             : 'Failed to submit profile changes for review.'
++       }
++
++       const profile = await refreshOwnProfileAfterSave(supabase, user.id, savedOwnProfile)
++       const wasEditingOther = priorTarget.kind !== 'self'
++       const updatedName = priorDisplayName?.trim() || 'team member'
++       setOwnProfile(profile)
++       setLoadingMemberKey(null)
++       setCarrierFormExpanded(false)
++
++       const teamData = await loadTeamData(supabase, user.id, profile)
++
++       const createdNewRosterMember =
++         priorTarget.kind === 'team_member_profile' && !priorTarget.id && Boolean(result.savedRoster?.id)
++
++       if (createdNewRosterMember) {
++         setEditingTarget({ kind: 'self' })
++         setEditingDisplayName(null)
++         setEditingMemberKey(null)
++         setFormState(memberProfileFromRow(profile))
++       } else if (wasEditingOther) {
++         restoreEditingTargetAfterSave(
++           priorTarget,
++           priorMemberKey,
++           priorDisplayName,
++           profile,
++           teamData,
++           result.savedRoster?.id ?? null
++         )
++       } else {
++         setEditingTarget({ kind: 'self' })
++         setEditingDisplayName(null)
++         setEditingMemberKey(null)
++         setFormState(memberProfileFromRow(profile))
++       }
++
++       const reviewSuffix =
++         submittedChangeCount > 0
++           ? ` ${submittedChangeCount} field change${submittedChangeCount === 1 ? '' : 's'} submitted for admin review.`
++           : ''
++
++       if (changeRequestError) {
++         setSaveMessage({
++           type: 'error',
++           text: `Profile saved, but review submission failed: ${changeRequestError}`,
++         })
++       } else {
++         setSaveMessage({
++           type: 'success',
++           text: createdNewRosterMember
++             ? 'New team member saved.'
++             : wasEditingOther
++               ? `Updated ${updatedName} successfully.${reviewSuffix}`
++               : `Profile saved successfully.${reviewSuffix}`,
++         })
++       }
++
++       if (isDriverSelfServiceActor(profile)) {
++         await loadOwnPendingChangeRequests(supabase, user.id)
++       }
++       if (isPrimaryOwner(profile) && accessToken) {
++         await loadAdminPendingChangeRequests(accessToken)
++       }
++
++       requestAnimationFrame(() => {
++         teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
++       })
++     } catch (error) {
++       console.warn('profile save', error)
++       setSaveMessage({
++         type: 'error',
++         text: error instanceof Error ? error.message : 'Failed to save profile. Please try again.',
++       })
++     } finally {
++       setSavingProfile(false)
++     }
++   }
++
++   async function confirmDeleteMember() {
++     if (!deleteCandidate || !user || !ownProfile) return
++
++     setDeletingId(deleteCandidate.id)
++     setSaveMessage(null)
++
++     try {
++       const supabase = createClient()
++       const { data: sessionData } = await supabase.auth.getSession()
++       const accessToken = sessionData.session?.access_token
++       if (!accessToken) throw new Error('Session expired. Please sign in again.')
++
++       const params = new URLSearchParams({ source: deleteCandidate.source })
++       if (deleteCandidate.user_id) params.set('user_id', deleteCandidate.user_id)
++
++       const response = await fetch(`/api/team-member-profiles/${deleteCandidate.id}?${params}`, {
++         method: 'DELETE',
++         headers: { Authorization: `Bearer ${accessToken}` },
++       })
++
++       const result = await response.json()
++       if (!response.ok || !result.success) {
++         throw new Error(result.error || 'Failed to delete team member.')
++       }
++
++       await loadTeamData(supabase, user.id, ownProfile)
++       if (
++         editingTarget.kind === 'member_profile' &&
++         editingTarget.userId === deleteCandidate.user_id
++       ) {
++         resetToSelfForm()
++       }
++       if (
++         editingTarget.kind === 'team_member_profile' &&
++         editingTarget.id === deleteCandidate.id
++       ) {
++         resetToSelfForm()
++       }
++
++       setSaveMessage({ type: 'success', text: 'Team member removed.' })
++
++       requestAnimationFrame(() => {
++         teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
++       })
++     } catch (error) {
++       console.warn('team member delete', error)
++       setSaveMessage({
++         type: 'error',
++         text: error instanceof Error ? error.message : 'Failed to delete team member.',
++       })
++     } finally {
++       setDeletingId(null)
++       setDeleteCandidate(null)
++     }
++   }
++
++   const isProfileBootstrap = !ownProfile
++   const primaryOwner = isPrimaryOwner(ownProfile)
++   const editingLabel =
++     shouldShowLandingProfileView(editingTarget, editingMemberKey, isProfileBootstrap)
++       ? null
++       : editingTarget.kind === 'team_member_profile' && !editingTarget.id
++         ? 'New Team Member'
++         : editingTarget.kind === 'self'
++           ? 'Your profile'
++           : `Editing ${editingDisplayName?.trim() || 'team member'}`
++
++   const saveButtonLabel = memberEditSaveButtonLabel(savingProfile, editingTarget)
++   const memberCardTitle = memberEditCardTitle(editingTarget, editingDisplayName)
++   const showLandingView = shouldShowLandingProfileView(editingTarget, editingMemberKey, isProfileBootstrap)
++   const showMemberEditCard = shouldShowMemberEditCard(
++     editingTarget,
++     editingMemberKey,
++     isProfileBootstrap,
++     ownProfile
++   )
++   const persistedProfileBaseline = memberProfileFromRow(ownProfile)
++   const pendingFieldKeys = pendingProfileChangeFieldKeys(ownPendingChangeRequests)
++   const showDriverRestrictedWarning =
++     ownProfile &&
++     isDriverSelfServiceActor(ownProfile) &&
++     isEditingOwnProfileTarget() &&
++     hasPendingRestrictedFieldEdits(form, persistedProfileBaseline)
++   const showEditMyProfileButton = shouldShowEditMyProfileOnLanding(
++     editingTarget,
++     editingMemberKey,
++     isProfileBootstrap,
++     ownProfile,
++     Boolean(ownProfile && isDriverSelfServiceActor(ownProfile))
++   )
++
++   const showTeamSection = shouldShowTeamSection(ownProfile, teamMembers)
++   const canWriteProfile = canWriteTeamData(ownProfile)
++   const canEditRoles = canSelfEditRoles(ownProfile)
++   const canManageCarrier = canSaveCarrierInfo(ownProfile, form)
++   const showCarrierCard = shouldShowCarrierInformationCard(
++     editingTarget,
++     primaryOwner,
++     isProfileBootstrap,
++     form
++   )
++   const showOwnerAdminBadge = shouldShowOwnerAdminBadge(ownProfile, editingTarget, showLandingView)
++   const showAssignedRoleBadges = shouldShowAssignedRoleBadges(ownProfile, editingTarget, showLandingView)
++   const landingAssignedRoles = getLandingAssignedRoles(ownProfile)
++   const showUserRolesSection = shouldShowUserRolesSection(editingTarget)
++   const memberEditSubtitle = getMemberEditCardSubtitle(editingTarget)
++   const showTeamSectionCarrier = shouldShowTeamSectionCarrierBlock(editingTarget)
++   const orgCarrierSource = memberProfileFromRow(ownProfile)
++   const carrierDataSource = resolveCarrierDataSource(editingTarget, form, ownProfile, carrierFormExpanded)
++   const teamSectionCarrierSource = orgCarrierSource
++   const carrierSummaryMode = shouldUseCarrierSummaryMode(editingTarget, carrierDataSource)
++   const showCarrierForm = shouldShowCarrierForm(editingTarget, carrierDataSource, carrierFormExpanded)
++   const showTeamSectionCarrierDetails = shouldShowTeamSectionCarrierDetails(
++     teamSectionCarrierSource,
++     carrierFormExpanded
++   )
++   const teamMemberCarrierSummaryMode = shouldUseTeamMemberCarrierSummary(
++     editingTarget,
++     teamSectionCarrierSource,
++     carrierFormExpanded
++   )
++   const carrierSummaryFields = formatCarrierSummaryDisplay(carrierDataSource)
++   const teamSectionCarrierFields = formatCarrierSummaryDisplay(teamSectionCarrierSource)
++   const carrierNameSummary = formatCarrierNameSummary(teamSectionCarrierSource)
++   const showEditCarrierButton =
++     canWriteProfile &&
++     canManageCarrier &&
++     carrierSummaryMode &&
++     editingTarget.kind === 'self' &&
++     !carrierFormExpanded
++   const showSaveCarrierInfoButton =
++     editingTarget.kind === 'self' && showCarrierForm && canManageCarrier
++   const isLoadingMember = loadingMemberKey !== null
++   const carrierSaveInFlight = savingCarrier || savingProfile
++   const isSaving = isAnySaveInFlight(savingCarrier, savingProfile)
++   const showBootstrapProfilePrompt = shouldShowBootstrapProfilePrompt(ownProfile)
++   if (loading) {
++     return (
++       <div className="min-h-screen flex items-center justify-center bg-gray-50">
++         <div className="text-center">
++           <div className="w-14 h-14 bg-black rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
++             <span className="text-white text-3xl font-bold tracking-tighter">T</span>
++           </div>
++           <p className="text-gray-700 font-semibold text-lg">Checking authentication...</p>
++           <p className="text-gray-500 text-sm mt-1">Please wait while we verify your session</p>
++         </div>
++       </div>
++     )
++   }
++
++   return (
++     <div className="min-h-screen bg-gray-50">
++       <AppHeader user={user} activePage="profile" ownOrganizationId={ownProfile?.organization_id} />
++
++       <main className="max-w-4xl mx-auto px-6 py-10">
++         <div className="mb-8">
++           <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Member Profile</h1>
++           <p className="text-gray-600 mt-1.5 text-[15px]">
++             Store carrier and driver details for permit applications and team coordination.
++           </p>
++           {showAssignedRoleBadges && (
++             <p className="mt-3 text-sm text-gray-600">
++               Your assigned roles:{' '}
++               {landingAssignedRoles.map((role) => (
++                 <span
++                   key={role}
++                   className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border mr-1.5 ${roleBadgeClass(role as Parameters<typeof roleBadgeClass>[0])}`}
++                 >
++                   {role}
++                 </span>
++               ))}
++             </p>
++           )}
++         </div>
++
++         {saveMessage && (
++           <div
++             role="status"
++             aria-live="polite"
++             className={`mb-4 rounded-xl px-4 py-3 text-sm ${
++               saveMessage.type === 'success'
++                 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
++                 : 'bg-red-50 text-red-800 border border-red-200'
++             }`}
++           >
++             {saveMessage.text}
++           </div>
++         )}
++
++         {editingLabel && (
++           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
++             <span className="font-medium">
++               {isLoadingMember ? 'Loading team member…' : editingLabel}
++             </span>
++             <button
++               type="button"
++               onClick={() => {
++                 if (confirmDiscardIfDirty()) resetToSelfForm()
++               }}
++               disabled={isLoadingMember || isSaving}
++               className="rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-blue-900 hover:bg-blue-100 transition disabled:opacity-50"
++             >
++               Cancel editing
++             </button>
++           </div>
++         )}
++
++         {showCarrierCard && (
++           <section className="bg-white border rounded-2xl p-6 mb-6">
++             <form onSubmit={handleSaveCarrierInfo} className="space-y-5">
++                 <div className="flex flex-wrap items-start justify-between gap-3">
++                   <div>
++                     <h2 className="font-semibold text-lg tracking-tight text-gray-900">Carrier Information</h2>
++                     <p className="text-sm text-gray-500 mt-1">
++                       Company details used on permits and compliance forms. Use Save Carrier Info below.
++                     </p>
++                     {isProfileBootstrap && (
++                       <p className="mt-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
++                         Welcome! You are setting up as Owner / Admin. Add carrier details here to create your
++                         organization.
++                       </p>
++                     )}
++                     {showOwnerAdminBadge && (
++                       <p className="mt-2 text-sm text-gray-600">
++                         You are{' '}
++                         <span
++                           className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${roleBadgeClass('Owner / Admin')}`}
++                         >
++                           Owner / Admin
++                         </span>
++                       </p>
++                     )}
++                   </div>
++                   {showEditCarrierButton && (
++                     <button
++                       type="button"
++                       onClick={() => setCarrierFormExpanded(true)}
++                       disabled={carrierSaveInFlight}
++                       className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 transition disabled:opacity-50"
++                     >
++                       Edit Carrier Info
++                     </button>
++                   )}
++                   {canManageCarrier && carrierSummaryMode && editingTarget.kind === 'self' && carrierFormExpanded && (
++                     <button
++                       type="button"
++                       onClick={handleCollapseCarrier}
++                       disabled={carrierSaveInFlight}
++                       className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 transition disabled:opacity-50"
++                     >
++                       Collapse
++                     </button>
++                   )}
++                 </div>
++                 {showCarrierForm ? (
++                   <>
++                     <div className="grid sm:grid-cols-2 gap-4">
++                       {CARRIER_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
++                         <div key={key} className={key === 'carrier_address' ? 'sm:col-span-2' : ''}>
++                           <label htmlFor={key} className="block text-xs font-medium text-gray-600 mb-1">
++                             {label}
++                           </label>
++                           <input
++                             id={key}
++                             type={type}
++                             value={(form[key] as string) ?? ''}
++                             onChange={(e) => updateField(key, e.target.value)}
++                             placeholder={placeholder}
++                             className={inputClass}
++                             disabled={carrierSaveInFlight}
++                           />
++                         </div>
++                       ))}
++                     </div>
++                     {showSaveCarrierInfoButton && (
++                       <div className="flex justify-end">
++                         <button
++                           type="submit"
++                           disabled={carrierSaveInFlight}
++                           className="bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.985]"
++                         >
++                           {savingCarrier ? 'Saving...' : 'Save Carrier Info'}
++                         </button>
++                       </div>
++                     )}
++                   </>
++                 ) : (
++                   <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-4">
++                     {carrierSummaryFields.map(({ label, value }) => (
++                       <div key={label} className={label === 'Address' ? 'sm:col-span-2' : ''}>
++                         <dt className="text-xs font-medium text-gray-500">{label}</dt>
++                         <dd className="mt-1 text-sm text-gray-900">{value}</dd>
++                       </div>
++                     ))}
++                   </dl>
++                 )}
++                 {carrierMessage && (
++                   <div
++                     role="status"
++                     aria-live="polite"
++                     className={`rounded-xl px-4 py-3 text-sm ${
++                       carrierMessage.type === 'success'
++                         ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
++                         : 'bg-red-50 text-red-800 border border-red-200'
++                     }`}
++                   >
++                     {carrierMessage.text}
++                   </div>
++                 )}
++             </form>
++           </section>
++         )}
++
++         {showMemberEditCard && (
++         <form onSubmit={handleSave} className="space-y-6 mb-6">
++           <section className="bg-white border rounded-2xl p-6">
++             <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
++               <div>
++                 <h2 className="font-semibold text-lg tracking-tight text-gray-900">{memberCardTitle}</h2>
++                 <p className="text-sm text-gray-500 mt-1">{memberEditSubtitle}</p>
++               </div>
++               <button
++                 type="submit"
++                 disabled={isSaving || !canWriteProfile || isLoadingMember}
++                 className="rounded-lg bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-4 py-2 text-sm font-semibold transition whitespace-nowrap"
++               >
++                 {saveButtonLabel}
++               </button>
++             </div>
++
++             {showDriverRestrictedWarning && (
++               <div
++                 role="status"
++                 aria-live="polite"
++                 className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
++               >
++                 <p className="font-medium">Requires Admin approval</p>
++                 <p className="mt-1">
++                   Changes to name, CDL, or date of birth will be submitted for review when you save. Contact
++                   fields save immediately.
++                 </p>
++               </div>
++             )}
++
++             {showTeamSectionCarrier && (
++               <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
++                 <div className="flex flex-wrap items-center justify-between gap-3">
++                   <div>
++                     <p className="text-xs font-medium text-gray-500">Carrier</p>
++                     <p className="text-sm font-medium text-gray-900 mt-0.5">{carrierNameSummary}</p>
++                   </div>
++                   {hasCarrierData(teamSectionCarrierSource) && (
++                     <button
++                       type="button"
++                       onClick={() => setCarrierFormExpanded((prev) => !prev)}
++                       className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 transition"
++                     >
++                       {carrierFormExpanded ? 'Collapse' : 'Expand'}
++                     </button>
++                   )}
++                 </div>
++                 {showTeamSectionCarrierDetails && (
++                   <dl className="mt-4 grid sm:grid-cols-2 gap-x-6 gap-y-4">
++                     {teamSectionCarrierFields.map(({ label, value }) => (
++                       <div key={`team-carrier-${label}`} className={label === 'Address' ? 'sm:col-span-2' : ''}>
++                         <dt className="text-xs font-medium text-gray-500">{label}</dt>
++                         <dd className="mt-1 text-sm text-gray-900">{value}</dd>
++                       </div>
++                     ))}
++                   </dl>
++                 )}
++                 <p className="mt-2 text-xs text-gray-500">
++                   {teamMemberCarrierSummaryMode
++                     ? 'Carrier details are shared across your organization. Edit carrier info on your profile above.'
++                     : 'Carrier details are shared across your organization.'}
++                 </p>
++               </div>
++             )}
++
++             <div className="mt-5 grid sm:grid-cols-2 gap-4">
++               {DRIVER_IDENTITY_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
++                 <div key={key}>
++                   <label htmlFor={key} className="block text-xs font-medium text-gray-600 mb-1">
++                     {label}
++                     {isDriverRestrictedField(key) &&
++                       ownProfile &&
++                       isDriverSelfServiceActor(ownProfile) &&
++                       isEditingOwnProfileTarget() && (
++                         <span className="ml-1 text-amber-700">(requires approval)</span>
++                       )}
++                     {pendingFieldKeys.has(key) && (
++                       <span className="ml-1 text-blue-700">(pending approval)</span>
++                     )}
++                   </label>
++                   <input
++                     id={key}
++                     type={type}
++                     value={(form[key] as string) ?? ''}
++                     onChange={(e) => updateField(key, e.target.value)}
++                     placeholder={placeholder}
++                     className={inputClass}
++                     disabled={isFieldDisabled(key)}
++                   />
++                 </div>
++               ))}
++               <div>
++                 <label htmlFor="cdl_state" className="block text-xs font-medium text-gray-600 mb-1">
++                   CDL State
++                   {ownProfile && isDriverSelfServiceActor(ownProfile) && isEditingOwnProfileTarget() && (
++                     <span className="ml-1 text-amber-700">(requires approval)</span>
++                   )}
++                   {pendingFieldKeys.has('cdl_state') && (
++                     <span className="ml-1 text-blue-700">(pending approval)</span>
++                   )}
++                 </label>
++                 <select
++                   id="cdl_state"
++                   value={form.cdl_state ?? ''}
++                   onChange={(e) => updateField('cdl_state', e.target.value)}
++                   disabled={isFieldDisabled('cdl_state')}
++                   className={`${inputClass} min-h-[38px] disabled:opacity-50`}
++                 >
++                   <option value="">— Select state —</option>
++                   {US_STATE_OPTIONS.map(({ code, name }) => (
++                     <option key={code} value={code}>
++                       {code} — {name}
++                     </option>
++                   ))}
++                 </select>
++               </div>
++               <div>
++                 <label htmlFor="date_of_birth" className="block text-xs font-medium text-gray-600 mb-1">
++                   Date of Birth
++                   {ownProfile && isDriverSelfServiceActor(ownProfile) && isEditingOwnProfileTarget() && (
++                     <span className="ml-1 text-amber-700">(requires approval)</span>
++                   )}
++                   {pendingFieldKeys.has('date_of_birth') && (
++                     <span className="ml-1 text-blue-700">(pending approval)</span>
++                   )}
++                 </label>
++                 <input
++                   id="date_of_birth"
++                   type="date"
++                   max={maxDateOfBirth}
++                   value={form.date_of_birth ?? ''}
++                   onChange={(e) => updateField('date_of_birth', e.target.value)}
++                   className={inputClass}
++                   disabled={isFieldDisabled('date_of_birth')}
++                 />
++               </div>
++               {DRIVER_CONTACT_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
++                 <div key={key} className={key === 'emergency_contact' ? 'sm:col-span-2' : ''}>
++                   <label htmlFor={key} className="block text-xs font-medium text-gray-600 mb-1">
++                     {label}
++                   </label>
++                   <input
++                     id={key}
++                     type={type}
++                     value={(form[key] as string) ?? ''}
++                     onChange={(e) => updateField(key, e.target.value)}
++                     placeholder={placeholder}
++                     className={inputClass}
++                     disabled={isFieldDisabled(key)}
++                   />
++                 </div>
++               ))}
++             </div>
++
++             {showUserRolesSection && (
++               <div className="mt-6 pt-6 border-t border-gray-100">
++                 <UserRolesCheckboxGrid
++                   userRoles={(form.user_roles as string[]) || []}
++                   canEditRoles={canEditRoles}
++                   canWriteProfile={canWriteProfile}
++                   disabled={isLoadingMember || isSaving}
++                   helperText={getTeamMemberRolesHelperText(canEditRoles)}
++                   onToggleRole={toggleRole}
++                 />
++               </div>
++             )}
++           </section>
++
++           {showBootstrapProfilePrompt && editingTarget.kind === 'self' && (
++             <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
++               Carrier details are saved. Add your driver information here, then click Save Profile to finish
++               setup.
++             </p>
++           )}
++         </form>
++         )}
++
++         {showTeamSection && (
++           <section
++             ref={teamSectionRef}
++             id="saved-team-members"
++             className={`bg-white border rounded-2xl shadow-sm overflow-hidden ${showLandingView ? 'mb-6' : 'mt-6'}`}
++           >
++             <div className="px-6 py-5 border-b bg-gray-50 flex flex-wrap items-start justify-between gap-3">
++               <div>
++                 <h2 className="text-xl font-semibold tracking-tight text-gray-900">Team Roster</h2>
++                 <p className="text-sm text-gray-600 mt-1">
++                   {primaryOwner
++                     ? 'Manage profiles for everyone on your team.'
++                     : 'Your saved profile details.'}
++                 </p>
++               </div>
++               <div className="flex flex-wrap gap-2">
++                 {showEditMyProfileButton && (
++                   <button
++                     type="button"
++                     onClick={handleEditMyProfile}
++                     disabled={isLoadingMember || isSaving}
++                     className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50 transition whitespace-nowrap disabled:opacity-50"
++                   >
++                     Edit my profile
++                   </button>
++                 )}
++                 {primaryOwner && canWriteProfile && (
++                   <button
++                     type="button"
++                     onClick={handleAddTeamMember}
++                     disabled={isLoadingMember || isSaving}
++                     className="rounded-lg bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-4 py-2 text-sm font-semibold transition whitespace-nowrap"
++                   >
++                     + Add New Member
++                   </button>
++                 )}
++               </div>
++             </div>
++
++             {teamMembers.length === 0 ? (
++               <div className="px-6 py-10 text-center text-sm text-gray-600">
++                 Save your profile to see it listed here.
++               </div>
++             ) : (
++               <div className="overflow-x-auto">
++                 <table className="w-full text-sm">
++                   <thead className="bg-gray-50 border-b">
++                     <tr>
++                       <th className="text-left px-6 py-4 font-semibold text-gray-700">Name</th>
++                       <th className="text-left px-6 py-4 font-semibold text-gray-700">Roles</th>
++                       <th className="text-left px-6 py-4 font-semibold text-gray-700">Company</th>
++                       <th className="text-left px-6 py-4 font-semibold text-gray-700">Driver Info</th>
++                       <th className="text-right px-6 py-4 font-semibold text-gray-700">Actions</th>
++                     </tr>
++                   </thead>
++                   <tbody className="divide-y">
++                     {teamMembers.map((member) => {
++                       const allowEdit = ownProfile ? canEditMember(ownProfile, member) : member.is_self
++                       const allowDelete = ownProfile ? canDeleteMember(ownProfile, member) : false
++
++                       const rowKey = memberListKey(member)
++                       const isEditingRow = editingMemberKey === rowKey
++
++                       return (
++                         <tr
++                           key={rowKey}
++                           className={`transition-colors ${
++                             isEditingRow ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-gray-50'
++                           }`}
++                         >
++                           <td className="px-6 py-4">
++                             <div className="font-medium text-gray-900">{member.display_name}</div>
++                             {member.is_self && (
++                               <div className="text-xs text-gray-500 mt-0.5">You</div>
++                             )}
++                             {member.is_primary_owner && !member.is_self && (
++                               <div className="text-xs text-gray-500 mt-0.5">Primary owner</div>
++                             )}
++                           </td>
++                           <td className="px-6 py-4">
++                             <div className="flex flex-wrap gap-1.5">
++                               {member.user_roles.length > 0 ? (
++                                 member.user_roles.map((role, index) => (
++                                   <span
++                                     key={`${role}-${index}`}
++                                     className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${roleBadgeClass(role)}`}
++                                   >
++                                     {role}
++                                   </span>
++                                 ))
++                               ) : (
++                                 <span className="text-gray-500">—</span>
++                               )}
++                             </div>
++                           </td>
++                           <td className="px-6 py-4 text-gray-700">{member.company_name?.trim() || '—'}</td>
++                           <td className="px-6 py-4 text-gray-600">{member.driver_summary}</td>
++                           <td className="px-6 py-4 text-right whitespace-nowrap">
++                             {allowEdit && canWriteProfile && (
++                               <button
++                                 type="button"
++                                 onClick={() => {
++                                   if (confirmDiscardIfDirty()) void handleEditMember(member)
++                                 }}
++                                 disabled={isLoadingMember || isSaving}
++                                 className="text-sm px-3 py-1.5 border border-gray-300 hover:bg-gray-100 rounded-lg text-gray-700 transition mr-2 disabled:opacity-50"
++                               >
++                                 Edit
++                               </button>
++                             )}
++                             {allowDelete && (
++                               <button
++                                 type="button"
++                                 onClick={() => setDeleteCandidate(member)}
++                                 disabled={deletingId === member.id}
++                                 className="text-sm px-3 py-1.5 border border-red-200 hover:bg-red-50 rounded-lg text-red-700 transition disabled:opacity-50"
++                               >
++                                 {deletingId === member.id ? 'Deleting...' : 'Delete'}
++                               </button>
++                             )}
++                           </td>
++                         </tr>
++                       )
++                     })}
++                   </tbody>
++                 </table>
++               </div>
++             )}
++           </section>
++         )}
++
++         {ownProfile &&
++           isDriverSelfServiceActor(ownProfile) &&
++           ownPendingChangeRequests.length > 0 && (
++             <section className="mt-10 bg-white border rounded-2xl shadow-sm overflow-hidden">
++               <div className="px-6 py-5 border-b bg-gray-50">
++                 <h2 className="text-xl font-semibold tracking-tight text-gray-900">
++                   Your Pending Profile Changes
++                 </h2>
++                 <p className="text-sm text-gray-600 mt-1">
++                   Identity updates awaiting admin approval. Contact fields save immediately.
++                 </p>
++               </div>
++               <ul className="divide-y">
++                 {ownPendingChangeRequests.map((request) => (
++                   <li key={request.id} className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
++                     <div>
++                       <div className="font-medium text-gray-900">
++                         {profileChangeFieldLabel(request.field_key)}
++                       </div>
++                       <div className="text-sm text-gray-600 mt-0.5">
++                         {request.current_value?.trim() || '—'} → {request.requested_value?.trim() || '—'}
++                       </div>
++                       <div className="text-xs text-blue-700 mt-1 capitalize">{request.status}</div>
++                     </div>
++                     <button
++                       type="button"
++                       onClick={() => withdrawOwnProfileChangeRequest(request.id)}
++                       disabled={withdrawingChangeRequestId === request.id}
++                       className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
++                     >
++                       {withdrawingChangeRequestId === request.id ? 'Withdrawing…' : 'Withdraw'}
++                     </button>
++                   </li>
++                 ))}
++               </ul>
++             </section>
++           )}
++
++         {primaryOwner && adminPendingChangeRequests.length > 0 && (
++           <section className="mt-10 bg-white border rounded-2xl shadow-sm overflow-hidden">
++             <div className="px-6 py-5 border-b bg-gray-50">
++               <h2 className="text-xl font-semibold tracking-tight text-gray-900">
++                 Pending Profile Changes
++               </h2>
++               <p className="text-sm text-gray-600 mt-1">
++                 Driver identity updates awaiting your approval.
++               </p>
++             </div>
++             <ul className="divide-y">
++               {adminPendingChangeRequests.map((request) => {
++                 const requester = orgMemberRows.find((row) => row.user_id === request.requester_user_id)
++                 const requesterName = requester ? memberDisplayName(requester) : 'Team member'
++
++                 return (
++                   <li key={request.id} className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
++                     <div>
++                       <div className="font-medium text-gray-900">{requesterName}</div>
++                       <div className="text-sm text-gray-600 mt-0.5">
++                         <span className="font-medium">{profileChangeFieldLabel(request.field_key)}:</span>{' '}
++                         {request.current_value?.trim() || '—'} → {request.requested_value?.trim() || '—'}
++                       </div>
++                     </div>
++                     <div className="flex gap-2">
++                       <button
++                         type="button"
++                         onClick={() => respondToProfileChangeRequest(request.id, 'approve')}
++                         disabled={reviewingChangeRequestId === request.id}
++                         className="text-sm px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
++                       >
++                         {reviewingChangeRequestId === request.id ? 'Working…' : 'Approve'}
++                       </button>
++                       <button
++                         type="button"
++                         onClick={() => respondToProfileChangeRequest(request.id, 'reject')}
++                         disabled={reviewingChangeRequestId === request.id}
++                         className="text-sm px-3 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50"
++                       >
++                         Reject
++                       </button>
++                     </div>
++                   </li>
++                 )
++               })}
++             </ul>
++           </section>
++         )}
++
++         {primaryOwner && incomingLinkRequests.length > 0 && (
++           <section className="mt-10 bg-white border rounded-2xl shadow-sm overflow-hidden">
++             <div className="px-6 py-5 border-b bg-gray-50">
++               <h2 className="text-xl font-semibold tracking-tight text-gray-900">Account Link Requests</h2>
++               <p className="text-sm text-gray-600 mt-1">
++                 Permit clerks and service users requesting access to your carrier account.
++               </p>
++             </div>
++             <ul className="divide-y">
++               {incomingLinkRequests.map((request) => (
++                 <li key={request.id} className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
++                   <div>
++                     <div className="font-medium text-gray-900">
++                       {request.requester_name || 'Account link request'}
++                     </div>
++                     <div className="text-sm text-gray-600 mt-0.5">
++                       {request.requester_email && <span>{request.requester_email} · </span>}
++                       {request.target_usdot && <span>USDOT {request.target_usdot} · </span>}
++                       {request.target_email && <span>{request.target_email} · </span>}
++                       {request.message && <span className="italic">{request.message}</span>}
++                     </div>
++                   </div>
++                   <div className="flex gap-2">
++                     <button
++                       type="button"
++                       onClick={() => respondToLinkRequest(request.id, 'approve')}
++                       disabled={respondingRequestId === request.id}
++                       className="text-sm px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
++                     >
++                       {respondingRequestId === request.id ? 'Working…' : 'Approve'}
++                     </button>
++                     <button
++                       type="button"
++                       onClick={() => respondToLinkRequest(request.id, 'reject')}
++                       disabled={respondingRequestId === request.id}
++                       className="text-sm px-3 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50"
++                     >
++                       Reject
++                     </button>
++                   </div>
++                 </li>
++               ))}
++             </ul>
++           </section>
++         )}
++
++         {deleteCandidate && (
++           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
++             <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
++               <h3 className="text-lg font-semibold text-gray-900">Delete team member?</h3>
++               <p className="mt-2 text-sm text-gray-600">
++                 Remove <span className="font-medium text-gray-900">{deleteCandidate.display_name}</span> from your
++                 team? This cannot be undone.
++               </p>
++               <div className="mt-6 flex justify-end gap-3">
++                 <button
++                   type="button"
++                   onClick={() => setDeleteCandidate(null)}
++                   className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
++                 >
++                   Cancel
++                 </button>
++                 <button
++                   type="button"
++                   onClick={confirmDeleteMember}
++                   disabled={deletingId === deleteCandidate.id}
++                   className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
++                 >
++                   {deletingId === deleteCandidate.id ? 'Deleting...' : 'Delete'}
++                 </button>
++               </div>
++             </div>
++           </div>
++         )}
++       </main>
++     </div>
++   )
++ }
+
+ ❯ app/profile/profile-ui.test.ts:188:24
+    186|     const memberProfileSource = readFileSync(memberProfilePath, 'utf8')
+    187| 
+    188|     expect(source).not.toContain('{showUserRolesSection && (')
+       |                        ^
+    189|     expect(source).toContain('shouldShowOwnerAdminBadge')
+    190|     expect(source).toContain('showOwnerAdminBadge')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+

@@ -18,7 +18,10 @@ export interface Tractor {
   fifth_wheel_from_rear_in: number | null
 
   unit_number?: string | null
+  license_plate?: string | null
+  license_plate_state?: string | null   // 2-letter US state code (e.g. TX)
   vin?: string | null
+  empty_weight_lbs?: number | null
   year?: number | null
   make?: string | null
   model?: string | null
@@ -44,6 +47,12 @@ export interface Trailer {
   extendable_extra_ft: number | null
 
   trailer_type?: string | null
+  license_plate?: string | null
+  license_plate_state?: string | null   // 2-letter US state code (e.g. TX)
+  vin?: string | null
+  empty_weight_lbs?: number | null
+  width_ft?: number | null
+  deck_height_ft?: number | null
   make?: string | null
   model?: string | null
   year?: number | null
@@ -67,6 +76,10 @@ export interface RigConfiguration {
   computed_kingpin_to_last_axle_ft: number | null
 
   notes?: string | null
+  /** When true, auto-selected in Permit Agent. At most one per user. */
+  is_default?: boolean | null
+  /** Whether this row lives in rig_configurations (vs legacy equipment_profiles payload). */
+  source?: 'rig_configurations' | 'legacy'
   created_at?: string
   updated_at?: string
 
@@ -260,6 +273,94 @@ export function computeOverallDimensions(tractor: Partial<Tractor> | null, trail
     totalAxles: dims.totalAxles,
     axleGroupCount: Math.ceil(dims.totalAxles / 2), // rough for future bridge
   }
+}
+
+/** Sum tractor + trailer empty weights when both are known. */
+export function computeRigEmptyWeightLbs(
+  tractor: Partial<Tractor> | null | undefined,
+  trailers: (Partial<Trailer> | null | undefined)[]
+): number | null {
+  const tractorWt = Number(tractor?.empty_weight_lbs) || 0
+  const trailerWt = trailers.reduce((sum, tr) => sum + (Number(tr?.empty_weight_lbs) || 0), 0)
+  if (tractorWt > 0 && trailerWt > 0) return tractorWt + trailerWt
+  if (tractorWt > 0) return tractorWt
+  if (trailerWt > 0) return trailerWt
+  return null
+}
+
+/** Inputs for routing envelope (rig base + load overhangs / dimensions). */
+export interface RoutingEnvelopeInput {
+  rigLengthFt?: number | null
+  loadOverhangFrontFt?: number | null
+  loadOverhangRearFt?: number | null
+  trailerWidthFt?: number | null
+  loadWidthFt?: number | null
+  deckHeightFt?: number | null
+  loadHeightFt?: number | null
+  rigEmptyWeightLbs?: number | null
+  loadWeightLbs?: number | null
+}
+
+export interface RoutingEnvelope {
+  lengthFt: number
+  widthFt: number
+  heightFt: number
+  weightLbs: number
+}
+
+/**
+ * Compute routing envelope sent to OR-Tools / permit agent.
+ * - Length = rig length + front overhang + rear overhang
+ * - Width = max(trailer width, load width)
+ * - Height = deck height + load height
+ * - Weight = rig empty + load weight
+ */
+export function computeRoutingEnvelope(input: RoutingEnvelopeInput): RoutingEnvelope {
+  const rigLen = Number(input.rigLengthFt) || 0
+  const frontOh = Number(input.loadOverhangFrontFt) || 0
+  const rearOh = Number(input.loadOverhangRearFt) || 0
+  const trailerW = Number(input.trailerWidthFt) || 0
+  const loadW = Number(input.loadWidthFt) || 0
+  const deckH = Number(input.deckHeightFt) || 0
+  const loadH = Number(input.loadHeightFt) || 0
+  const rigEmpty = Number(input.rigEmptyWeightLbs) || 0
+  const loadWt = Number(input.loadWeightLbs) || 0
+
+  const lengthFt =
+    rigLen > 0 || frontOh > 0 || rearOh > 0 ? rigLen + frontOh + rearOh : 0
+  const widthFt = trailerW > 0 || loadW > 0 ? Math.max(trailerW, loadW) : 0
+  const heightFt = deckH > 0 || loadH > 0 ? deckH + loadH : 0
+  const weightLbs = rigEmpty > 0 || loadWt > 0 ? rigEmpty + loadWt : 0
+
+  return { lengthFt, widthFt, heightFt, weightLbs }
+}
+
+/** Primary trailer dimensions for display / permit prefill (first trailer in combination). */
+export function primaryTrailerDimensions(trailers: (Partial<Trailer> | null | undefined)[]) {
+  const primary = trailers.find(Boolean) as Partial<Trailer> | undefined
+  return {
+    vin: primary?.vin ?? null,
+    licensePlate: primary?.license_plate ?? null,
+    licensePlateState: primary?.license_plate_state ?? null,
+    emptyWeightLbs: primary?.empty_weight_lbs ?? null,
+    widthFt: primary?.width_ft ?? null,
+    deckHeightFt: primary?.deck_height_ft ?? null,
+    lengthFt: primary?.overall_length_ft ?? null,
+  }
+}
+
+/** Sort saved rigs for display: default first, then name (A–Z), then newest created_at. */
+export function sortRigsForDisplay(rigs: RigConfiguration[]): RigConfiguration[] {
+  return [...rigs].sort((a, b) => {
+    const aDefault = a.is_default ? 1 : 0
+    const bDefault = b.is_default ? 1 : 0
+    if (bDefault !== aDefault) return bDefault - aDefault
+    const nameA = (a.rig_name || '').toLowerCase()
+    const nameB = (b.rig_name || '').toLowerCase()
+    const byName = nameA.localeCompare(nameB)
+    if (byName !== 0) return byName
+    return (b.created_at || '').localeCompare(a.created_at || '')
+  })
 }
 
 // Placeholder helpers for future features (VIN decoder, photo upload, BOL parse)

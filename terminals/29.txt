@@ -1,0 +1,20 @@
+---
+pid: 7372
+cwd: "C:\Users\andre\truckeros"
+command: "Set-Location C:\\Users\\andre\\truckeros; npx vitest run app/profile/profile-ui.test.ts lib/member-profile.test.ts lib/team-member-profiles-api.test.ts lib/profile-persistence.test.ts"
+started_at: 2026-07-07T20:06:27.661Z
+running_for_ms: 80006    
+---
+
+ RUN  v3.2.6 C:/Users/andre/truckeros
+
+ ✓ app/profile/profile-ui.test.ts (35 tests) 55ms
+ ✓ lib/profile-persistence.test.ts (11 tests) 14ms
+ ✓ lib/member-profile.test.ts (84 tests) 54ms
+ ✓ lib/team-member-profiles-api.test.ts (16 tests) 26ms
+
+ Test Files  4 passed (4)
+      Tests  146 passed (146)
+   Start at  16:07:24
+   Duration  3.12s (transform 2.08s, setup 0ms, collect 2.89s, tests 150ms, environment 1ms, prepare 1.64s)
+

@@ -1,0 +1,1582 @@
+{
+    "swagger":  "2.0",
+    "info":  {
+                 "description":  "",
+                 "title":  "standard public schema",
+                 "version":  "14.5"
+             },
+    "host":  "usvunsqdopddvufsxvxx.supabase.co:443",
+    "basePath":  "/",
+    "schemes":  [
+                    "https"
+                ],
+    "consumes":  [
+                     "application/json",
+                     "application/vnd.pgrst.object+json;nulls=stripped",
+                     "application/vnd.pgrst.object+json",
+                     "text/csv"
+                 ],
+    "produces":  [
+                     "application/json",
+                     "application/vnd.pgrst.object+json;nulls=stripped",
+                     "application/vnd.pgrst.object+json",
+                     "text/csv"
+                 ],
+    "paths":  {
+                  "/":  {
+                            "get":  {
+                                        "produces":  "application/openapi+json application/json",
+                                        "responses":  "@{200=}",
+                                        "summary":  "OpenAPI description (this document)",
+                                        "tags":  "Introspection"
+                                    }
+                        },
+                  "/equipment_profiles":  {
+                                              "get":  {
+                                                          "parameters":  "                                 ",
+                                                          "responses":  "@{200=; 206=}",
+                                                          "tags":  "equipment_profiles"
+                                                      },
+                                              "post":  {
+                                                           "parameters":  "  ",
+                                                           "responses":  "@{201=}",
+                                                           "tags":  "equipment_profiles"
+                                                       },
+                                              "delete":  {
+                                                             "parameters":  "                           ",
+                                                             "responses":  "@{204=}",
+                                                             "tags":  "equipment_profiles"
+                                                         },
+                                              "patch":  {
+                                                            "parameters":  "                            ",
+                                                            "responses":  "@{204=}",
+                                                            "tags":  "equipment_profiles"
+                                                        }
+                                          },
+                  "/tractors":  {
+                                    "get":  {
+                                                "parameters":  "                          ",
+                                                "responses":  "@{200=; 206=}",
+                                                "tags":  "tractors"
+                                            },
+                                    "post":  {
+                                                 "parameters":  "  ",
+                                                 "responses":  "@{201=}",
+                                                 "tags":  "tractors"
+                                             },
+                                    "delete":  {
+                                                   "parameters":  "                    ",
+                                                   "responses":  "@{204=}",
+                                                   "tags":  "tractors"
+                                               },
+                                    "patch":  {
+                                                  "parameters":  "                     ",
+                                                  "responses":  "@{204=}",
+                                                  "tags":  "tractors"
+                                              }
+                                },
+                  "/loads":  {
+                                 "get":  {
+                                             "parameters":  "                ",
+                                             "responses":  "@{200=; 206=}",
+                                             "tags":  "loads"
+                                         },
+                                 "post":  {
+                                              "parameters":  "  ",
+                                              "responses":  "@{201=}",
+                                              "tags":  "loads"
+                                          },
+                                 "delete":  {
+                                                "parameters":  "          ",
+                                                "responses":  "@{204=}",
+                                                "tags":  "loads"
+                                            },
+                                 "patch":  {
+                                               "parameters":  "           ",
+                                               "responses":  "@{204=}",
+                                               "tags":  "loads"
+                                           }
+                             },
+                  "/state_permit_rules":  {
+                                              "get":  {
+                                                          "parameters":  "                       ",
+                                                          "responses":  "@{200=; 206=}",
+                                                          "tags":  "state_permit_rules"
+                                                      },
+                                              "post":  {
+                                                           "parameters":  "  ",
+                                                           "responses":  "@{201=}",
+                                                           "tags":  "state_permit_rules"
+                                                       },
+                                              "delete":  {
+                                                             "parameters":  "                 ",
+                                                             "responses":  "@{204=}",
+                                                             "tags":  "state_permit_rules"
+                                                         },
+                                              "patch":  {
+                                                            "parameters":  "                  ",
+                                                            "responses":  "@{204=}",
+                                                            "tags":  "state_permit_rules"
+                                                        }
+                                          },
+                  "/portal_submissions":  {
+                                              "get":  {
+                                                          "parameters":  "                        ",
+                                                          "responses":  "@{200=; 206=}",
+                                                          "tags":  "portal_submissions"
+                                                      },
+                                              "post":  {
+                                                           "parameters":  "  ",
+                                                           "responses":  "@{201=}",
+                                                           "tags":  "portal_submissions"
+                                                       },
+                                              "delete":  {
+                                                             "parameters":  "                  ",
+                                                             "responses":  "@{204=}",
+                                                             "tags":  "portal_submissions"
+                                                         },
+                                              "patch":  {
+                                                            "parameters":  "                   ",
+                                                            "responses":  "@{204=}",
+                                                            "tags":  "portal_submissions"
+                                                        }
+                                          },
+                  "/rig_configurations":  {
+                                              "get":  {
+                                                          "parameters":  "                      ",
+                                                          "responses":  "@{200=; 206=}",
+                                                          "tags":  "rig_configurations"
+                                                      },
+                                              "post":  {
+                                                           "parameters":  "  ",
+                                                           "responses":  "@{201=}",
+                                                           "tags":  "rig_configurations"
+                                                       },
+                                              "delete":  {
+                                                             "parameters":  "                ",
+                                                             "responses":  "@{204=}",
+                                                             "tags":  "rig_configurations"
+                                                         },
+                                              "patch":  {
+                                                            "parameters":  "                 ",
+                                                            "responses":  "@{204=}",
+                                                            "tags":  "rig_configurations"
+                                                        }
+                                          },
+                  "/permit_requests":  {
+                                           "get":  {
+                                                       "parameters":  "                                  ",
+                                                       "responses":  "@{200=; 206=}",
+                                                       "tags":  "permit_requests"
+                                                   },
+                                           "post":  {
+                                                        "parameters":  "  ",
+                                                        "responses":  "@{201=}",
+                                                        "tags":  "permit_requests"
+                                                    },
+                                           "delete":  {
+                                                          "parameters":  "                            ",
+                                                          "responses":  "@{204=}",
+                                                          "tags":  "permit_requests"
+                                                      },
+                                           "patch":  {
+                                                         "parameters":  "                             ",
+                                                         "responses":  "@{204=}",
+                                                         "tags":  "permit_requests"
+                                                     }
+                                       },
+                  "/trailers":  {
+                                    "get":  {
+                                                "parameters":  "                          ",
+                                                "responses":  "@{200=; 206=}",
+                                                "tags":  "trailers"
+                                            },
+                                    "post":  {
+                                                 "parameters":  "  ",
+                                                 "responses":  "@{201=}",
+                                                 "tags":  "trailers"
+                                             },
+                                    "delete":  {
+                                                   "parameters":  "                    ",
+                                                   "responses":  "@{204=}",
+                                                   "tags":  "trailers"
+                                               },
+                                    "patch":  {
+                                                  "parameters":  "                     ",
+                                                  "responses":  "@{204=}",
+                                                  "tags":  "trailers"
+                                              }
+                                }
+              },
+    "definitions":  {
+                        "equipment_profiles":  {
+                                                   "required":  [
+                                                                    "id",
+                                                                    "user_id",
+                                                                    "type",
+                                                                    "name"
+                                                                ],
+                                                   "properties":  {
+                                                                      "id":  "@{default=gen_random_uuid(); description=Note:\nThis is a Primary Key.\u003cpk/\u003e; format=uuid; type=string}",
+                                                                      "user_id":  "@{format=uuid; type=string}",
+                                                                      "type":  "@{format=text; type=string}",
+                                                                      "name":  "@{format=text; type=string}",
+                                                                      "unit_number":  "@{format=text; type=string}",
+                                                                      "vin":  "@{format=text; type=string}",
+                                                                      "year":  "@{format=integer; type=integer}",
+                                                                      "make":  "@{format=text; type=string}",
+                                                                      "model":  "@{format=text; type=string}",
+                                                                      "color":  "@{format=text; type=string}",
+                                                                      "length_ft":  "@{format=numeric; type=number}",
+                                                                      "axles":  "@{format=integer; type=integer}",
+                                                                      "steer_axle_setback_ft":  "@{format=numeric; type=number}",
+                                                                      "wheelbase_ft":  "@{format=numeric; type=number}",
+                                                                      "axle_spacing":  "@{format=text[]; items=; type=array}",
+                                                                      "fifth_wheel_from_rear_ft":  "@{format=numeric; type=number}",
+                                                                      "registered_gvw":  "@{format=numeric; type=number}",
+                                                                      "tire_width_inches":  "@{default=11.0; format=numeric; type=number}",
+                                                                      "kingpin_from_front_ft":  "@{format=numeric; type=number}",
+                                                                      "kingpin_to_first_axle_ft":  "@{format=numeric; type=number}",
+                                                                      "lift_axle":  "@{default=False; format=boolean; type=boolean}",
+                                                                      "extendable":  "@{default=False; format=boolean; type=boolean}",
+                                                                      "extendable_extra_ft":  "@{default=0; format=numeric; type=number}",
+                                                                      "created_at":  "@{default=now(); format=timestamp with time zone; type=string}",
+                                                                      "updated_at":  "@{default=now(); format=timestamp with time zone; type=string}",
+                                                                      "notes":  "@{format=text; type=string}",
+                                                                      "profile_name":  "@{format=text; type=string}"
+                                                                  },
+                                                   "type":  "object"
+                                               },
+                        "tractors":  {
+                                         "required":  [
+                                                          "id",
+                                                          "user_id",
+                                                          "name"
+                                                      ],
+                                         "properties":  {
+                                                            "id":  "@{default=gen_random_uuid(); description=Note:\nThis is a Primary Key.\u003cpk/\u003e; format=uuid; type=string}",
+                                                            "user_id":  "@{format=uuid; type=string}",
+                                                            "name":  "@{format=text; type=string}",
+                                                            "unit_number":  "@{format=text; type=string}",
+                                                            "vin":  "@{format=text; type=string}",
+                                                            "year":  "@{format=integer; type=integer}",
+                                                            "make":  "@{format=text; type=string}",
+                                                            "model":  "@{format=text; type=string}",
+                                                            "color":  "@{format=text; type=string}",
+                                                            "length_ft":  "@{format=numeric; type=number}",
+                                                            "axles":  "@{format=integer; type=integer}",
+                                                            "steer_axle_setback_ft":  "@{format=numeric; type=number}",
+                                                            "wheelbase_ft":  "@{format=numeric; type=number}",
+                                                            "axle_spacing":  "@{format=text[]; items=; type=array}",
+                                                            "fifth_wheel_from_rear_ft":  "@{format=numeric; type=number}",
+                                                            "registered_gvw":  "@{format=numeric; type=number}",
+                                                            "tire_width_inches":  "@{default=11.0; format=numeric; type=number}",
+                                                            "notes":  "@{format=text; type=string}",
+                                                            "created_at":  "@{default=now(); format=timestamp with time zone; type=string}",
+                                                            "updated_at":  "@{default=now(); format=timestamp with time zone; type=string}"
+                                                        },
+                                         "type":  "object"
+                                     },
+                        "loads":  {
+                                      "required":  [
+                                                       "id",
+                                                       "created_at"
+                                                   ],
+                                      "properties":  {
+                                                         "id":  "@{default=gen_random_uuid(); description=Note:\nThis is a Primary Key.\u003cpk/\u003e; format=uuid; type=string}",
+                                                         "origin":  "@{format=text; type=string}",
+                                                         "destination":  "@{format=text; type=string}",
+                                                         "length":  "@{format=numeric; type=number}",
+                                                         "width":  "@{format=numeric; type=number}",
+                                                         "height":  "@{format=numeric; type=number}",
+                                                         "weight":  "@{format=numeric; type=number}",
+                                                         "VIN":  "@{format=text; type=string}",
+                                                         "year":  "@{format=numeric; type=number}",
+                                                         "created_at":  "@{default=now(); format=timestamp with time zone; type=string}"
+                                                     },
+                                      "type":  "object"
+                                  },
+                        "state_permit_rules":  {
+                                                   "required":  [
+                                                                    "state_code",
+                                                                    "state_name",
+                                                                    "legal_width_ft",
+                                                                    "legal_height_ft",
+                                                                    "legal_length_ft",
+                                                                    "legal_weight_lbs",
+                                                                    "permit_threshold_width_ft",
+                                                                    "permit_threshold_height_ft",
+                                                                    "permit_threshold_length_ft",
+                                                                    "permit_threshold_weight_lbs"
+                                                                ],
+                                                   "properties":  {
+                                                                      "state_code":  "@{description=Two-letter USPS state abbreviation (primary key)\n\nNote:\nThis is a Primary Key.\u003cpk/\u003e; format=text; type=string}",
+                                                                      "state_name":  "@{description=Full name of the state; format=text; type=string}",
+                                                                      "legal_width_ft":  "@{default=8.5; description=Legal width limit in feet without a permit; format=numeric; type=number}",
+                                                                      "legal_height_ft":  "@{default=13.5; description=Legal height limit in feet without a permit; format=numeric; type=number}",
+                                                                      "legal_length_ft":  "@{default=53.0; description=Legal length limit in feet without a permit; format=numeric; type=number}",
+                                                                      "legal_weight_lbs":  "@{default=80000; description=Legal gross weight limit in pounds without a permit; format=numeric; type=number}",
+                                                                      "permit_threshold_width_ft":  "@{description=Width (ft) at which a permit becomes required. Falls back to legal_width_ft if null; format=numeric; type=number}",
+                                                                      "permit_threshold_height_ft":  "@{description=Height (ft) at which a permit becomes required; format=numeric; type=number}",
+                                                                      "permit_threshold_length_ft":  "@{description=Length (ft) at which a permit becomes required; format=numeric; type=number}",
+                                                                      "permit_threshold_weight_lbs":  "@{description=Weight (lbs) at which a permit becomes required; format=numeric; type=number}",
+                                                                      "escort_threshold_width_ft":  "@{description=Width (ft) at which an escort vehicle is typically required; format=numeric; type=number}",
+                                                                      "escort_threshold_height_ft":  "@{description=Height (ft) at which an escort vehicle is typically required; format=numeric; type=number}",
+                                                                      "escort_threshold_length_ft":  "@{description=Length (ft) at which an escort vehicle is typically required; format=numeric; type=number}",
+                                                                      "curfew_restrictions":  "@{description=Time-of-day, day-of-week, or holiday travel restrictions; format=text; type=string}",
+                                                                      "special_notes":  "@{description=Additional useful notes about permitting in this state; format=text; type=string}",
+                                                                      "last_updated":  "@{default=now(); description=Timestamp of when this record was last reviewed or updated; format=timestamp with time zone; type=string}",
+                                                                      "source":  "@{description=Origin of the data (e.g. State DOT, FMCSA, Manual Research); format=text; type=string}"
+                                                                  },
+                                                   "type":  "object"
+                                               },
+                        "portal_submissions":  {
+                                                   "required":  [
+                                                                    "id",
+                                                                    "permit_request_id",
+                                                                    "user_id",
+                                                                    "state_code",
+                                                                    "status"
+                                                                ],
+                                                   "properties":  {
+                                                                      "id":  "@{default=gen_random_uuid(); description=Note:\nThis is a Primary Key.\u003cpk/\u003e; format=uuid; type=string}",
+                                                                      "permit_request_id":  "@{description=Note:\nThis is a Foreign Key to `permit_requests.id`.\u003cfk table=\u0027permit_requests\u0027 column=\u0027id\u0027/\u003e; format=uuid; type=string}",
+                                                                      "user_id":  "@{format=uuid; type=string}",
+                                                                      "state_code":  "@{format=text; type=string}",
+                                                                      "status":  "@{format=text; type=string}",
+                                                                      "our_recommended_corridor":  "@{format=text[]; items=; type=array}",
+                                                                      "portal_returned_corridor":  "@{format=text[]; items=; type=array}",
+                                                                      "route_comparison":  "@{format=jsonb}",
+                                                                      "permit_number":  "@{format=text; type=string}",
+                                                                      "portal_fees":  "@{format=numeric; type=number}",
+                                                                      "portal_restrictions":  "@{format=text[]; items=; type=array}",
+                                                                      "human_approved":  "@{default=False; format=boolean; type=boolean}",
+                                                                      "pdf_reference":  "@{format=text; type=string}",
+                                                                      "raw_portal_output":  "@{format=text; type=string}",
+                                                                      "created_at":  "@{default=now(); format=timestamp with time zone; type=string}",
+                                                                      "updated_at":  "@{default=now(); format=timestamp with time zone; type=string}",
+                                                                      "user_notes":  "@{format=text; type=string}",
+                                                                      "request_id":  "@{format=uuid; type=string}"
+                                                                  },
+                                                   "type":  "object"
+                                               },
+                        "rig_configurations":  {
+                                                   "required":  [
+                                                                    "id",
+                                                                    "user_id",
+                                                                    "name",
+                                                                    "tractor_id",
+                                                                    "trailer_ids"
+                                                                ],
+                                                   "properties":  {
+                                                                      "id":  "@{default=gen_random_uuid(); description=Note:\nThis is a Primary Key.\u003cpk/\u003e; format=uuid; type=string}",
+                                                                      "user_id":  "@{format=uuid; type=string}",
+                                                                      "name":  "@{format=text; type=string}",
+                                                                      "tractor_id":  "@{format=uuid; type=string}",
+                                                                      "trailer_ids":  "@{format=uuid[]; items=; type=array}",
+                                                                      "overall_length_ft":  "@{format=numeric; type=number}",
+                                                                      "total_axles":  "@{format=integer; type=integer}",
+                                                                      "notes":  "@{format=text; type=string}",
+                                                                      "created_at":  "@{default=now(); format=timestamp with time zone; type=string}",
+                                                                      "updated_at":  "@{default=now(); format=timestamp with time zone; type=string}",
+                                                                      "computed_kingpin_to_last_axle_ft":  "@{format=numeric; type=number}",
+                                                                      "computed_total_axles":  "@{format=integer; type=integer}",
+                                                                      "computed_overall_length_ft":  "@{format=numeric; type=number}",
+                                                                      "computed_fifth_wheel_position_ft":  "@{format=numeric; type=number}",
+                                                                      "computed_total_length_ft":  "@{format=numeric; type=number}",
+                                                                      "rig_name":  "@{format=text; type=string}"
+                                                                  },
+                                                   "type":  "object"
+                                               },
+                        "permit_requests":  {
+                                                "required":  [
+                                                                 "id"
+                                                             ],
+                                                "properties":  {
+                                                                   "id":  "@{default=gen_random_uuid(); description=Note:\nThis is a Primary Key.\u003cpk/\u003e; format=uuid; type=string}",
+                                                                   "created_at":  "@{default=now(); format=timestamp with time zone; type=string}",
+                                                                   "origin_city":  "@{format=text; type=string}",
+                                                                   "origin_state":  "@{format=text; type=string}",
+                                                                   "destination_city":  "@{format=text; type=string}",
+                                                                   "destination_state":  "@{format=text; type=string}",
+                                                                   "weight":  "@{format=numeric; type=number}",
+                                                                   "length":  "@{format=numeric; type=number}",
+                                                                   "width":  "@{format=numeric; type=number}",
+                                                                   "height":  "@{format=numeric; type=number}",
+                                                                   "route_corridor":  "@{format=jsonb}",
+                                                                   "permit_required_states":  "@{format=jsonb}",
+                                                                   "requires_permit":  "@{format=boolean; type=boolean}",
+                                                                   "reasons":  "@{format=jsonb}",
+                                                                   "notes":  "@{format=jsonb}",
+                                                                   "estimated_cost":  "@{format=numeric; type=number}",
+                                                                   "user_id":  "@{format=uuid; type=string}",
+                                                                   "cost_breakdown":  "@{format=jsonb}",
+                                                                   "distance_miles":  "@{format=numeric; type=number}",
+                                                                   "duration_hours":  "@{format=numeric; type=number}",
+                                                                   "equipment":  "@{format=jsonb}",
+                                                                   "cargo":  "@{format=jsonb}",
+                                                                   "highways":  "@{format=jsonb}",
+                                                                   "user_preference_note":  "@{format=text; type=string}",
+                                                                   "routing_engine":  "@{format=text; type=string}",
+                                                                   "origin_query":  "@{format=text; type=string}",
+                                                                   "destination_query":  "@{format=text; type=string}",
+                                                                   "drops":  "@{format=jsonb}"
+                                                               },
+                                                "type":  "object"
+                                            },
+                        "trailers":  {
+                                         "required":  [
+                                                          "id",
+                                                          "user_id",
+                                                          "name"
+                                                      ],
+                                         "properties":  {
+                                                            "id":  "@{default=gen_random_uuid(); description=Note:\nThis is a Primary Key.\u003cpk/\u003e; format=uuid; type=string}",
+                                                            "user_id":  "@{format=uuid; type=string}",
+                                                            "name":  "@{format=text; type=string}",
+                                                            "unit_number":  "@{format=text; type=string}",
+                                                            "vin":  "@{format=text; type=string}",
+                                                            "year":  "@{format=integer; type=integer}",
+                                                            "make":  "@{format=text; type=string}",
+                                                            "model":  "@{format=text; type=string}",
+                                                            "color":  "@{format=text; type=string}",
+                                                            "length_ft":  "@{format=numeric; type=number}",
+                                                            "kingpin_from_front_ft":  "@{format=numeric; type=number}",
+                                                            "kingpin_to_first_axle_ft":  "@{format=numeric; type=number}",
+                                                            "axles":  "@{format=integer; type=integer}",
+                                                            "axle_spacing":  "@{format=text[]; items=; type=array}",
+                                                            "lift_axle":  "@{default=False; format=boolean; type=boolean}",
+                                                            "extendable":  "@{default=False; format=boolean; type=boolean}",
+                                                            "extendable_extra_ft":  "@{default=0; format=numeric; type=number}",
+                                                            "notes":  "@{format=text; type=string}",
+                                                            "created_at":  "@{default=now(); format=timestamp with time zone; type=string}",
+                                                            "updated_at":  "@{default=now(); format=timestamp with time zone; type=string}"
+                                                        },
+                                         "type":  "object"
+                                     }
+                    },
+    "parameters":  {
+                       "preferParams":  {
+                                            "name":  "Prefer",
+                                            "description":  "Preference",
+                                            "required":  false,
+                                            "in":  "header",
+                                            "type":  "string"
+                                        },
+                       "preferReturn":  {
+                                            "name":  "Prefer",
+                                            "description":  "Preference",
+                                            "required":  false,
+                                            "enum":  [
+                                                         "return=representation",
+                                                         "return=minimal",
+                                                         "return=none"
+                                                     ],
+                                            "in":  "header",
+                                            "type":  "string"
+                                        },
+                       "preferCount":  {
+                                           "name":  "Prefer",
+                                           "description":  "Preference",
+                                           "required":  false,
+                                           "enum":  [
+                                                        "count=none"
+                                                    ],
+                                           "in":  "header",
+                                           "type":  "string"
+                                       },
+                       "preferPost":  {
+                                          "name":  "Prefer",
+                                          "description":  "Preference",
+                                          "required":  false,
+                                          "enum":  [
+                                                       "return=representation",
+                                                       "return=minimal",
+                                                       "return=none",
+                                                       "resolution=ignore-duplicates",
+                                                       "resolution=merge-duplicates"
+                                                   ],
+                                          "in":  "header",
+                                          "type":  "string"
+                                      },
+                       "select":  {
+                                      "name":  "select",
+                                      "description":  "Filtering Columns",
+                                      "required":  false,
+                                      "in":  "query",
+                                      "type":  "string"
+                                  },
+                       "on_conflict":  {
+                                           "name":  "on_conflict",
+                                           "description":  "On Conflict",
+                                           "required":  false,
+                                           "in":  "query",
+                                           "type":  "string"
+                                       },
+                       "order":  {
+                                     "name":  "order",
+                                     "description":  "Ordering",
+                                     "required":  false,
+                                     "in":  "query",
+                                     "type":  "string"
+                                 },
+                       "range":  {
+                                     "name":  "Range",
+                                     "description":  "Limiting and Pagination",
+                                     "required":  false,
+                                     "in":  "header",
+                                     "type":  "string"
+                                 },
+                       "rangeUnit":  {
+                                         "name":  "Range-Unit",
+                                         "description":  "Limiting and Pagination",
+                                         "required":  false,
+                                         "default":  "items",
+                                         "in":  "header",
+                                         "type":  "string"
+                                     },
+                       "offset":  {
+                                      "name":  "offset",
+                                      "description":  "Limiting and Pagination",
+                                      "required":  false,
+                                      "in":  "query",
+                                      "type":  "string"
+                                  },
+                       "limit":  {
+                                     "name":  "limit",
+                                     "description":  "Limiting and Pagination",
+                                     "required":  false,
+                                     "in":  "query",
+                                     "type":  "string"
+                                 },
+                       "body.equipment_profiles":  {
+                                                       "name":  "equipment_profiles",
+                                                       "description":  "equipment_profiles",
+                                                       "required":  false,
+                                                       "in":  "body",
+                                                       "schema":  {
+                                                                      "$ref":  "#/definitions/equipment_profiles"
+                                                                  }
+                                                   },
+                       "rowFilter.equipment_profiles.id":  {
+                                                               "name":  "id",
+                                                               "required":  false,
+                                                               "in":  "query",
+                                                               "type":  "string"
+                                                           },
+                       "rowFilter.equipment_profiles.user_id":  {
+                                                                    "name":  "user_id",
+                                                                    "required":  false,
+                                                                    "in":  "query",
+                                                                    "type":  "string"
+                                                                },
+                       "rowFilter.equipment_profiles.type":  {
+                                                                 "name":  "type",
+                                                                 "required":  false,
+                                                                 "in":  "query",
+                                                                 "type":  "string"
+                                                             },
+                       "rowFilter.equipment_profiles.name":  {
+                                                                 "name":  "name",
+                                                                 "required":  false,
+                                                                 "in":  "query",
+                                                                 "type":  "string"
+                                                             },
+                       "rowFilter.equipment_profiles.unit_number":  {
+                                                                        "name":  "unit_number",
+                                                                        "required":  false,
+                                                                        "in":  "query",
+                                                                        "type":  "string"
+                                                                    },
+                       "rowFilter.equipment_profiles.vin":  {
+                                                                "name":  "vin",
+                                                                "required":  false,
+                                                                "in":  "query",
+                                                                "type":  "string"
+                                                            },
+                       "rowFilter.equipment_profiles.year":  {
+                                                                 "name":  "year",
+                                                                 "required":  false,
+                                                                 "in":  "query",
+                                                                 "type":  "string"
+                                                             },
+                       "rowFilter.equipment_profiles.make":  {
+                                                                 "name":  "make",
+                                                                 "required":  false,
+                                                                 "in":  "query",
+                                                                 "type":  "string"
+                                                             },
+                       "rowFilter.equipment_profiles.model":  {
+                                                                  "name":  "model",
+                                                                  "required":  false,
+                                                                  "in":  "query",
+                                                                  "type":  "string"
+                                                              },
+                       "rowFilter.equipment_profiles.color":  {
+                                                                  "name":  "color",
+                                                                  "required":  false,
+                                                                  "in":  "query",
+                                                                  "type":  "string"
+                                                              },
+                       "rowFilter.equipment_profiles.length_ft":  {
+                                                                      "name":  "length_ft",
+                                                                      "required":  false,
+                                                                      "in":  "query",
+                                                                      "type":  "string"
+                                                                  },
+                       "rowFilter.equipment_profiles.axles":  {
+                                                                  "name":  "axles",
+                                                                  "required":  false,
+                                                                  "in":  "query",
+                                                                  "type":  "string"
+                                                              },
+                       "rowFilter.equipment_profiles.steer_axle_setback_ft":  {
+                                                                                  "name":  "steer_axle_setback_ft",
+                                                                                  "required":  false,
+                                                                                  "in":  "query",
+                                                                                  "type":  "string"
+                                                                              },
+                       "rowFilter.equipment_profiles.wheelbase_ft":  {
+                                                                         "name":  "wheelbase_ft",
+                                                                         "required":  false,
+                                                                         "in":  "query",
+                                                                         "type":  "string"
+                                                                     },
+                       "rowFilter.equipment_profiles.axle_spacing":  {
+                                                                         "name":  "axle_spacing",
+                                                                         "required":  false,
+                                                                         "in":  "query",
+                                                                         "type":  "string"
+                                                                     },
+                       "rowFilter.equipment_profiles.fifth_wheel_from_rear_ft":  {
+                                                                                     "name":  "fifth_wheel_from_rear_ft",
+                                                                                     "required":  false,
+                                                                                     "in":  "query",
+                                                                                     "type":  "string"
+                                                                                 },
+                       "rowFilter.equipment_profiles.registered_gvw":  {
+                                                                           "name":  "registered_gvw",
+                                                                           "required":  false,
+                                                                           "in":  "query",
+                                                                           "type":  "string"
+                                                                       },
+                       "rowFilter.equipment_profiles.tire_width_inches":  {
+                                                                              "name":  "tire_width_inches",
+                                                                              "required":  false,
+                                                                              "in":  "query",
+                                                                              "type":  "string"
+                                                                          },
+                       "rowFilter.equipment_profiles.kingpin_from_front_ft":  {
+                                                                                  "name":  "kingpin_from_front_ft",
+                                                                                  "required":  false,
+                                                                                  "in":  "query",
+                                                                                  "type":  "string"
+                                                                              },
+                       "rowFilter.equipment_profiles.kingpin_to_first_axle_ft":  {
+                                                                                     "name":  "kingpin_to_first_axle_ft",
+                                                                                     "required":  false,
+                                                                                     "in":  "query",
+                                                                                     "type":  "string"
+                                                                                 },
+                       "rowFilter.equipment_profiles.lift_axle":  {
+                                                                      "name":  "lift_axle",
+                                                                      "required":  false,
+                                                                      "in":  "query",
+                                                                      "type":  "string"
+                                                                  },
+                       "rowFilter.equipment_profiles.extendable":  {
+                                                                       "name":  "extendable",
+                                                                       "required":  false,
+                                                                       "in":  "query",
+                                                                       "type":  "string"
+                                                                   },
+                       "rowFilter.equipment_profiles.extendable_extra_ft":  {
+                                                                                "name":  "extendable_extra_ft",
+                                                                                "required":  false,
+                                                                                "in":  "query",
+                                                                                "type":  "string"
+                                                                            },
+                       "rowFilter.equipment_profiles.created_at":  {
+                                                                       "name":  "created_at",
+                                                                       "required":  false,
+                                                                       "in":  "query",
+                                                                       "type":  "string"
+                                                                   },
+                       "rowFilter.equipment_profiles.updated_at":  {
+                                                                       "name":  "updated_at",
+                                                                       "required":  false,
+                                                                       "in":  "query",
+                                                                       "type":  "string"
+                                                                   },
+                       "rowFilter.equipment_profiles.notes":  {
+                                                                  "name":  "notes",
+                                                                  "required":  false,
+                                                                  "in":  "query",
+                                                                  "type":  "string"
+                                                              },
+                       "rowFilter.equipment_profiles.profile_name":  {
+                                                                         "name":  "profile_name",
+                                                                         "required":  false,
+                                                                         "in":  "query",
+                                                                         "type":  "string"
+                                                                     },
+                       "body.tractors":  {
+                                             "name":  "tractors",
+                                             "description":  "tractors",
+                                             "required":  false,
+                                             "in":  "body",
+                                             "schema":  {
+                                                            "$ref":  "#/definitions/tractors"
+                                                        }
+                                         },
+                       "rowFilter.tractors.id":  {
+                                                     "name":  "id",
+                                                     "required":  false,
+                                                     "in":  "query",
+                                                     "type":  "string"
+                                                 },
+                       "rowFilter.tractors.user_id":  {
+                                                          "name":  "user_id",
+                                                          "required":  false,
+                                                          "in":  "query",
+                                                          "type":  "string"
+                                                      },
+                       "rowFilter.tractors.name":  {
+                                                       "name":  "name",
+                                                       "required":  false,
+                                                       "in":  "query",
+                                                       "type":  "string"
+                                                   },
+                       "rowFilter.tractors.unit_number":  {
+                                                              "name":  "unit_number",
+                                                              "required":  false,
+                                                              "in":  "query",
+                                                              "type":  "string"
+                                                          },
+                       "rowFilter.tractors.vin":  {
+                                                      "name":  "vin",
+                                                      "required":  false,
+                                                      "in":  "query",
+                                                      "type":  "string"
+                                                  },
+                       "rowFilter.tractors.year":  {
+                                                       "name":  "year",
+                                                       "required":  false,
+                                                       "in":  "query",
+                                                       "type":  "string"
+                                                   },
+                       "rowFilter.tractors.make":  {
+                                                       "name":  "make",
+                                                       "required":  false,
+                                                       "in":  "query",
+                                                       "type":  "string"
+                                                   },
+                       "rowFilter.tractors.model":  {
+                                                        "name":  "model",
+                                                        "required":  false,
+                                                        "in":  "query",
+                                                        "type":  "string"
+                                                    },
+                       "rowFilter.tractors.color":  {
+                                                        "name":  "color",
+                                                        "required":  false,
+                                                        "in":  "query",
+                                                        "type":  "string"
+                                                    },
+                       "rowFilter.tractors.length_ft":  {
+                                                            "name":  "length_ft",
+                                                            "required":  false,
+                                                            "in":  "query",
+                                                            "type":  "string"
+                                                        },
+                       "rowFilter.tractors.axles":  {
+                                                        "name":  "axles",
+                                                        "required":  false,
+                                                        "in":  "query",
+                                                        "type":  "string"
+                                                    },
+                       "rowFilter.tractors.steer_axle_setback_ft":  {
+                                                                        "name":  "steer_axle_setback_ft",
+                                                                        "required":  false,
+                                                                        "in":  "query",
+                                                                        "type":  "string"
+                                                                    },
+                       "rowFilter.tractors.wheelbase_ft":  {
+                                                               "name":  "wheelbase_ft",
+                                                               "required":  false,
+                                                               "in":  "query",
+                                                               "type":  "string"
+                                                           },
+                       "rowFilter.tractors.axle_spacing":  {
+                                                               "name":  "axle_spacing",
+                                                               "required":  false,
+                                                               "in":  "query",
+                                                               "type":  "string"
+                                                           },
+                       "rowFilter.tractors.fifth_wheel_from_rear_ft":  {
+                                                                           "name":  "fifth_wheel_from_rear_ft",
+                                                                           "required":  false,
+                                                                           "in":  "query",
+                                                                           "type":  "string"
+                                                                       },
+                       "rowFilter.tractors.registered_gvw":  {
+                                                                 "name":  "registered_gvw",
+                                                                 "required":  false,
+                                                                 "in":  "query",
+                                                                 "type":  "string"
+                                                             },
+                       "rowFilter.tractors.tire_width_inches":  {
+                                                                    "name":  "tire_width_inches",
+                                                                    "required":  false,
+                                                                    "in":  "query",
+                                                                    "type":  "string"
+                                                                },
+                       "rowFilter.tractors.notes":  {
+                                                        "name":  "notes",
+                                                        "required":  false,
+                                                        "in":  "query",
+                                                        "type":  "string"
+                                                    },
+                       "rowFilter.tractors.created_at":  {
+                                                             "name":  "created_at",
+                                                             "required":  false,
+                                                             "in":  "query",
+                                                             "type":  "string"
+                                                         },
+                       "rowFilter.tractors.updated_at":  {
+                                                             "name":  "updated_at",
+                                                             "required":  false,
+                                                             "in":  "query",
+                                                             "type":  "string"
+                                                         },
+                       "body.loads":  {
+                                          "name":  "loads",
+                                          "description":  "loads",
+                                          "required":  false,
+                                          "in":  "body",
+                                          "schema":  {
+                                                         "$ref":  "#/definitions/loads"
+                                                     }
+                                      },
+                       "rowFilter.loads.id":  {
+                                                  "name":  "id",
+                                                  "required":  false,
+                                                  "in":  "query",
+                                                  "type":  "string"
+                                              },
+                       "rowFilter.loads.origin":  {
+                                                      "name":  "origin",
+                                                      "required":  false,
+                                                      "in":  "query",
+                                                      "type":  "string"
+                                                  },
+                       "rowFilter.loads.destination":  {
+                                                           "name":  "destination",
+                                                           "required":  false,
+                                                           "in":  "query",
+                                                           "type":  "string"
+                                                       },
+                       "rowFilter.loads.length":  {
+                                                      "name":  "length",
+                                                      "required":  false,
+                                                      "in":  "query",
+                                                      "type":  "string"
+                                                  },
+                       "rowFilter.loads.width":  {
+                                                     "name":  "width",
+                                                     "required":  false,
+                                                     "in":  "query",
+                                                     "type":  "string"
+                                                 },
+                       "rowFilter.loads.height":  {
+                                                      "name":  "height",
+                                                      "required":  false,
+                                                      "in":  "query",
+                                                      "type":  "string"
+                                                  },
+                       "rowFilter.loads.weight":  {
+                                                      "name":  "weight",
+                                                      "required":  false,
+                                                      "in":  "query",
+                                                      "type":  "string"
+                                                  },
+                       "rowFilter.loads.VIN":  {
+                                                   "name":  "VIN",
+                                                   "required":  false,
+                                                   "in":  "query",
+                                                   "type":  "string"
+                                               },
+                       "rowFilter.loads.year":  {
+                                                    "name":  "year",
+                                                    "required":  false,
+                                                    "in":  "query",
+                                                    "type":  "string"
+                                                },
+                       "rowFilter.loads.created_at":  {
+                                                          "name":  "created_at",
+                                                          "required":  false,
+                                                          "in":  "query",
+                                                          "type":  "string"
+                                                      },
+                       "body.state_permit_rules":  {
+                                                       "name":  "state_permit_rules",
+                                                       "description":  "state_permit_rules",
+                                                       "required":  false,
+                                                       "in":  "body",
+                                                       "schema":  {
+                                                                      "$ref":  "#/definitions/state_permit_rules"
+                                                                  }
+                                                   },
+                       "rowFilter.state_permit_rules.state_code":  {
+                                                                       "name":  "state_code",
+                                                                       "description":  "Two-letter USPS state abbreviation (primary key)",
+                                                                       "required":  false,
+                                                                       "in":  "query",
+                                                                       "type":  "string"
+                                                                   },
+                       "rowFilter.state_permit_rules.state_name":  {
+                                                                       "name":  "state_name",
+                                                                       "description":  "Full name of the state",
+                                                                       "required":  false,
+                                                                       "in":  "query",
+                                                                       "type":  "string"
+                                                                   },
+                       "rowFilter.state_permit_rules.legal_width_ft":  {
+                                                                           "name":  "legal_width_ft",
+                                                                           "description":  "Legal width limit in feet without a permit",
+                                                                           "required":  false,
+                                                                           "in":  "query",
+                                                                           "type":  "string"
+                                                                       },
+                       "rowFilter.state_permit_rules.legal_height_ft":  {
+                                                                            "name":  "legal_height_ft",
+                                                                            "description":  "Legal height limit in feet without a permit",
+                                                                            "required":  false,
+                                                                            "in":  "query",
+                                                                            "type":  "string"
+                                                                        },
+                       "rowFilter.state_permit_rules.legal_length_ft":  {
+                                                                            "name":  "legal_length_ft",
+                                                                            "description":  "Legal length limit in feet without a permit",
+                                                                            "required":  false,
+                                                                            "in":  "query",
+                                                                            "type":  "string"
+                                                                        },
+                       "rowFilter.state_permit_rules.legal_weight_lbs":  {
+                                                                             "name":  "legal_weight_lbs",
+                                                                             "description":  "Legal gross weight limit in pounds without a permit",
+                                                                             "required":  false,
+                                                                             "in":  "query",
+                                                                             "type":  "string"
+                                                                         },
+                       "rowFilter.state_permit_rules.permit_threshold_width_ft":  {
+                                                                                      "name":  "permit_threshold_width_ft",
+                                                                                      "description":  "Width (ft) at which a permit becomes required. Falls back to legal_width_ft if null",
+                                                                                      "required":  false,
+                                                                                      "in":  "query",
+                                                                                      "type":  "string"
+                                                                                  },
+                       "rowFilter.state_permit_rules.permit_threshold_height_ft":  {
+                                                                                       "name":  "permit_threshold_height_ft",
+                                                                                       "description":  "Height (ft) at which a permit becomes required",
+                                                                                       "required":  false,
+                                                                                       "in":  "query",
+                                                                                       "type":  "string"
+                                                                                   },
+                       "rowFilter.state_permit_rules.permit_threshold_length_ft":  {
+                                                                                       "name":  "permit_threshold_length_ft",
+                                                                                       "description":  "Length (ft) at which a permit becomes required",
+                                                                                       "required":  false,
+                                                                                       "in":  "query",
+                                                                                       "type":  "string"
+                                                                                   },
+                       "rowFilter.state_permit_rules.permit_threshold_weight_lbs":  {
+                                                                                        "name":  "permit_threshold_weight_lbs",
+                                                                                        "description":  "Weight (lbs) at which a permit becomes required",
+                                                                                        "required":  false,
+                                                                                        "in":  "query",
+                                                                                        "type":  "string"
+                                                                                    },
+                       "rowFilter.state_permit_rules.escort_threshold_width_ft":  {
+                                                                                      "name":  "escort_threshold_width_ft",
+                                                                                      "description":  "Width (ft) at which an escort vehicle is typically required",
+                                                                                      "required":  false,
+                                                                                      "in":  "query",
+                                                                                      "type":  "string"
+                                                                                  },
+                       "rowFilter.state_permit_rules.escort_threshold_height_ft":  {
+                                                                                       "name":  "escort_threshold_height_ft",
+                                                                                       "description":  "Height (ft) at which an escort vehicle is typically required",
+                                                                                       "required":  false,
+                                                                                       "in":  "query",
+                                                                                       "type":  "string"
+                                                                                   },
+                       "rowFilter.state_permit_rules.escort_threshold_length_ft":  {
+                                                                                       "name":  "escort_threshold_length_ft",
+                                                                                       "description":  "Length (ft) at which an escort vehicle is typically required",
+                                                                                       "required":  false,
+                                                                                       "in":  "query",
+                                                                                       "type":  "string"
+                                                                                   },
+                       "rowFilter.state_permit_rules.curfew_restrictions":  {
+                                                                                "name":  "curfew_restrictions",
+                                                                                "description":  "Time-of-day, day-of-week, or holiday travel restrictions",
+                                                                                "required":  false,
+                                                                                "in":  "query",
+                                                                                "type":  "string"
+                                                                            },
+                       "rowFilter.state_permit_rules.special_notes":  {
+                                                                          "name":  "special_notes",
+                                                                          "description":  "Additional useful notes about permitting in this state",
+                                                                          "required":  false,
+                                                                          "in":  "query",
+                                                                          "type":  "string"
+                                                                      },
+                       "rowFilter.state_permit_rules.last_updated":  {
+                                                                         "name":  "last_updated",
+                                                                         "description":  "Timestamp of when this record was last reviewed or updated",
+                                                                         "required":  false,
+                                                                         "in":  "query",
+                                                                         "type":  "string"
+                                                                     },
+                       "rowFilter.state_permit_rules.source":  {
+                                                                   "name":  "source",
+                                                                   "description":  "Origin of the data (e.g. State DOT, FMCSA, Manual Research)",
+                                                                   "required":  false,
+                                                                   "in":  "query",
+                                                                   "type":  "string"
+                                                               },
+                       "body.portal_submissions":  {
+                                                       "name":  "portal_submissions",
+                                                       "description":  "portal_submissions",
+                                                       "required":  false,
+                                                       "in":  "body",
+                                                       "schema":  {
+                                                                      "$ref":  "#/definitions/portal_submissions"
+                                                                  }
+                                                   },
+                       "rowFilter.portal_submissions.id":  {
+                                                               "name":  "id",
+                                                               "required":  false,
+                                                               "in":  "query",
+                                                               "type":  "string"
+                                                           },
+                       "rowFilter.portal_submissions.permit_request_id":  {
+                                                                              "name":  "permit_request_id",
+                                                                              "required":  false,
+                                                                              "in":  "query",
+                                                                              "type":  "string"
+                                                                          },
+                       "rowFilter.portal_submissions.user_id":  {
+                                                                    "name":  "user_id",
+                                                                    "required":  false,
+                                                                    "in":  "query",
+                                                                    "type":  "string"
+                                                                },
+                       "rowFilter.portal_submissions.state_code":  {
+                                                                       "name":  "state_code",
+                                                                       "required":  false,
+                                                                       "in":  "query",
+                                                                       "type":  "string"
+                                                                   },
+                       "rowFilter.portal_submissions.status":  {
+                                                                   "name":  "status",
+                                                                   "required":  false,
+                                                                   "in":  "query",
+                                                                   "type":  "string"
+                                                               },
+                       "rowFilter.portal_submissions.our_recommended_corridor":  {
+                                                                                     "name":  "our_recommended_corridor",
+                                                                                     "required":  false,
+                                                                                     "in":  "query",
+                                                                                     "type":  "string"
+                                                                                 },
+                       "rowFilter.portal_submissions.portal_returned_corridor":  {
+                                                                                     "name":  "portal_returned_corridor",
+                                                                                     "required":  false,
+                                                                                     "in":  "query",
+                                                                                     "type":  "string"
+                                                                                 },
+                       "rowFilter.portal_submissions.route_comparison":  {
+                                                                             "name":  "route_comparison",
+                                                                             "required":  false,
+                                                                             "in":  "query",
+                                                                             "type":  "string"
+                                                                         },
+                       "rowFilter.portal_submissions.permit_number":  {
+                                                                          "name":  "permit_number",
+                                                                          "required":  false,
+                                                                          "in":  "query",
+                                                                          "type":  "string"
+                                                                      },
+                       "rowFilter.portal_submissions.portal_fees":  {
+                                                                        "name":  "portal_fees",
+                                                                        "required":  false,
+                                                                        "in":  "query",
+                                                                        "type":  "string"
+                                                                    },
+                       "rowFilter.portal_submissions.portal_restrictions":  {
+                                                                                "name":  "portal_restrictions",
+                                                                                "required":  false,
+                                                                                "in":  "query",
+                                                                                "type":  "string"
+                                                                            },
+                       "rowFilter.portal_submissions.human_approved":  {
+                                                                           "name":  "human_approved",
+                                                                           "required":  false,
+                                                                           "in":  "query",
+                                                                           "type":  "string"
+                                                                       },
+                       "rowFilter.portal_submissions.pdf_reference":  {
+                                                                          "name":  "pdf_reference",
+                                                                          "required":  false,
+                                                                          "in":  "query",
+                                                                          "type":  "string"
+                                                                      },
+                       "rowFilter.portal_submissions.raw_portal_output":  {
+                                                                              "name":  "raw_portal_output",
+                                                                              "required":  false,
+                                                                              "in":  "query",
+                                                                              "type":  "string"
+                                                                          },
+                       "rowFilter.portal_submissions.created_at":  {
+                                                                       "name":  "created_at",
+                                                                       "required":  false,
+                                                                       "in":  "query",
+                                                                       "type":  "string"
+                                                                   },
+                       "rowFilter.portal_submissions.updated_at":  {
+                                                                       "name":  "updated_at",
+                                                                       "required":  false,
+                                                                       "in":  "query",
+                                                                       "type":  "string"
+                                                                   },
+                       "rowFilter.portal_submissions.user_notes":  {
+                                                                       "name":  "user_notes",
+                                                                       "required":  false,
+                                                                       "in":  "query",
+                                                                       "type":  "string"
+                                                                   },
+                       "rowFilter.portal_submissions.request_id":  {
+                                                                       "name":  "request_id",
+                                                                       "required":  false,
+                                                                       "in":  "query",
+                                                                       "type":  "string"
+                                                                   },
+                       "body.rig_configurations":  {
+                                                       "name":  "rig_configurations",
+                                                       "description":  "rig_configurations",
+                                                       "required":  false,
+                                                       "in":  "body",
+                                                       "schema":  {
+                                                                      "$ref":  "#/definitions/rig_configurations"
+                                                                  }
+                                                   },
+                       "rowFilter.rig_configurations.id":  {
+                                                               "name":  "id",
+                                                               "required":  false,
+                                                               "in":  "query",
+                                                               "type":  "string"
+                                                           },
+                       "rowFilter.rig_configurations.user_id":  {
+                                                                    "name":  "user_id",
+                                                                    "required":  false,
+                                                                    "in":  "query",
+                                                                    "type":  "string"
+                                                                },
+                       "rowFilter.rig_configurations.name":  {
+                                                                 "name":  "name",
+                                                                 "required":  false,
+                                                                 "in":  "query",
+                                                                 "type":  "string"
+                                                             },
+                       "rowFilter.rig_configurations.tractor_id":  {
+                                                                       "name":  "tractor_id",
+                                                                       "required":  false,
+                                                                       "in":  "query",
+                                                                       "type":  "string"
+                                                                   },
+                       "rowFilter.rig_configurations.trailer_ids":  {
+                                                                        "name":  "trailer_ids",
+                                                                        "required":  false,
+                                                                        "in":  "query",
+                                                                        "type":  "string"
+                                                                    },
+                       "rowFilter.rig_configurations.overall_length_ft":  {
+                                                                              "name":  "overall_length_ft",
+                                                                              "required":  false,
+                                                                              "in":  "query",
+                                                                              "type":  "string"
+                                                                          },
+                       "rowFilter.rig_configurations.total_axles":  {
+                                                                        "name":  "total_axles",
+                                                                        "required":  false,
+                                                                        "in":  "query",
+                                                                        "type":  "string"
+                                                                    },
+                       "rowFilter.rig_configurations.notes":  {
+                                                                  "name":  "notes",
+                                                                  "required":  false,
+                                                                  "in":  "query",
+                                                                  "type":  "string"
+                                                              },
+                       "rowFilter.rig_configurations.created_at":  {
+                                                                       "name":  "created_at",
+                                                                       "required":  false,
+                                                                       "in":  "query",
+                                                                       "type":  "string"
+                                                                   },
+                       "rowFilter.rig_configurations.updated_at":  {
+                                                                       "name":  "updated_at",
+                                                                       "required":  false,
+                                                                       "in":  "query",
+                                                                       "type":  "string"
+                                                                   },
+                       "rowFilter.rig_configurations.computed_kingpin_to_last_axle_ft":  {
+                                                                                             "name":  "computed_kingpin_to_last_axle_ft",
+                                                                                             "required":  false,
+                                                                                             "in":  "query",
+                                                                                             "type":  "string"
+                                                                                         },
+                       "rowFilter.rig_configurations.computed_total_axles":  {
+                                                                                 "name":  "computed_total_axles",
+                                                                                 "required":  false,
+                                                                                 "in":  "query",
+                                                                                 "type":  "string"
+                                                                             },
+                       "rowFilter.rig_configurations.computed_overall_length_ft":  {
+                                                                                       "name":  "computed_overall_length_ft",
+                                                                                       "required":  false,
+                                                                                       "in":  "query",
+                                                                                       "type":  "string"
+                                                                                   },
+                       "rowFilter.rig_configurations.computed_fifth_wheel_position_ft":  {
+                                                                                             "name":  "computed_fifth_wheel_position_ft",
+                                                                                             "required":  false,
+                                                                                             "in":  "query",
+                                                                                             "type":  "string"
+                                                                                         },
+                       "rowFilter.rig_configurations.computed_total_length_ft":  {
+                                                                                     "name":  "computed_total_length_ft",
+                                                                                     "required":  false,
+                                                                                     "in":  "query",
+                                                                                     "type":  "string"
+                                                                                 },
+                       "rowFilter.rig_configurations.rig_name":  {
+                                                                     "name":  "rig_name",
+                                                                     "required":  false,
+                                                                     "in":  "query",
+                                                                     "type":  "string"
+                                                                 },
+                       "body.permit_requests":  {
+                                                    "name":  "permit_requests",
+                                                    "description":  "permit_requests",
+                                                    "required":  false,
+                                                    "in":  "body",
+                                                    "schema":  {
+                                                                   "$ref":  "#/definitions/permit_requests"
+                                                               }
+                                                },
+                       "rowFilter.permit_requests.id":  {
+                                                            "name":  "id",
+                                                            "required":  false,
+                                                            "in":  "query",
+                                                            "type":  "string"
+                                                        },
+                       "rowFilter.permit_requests.created_at":  {
+                                                                    "name":  "created_at",
+                                                                    "required":  false,
+                                                                    "in":  "query",
+                                                                    "type":  "string"
+                                                                },
+                       "rowFilter.permit_requests.origin_city":  {
+                                                                     "name":  "origin_city",
+                                                                     "required":  false,
+                                                                     "in":  "query",
+                                                                     "type":  "string"
+                                                                 },
+                       "rowFilter.permit_requests.origin_state":  {
+                                                                      "name":  "origin_state",
+                                                                      "required":  false,
+                                                                      "in":  "query",
+                                                                      "type":  "string"
+                                                                  },
+                       "rowFilter.permit_requests.destination_city":  {
+                                                                          "name":  "destination_city",
+                                                                          "required":  false,
+                                                                          "in":  "query",
+                                                                          "type":  "string"
+                                                                      },
+                       "rowFilter.permit_requests.destination_state":  {
+                                                                           "name":  "destination_state",
+                                                                           "required":  false,
+                                                                           "in":  "query",
+                                                                           "type":  "string"
+                                                                       },
+                       "rowFilter.permit_requests.weight":  {
+                                                                "name":  "weight",
+                                                                "required":  false,
+                                                                "in":  "query",
+                                                                "type":  "string"
+                                                            },
+                       "rowFilter.permit_requests.length":  {
+                                                                "name":  "length",
+                                                                "required":  false,
+                                                                "in":  "query",
+                                                                "type":  "string"
+                                                            },
+                       "rowFilter.permit_requests.width":  {
+                                                               "name":  "width",
+                                                               "required":  false,
+                                                               "in":  "query",
+                                                               "type":  "string"
+                                                           },
+                       "rowFilter.permit_requests.height":  {
+                                                                "name":  "height",
+                                                                "required":  false,
+                                                                "in":  "query",
+                                                                "type":  "string"
+                                                            },
+                       "rowFilter.permit_requests.route_corridor":  {
+                                                                        "name":  "route_corridor",
+                                                                        "required":  false,
+                                                                        "in":  "query",
+                                                                        "type":  "string"
+                                                                    },
+                       "rowFilter.permit_requests.permit_required_states":  {
+                                                                                "name":  "permit_required_states",
+                                                                                "required":  false,
+                                                                                "in":  "query",
+                                                                                "type":  "string"
+                                                                            },
+                       "rowFilter.permit_requests.requires_permit":  {
+                                                                         "name":  "requires_permit",
+                                                                         "required":  false,
+                                                                         "in":  "query",
+                                                                         "type":  "string"
+                                                                     },
+                       "rowFilter.permit_requests.reasons":  {
+                                                                 "name":  "reasons",
+                                                                 "required":  false,
+                                                                 "in":  "query",
+                                                                 "type":  "string"
+                                                             },
+                       "rowFilter.permit_requests.notes":  {
+                                                               "name":  "notes",
+                                                               "required":  false,
+                                                               "in":  "query",
+                                                               "type":  "string"
+                                                           },
+                       "rowFilter.permit_requests.estimated_cost":  {
+                                                                        "name":  "estimated_cost",
+                                                                        "required":  false,
+                                                                        "in":  "query",
+                                                                        "type":  "string"
+                                                                    },
+                       "rowFilter.permit_requests.user_id":  {
+                                                                 "name":  "user_id",
+                                                                 "required":  false,
+                                                                 "in":  "query",
+                                                                 "type":  "string"
+                                                             },
+                       "rowFilter.permit_requests.cost_breakdown":  {
+                                                                        "name":  "cost_breakdown",
+                                                                        "required":  false,
+                                                                        "in":  "query",
+                                                                        "type":  "string"
+                                                                    },
+                       "rowFilter.permit_requests.distance_miles":  {
+                                                                        "name":  "distance_miles",
+                                                                        "required":  false,
+                                                                        "in":  "query",
+                                                                        "type":  "string"
+                                                                    },
+                       "rowFilter.permit_requests.duration_hours":  {
+                                                                        "name":  "duration_hours",
+                                                                        "required":  false,
+                                                                        "in":  "query",
+                                                                        "type":  "string"
+                                                                    },
+                       "rowFilter.permit_requests.equipment":  {
+                                                                   "name":  "equipment",
+                                                                   "required":  false,
+                                                                   "in":  "query",
+                                                                   "type":  "string"
+                                                               },
+                       "rowFilter.permit_requests.cargo":  {
+                                                               "name":  "cargo",
+                                                               "required":  false,
+                                                               "in":  "query",
+                                                               "type":  "string"
+                                                           },
+                       "rowFilter.permit_requests.highways":  {
+                                                                  "name":  "highways",
+                                                                  "required":  false,
+                                                                  "in":  "query",
+                                                                  "type":  "string"
+                                                              },
+                       "rowFilter.permit_requests.user_preference_note":  {
+                                                                              "name":  "user_preference_note",
+                                                                              "required":  false,
+                                                                              "in":  "query",
+                                                                              "type":  "string"
+                                                                          },
+                       "rowFilter.permit_requests.routing_engine":  {
+                                                                        "name":  "routing_engine",
+                                                                        "required":  false,
+                                                                        "in":  "query",
+                                                                        "type":  "string"
+                                                                    },
+                       "rowFilter.permit_requests.origin_query":  {
+                                                                      "name":  "origin_query",
+                                                                      "required":  false,
+                                                                      "in":  "query",
+                                                                      "type":  "string"
+                                                                  },
+                       "rowFilter.permit_requests.destination_query":  {
+                                                                           "name":  "destination_query",
+                                                                           "required":  false,
+                                                                           "in":  "query",
+                                                                           "type":  "string"
+                                                                       },
+                       "rowFilter.permit_requests.drops":  {
+                                                               "name":  "drops",
+                                                               "required":  false,
+                                                               "in":  "query",
+                                                               "type":  "string"
+                                                           },
+                       "body.trailers":  {
+                                             "name":  "trailers",
+                                             "description":  "trailers",
+                                             "required":  false,
+                                             "in":  "body",
+                                             "schema":  {
+                                                            "$ref":  "#/definitions/trailers"
+                                                        }
+                                         },
+                       "rowFilter.trailers.id":  {
+                                                     "name":  "id",
+                                                     "required":  false,
+                                                     "in":  "query",
+                                                     "type":  "string"
+                                                 },
+                       "rowFilter.trailers.user_id":  {
+                                                          "name":  "user_id",
+                                                          "required":  false,
+                                                          "in":  "query",
+                                                          "type":  "string"
+                                                      },
+                       "rowFilter.trailers.name":  {
+                                                       "name":  "name",
+                                                       "required":  false,
+                                                       "in":  "query",
+                                                       "type":  "string"
+                                                   },
+                       "rowFilter.trailers.unit_number":  {
+                                                              "name":  "unit_number",
+                                                              "required":  false,
+                                                              "in":  "query",
+                                                              "type":  "string"
+                                                          },
+                       "rowFilter.trailers.vin":  {
+                                                      "name":  "vin",
+                                                      "required":  false,
+                                                      "in":  "query",
+                                                      "type":  "string"
+                                                  },
+                       "rowFilter.trailers.year":  {
+                                                       "name":  "year",
+                                                       "required":  false,
+                                                       "in":  "query",
+                                                       "type":  "string"
+                                                   },
+                       "rowFilter.trailers.make":  {
+                                                       "name":  "make",
+                                                       "required":  false,
+                                                       "in":  "query",
+                                                       "type":  "string"
+                                                   },
+                       "rowFilter.trailers.model":  {
+                                                        "name":  "model",
+                                                        "required":  false,
+                                                        "in":  "query",
+                                                        "type":  "string"
+                                                    },
+                       "rowFilter.trailers.color":  {
+                                                        "name":  "color",
+                                                        "required":  false,
+                                                        "in":  "query",
+                                                        "type":  "string"
+                                                    },
+                       "rowFilter.trailers.length_ft":  {
+                                                            "name":  "length_ft",
+                                                            "required":  false,
+                                                            "in":  "query",
+                                                            "type":  "string"
+                                                        },
+                       "rowFilter.trailers.kingpin_from_front_ft":  {
+                                                                        "name":  "kingpin_from_front_ft",
+                                                                        "required":  false,
+                                                                        "in":  "query",
+                                                                        "type":  "string"
+                                                                    },
+                       "rowFilter.trailers.kingpin_to_first_axle_ft":  {
+                                                                           "name":  "kingpin_to_first_axle_ft",
+                                                                           "required":  false,
+                                                                           "in":  "query",
+                                                                           "type":  "string"
+                                                                       },
+                       "rowFilter.trailers.axles":  {
+                                                        "name":  "axles",
+                                                        "required":  false,
+                                                        "in":  "query",
+                                                        "type":  "string"
+                                                    },
+                       "rowFilter.trailers.axle_spacing":  {
+                                                               "name":  "axle_spacing",
+                                                               "required":  false,
+                                                               "in":  "query",
+                                                               "type":  "string"
+                                                           },
+                       "rowFilter.trailers.lift_axle":  {
+                                                            "name":  "lift_axle",
+                                                            "required":  false,
+                                                            "in":  "query",
+                                                            "type":  "string"
+                                                        },
+                       "rowFilter.trailers.extendable":  {
+                                                             "name":  "extendable",
+                                                             "required":  false,
+                                                             "in":  "query",
+                                                             "type":  "string"
+                                                         },
+                       "rowFilter.trailers.extendable_extra_ft":  {
+                                                                      "name":  "extendable_extra_ft",
+                                                                      "required":  false,
+                                                                      "in":  "query",
+                                                                      "type":  "string"
+                                                                  },
+                       "rowFilter.trailers.notes":  {
+                                                        "name":  "notes",
+                                                        "required":  false,
+                                                        "in":  "query",
+                                                        "type":  "string"
+                                                    },
+                       "rowFilter.trailers.created_at":  {
+                                                             "name":  "created_at",
+                                                             "required":  false,
+                                                             "in":  "query",
+                                                             "type":  "string"
+                                                         },
+                       "rowFilter.trailers.updated_at":  {
+                                                             "name":  "updated_at",
+                                                             "required":  false,
+                                                             "in":  "query",
+                                                             "type":  "string"
+                                                         }
+                   },
+    "externalDocs":  {
+                         "description":  "PostgREST Documentation",
+                         "url":  "https://postgrest.org/en/v14/references/api.html"
+                     }
+}

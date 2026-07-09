@@ -1,0 +1,126 @@
+/** US state full name (lowercase) -> 2-letter code */
+export const US_STATE_NAME_TO_CODE: Record<string, string> = {
+  alabama: 'AL',
+  alaska: 'AK',
+  arizona: 'AZ',
+  arkansas: 'AR',
+  california: 'CA',
+  colorado: 'CO',
+  connecticut: 'CT',
+  delaware: 'DE',
+  florida: 'FL',
+  georgia: 'GA',
+  hawaii: 'HI',
+  idaho: 'ID',
+  illinois: 'IL',
+  indiana: 'IN',
+  iowa: 'IA',
+  kansas: 'KS',
+  kentucky: 'KY',
+  louisiana: 'LA',
+  maine: 'ME',
+  maryland: 'MD',
+  massachusetts: 'MA',
+  michigan: 'MI',
+  minnesota: 'MN',
+  mississippi: 'MS',
+  missouri: 'MO',
+  montana: 'MT',
+  nebraska: 'NE',
+  nevada: 'NV',
+  'new hampshire': 'NH',
+  'new jersey': 'NJ',
+  'new mexico': 'NM',
+  'new york': 'NY',
+  'north carolina': 'NC',
+  'north dakota': 'ND',
+  ohio: 'OH',
+  oklahoma: 'OK',
+  oregon: 'OR',
+  pennsylvania: 'PA',
+  'rhode island': 'RI',
+  'south carolina': 'SC',
+  'south dakota': 'SD',
+  tennessee: 'TN',
+  texas: 'TX',
+  utah: 'UT',
+  vermont: 'VT',
+  virginia: 'VA',
+  washington: 'WA',
+  'west virginia': 'WV',
+  wisconsin: 'WI',
+  wyoming: 'WY',
+  'district of columbia': 'DC',
+}
+
+/** 2-letter code -> full state name for Nominatim structured queries */
+export const STATE_CODE_TO_NAME: Record<string, string> = {
+  AL: 'Alabama',
+  AK: 'Alaska',
+  AZ: 'Arizona',
+  AR: 'Arkansas',
+  CA: 'California',
+  CO: 'Colorado',
+  CT: 'Connecticut',
+  DE: 'Delaware',
+  FL: 'Florida',
+  GA: 'Georgia',
+  HI: 'Hawaii',
+  ID: 'Idaho',
+  IL: 'Illinois',
+  IN: 'Indiana',
+  IA: 'Iowa',
+  KS: 'Kansas',
+  KY: 'Kentucky',
+  LA: 'Louisiana',
+  ME: 'Maine',
+  MD: 'Maryland',
+  MA: 'Massachusetts',
+  MI: 'Michigan',
+  MN: 'Minnesota',
+  MS: 'Mississippi',
+  MO: 'Missouri',
+  MT: 'Montana',
+  NE: 'Nebraska',
+  NV: 'Nevada',
+  NH: 'New Hampshire',
+  NJ: 'New Jersey',
+  NM: 'New Mexico',
+  NY: 'New York',
+  NC: 'North Carolina',
+  ND: 'North Dakota',
+  OH: 'Ohio',
+  OK: 'Oklahoma',
+  OR: 'Oregon',
+  PA: 'Pennsylvania',
+  RI: 'Rhode Island',
+  SC: 'South Carolina',
+  SD: 'South Dakota',
+  TN: 'Tennessee',
+  TX: 'Texas',
+  UT: 'Utah',
+  VT: 'Vermont',
+  VA: 'Virginia',
+  WA: 'Washington',
+  WV: 'West Virginia',
+  WI: 'Wisconsin',
+  WY: 'Wyoming',
+  DC: 'District of Columbia',
+}
+
+export const US_STATE_CODES = new Set(Object.values(US_STATE_NAME_TO_CODE))
+
+/** Sorted { code, name } pairs for license plate state dropdowns. */
+export const US_STATE_OPTIONS = Object.entries(STATE_CODE_TO_NAME)
+  .map(([code, name]) => ({ code, name }))
+  .sort((a, b) => a.name.localeCompare(b.name))
+
+/**
+ * Normalize and validate a 2-letter US state code for license plates.
+ * Returns uppercase code if valid, otherwise null.
+ */
+export function normalizeLicensePlateState(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const code = raw.trim().toUpperCase()
+  return code.length === 2 && US_STATE_CODES.has(code) ? code : null
+}

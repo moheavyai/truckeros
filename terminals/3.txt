@@ -1,0 +1,23 @@
+---
+pid: 20176
+cwd: "C:\Users\andre\truckeros"
+command: "node C:\\Users\\andre\\truckeros\\scripts\\live-geocode-variants.mjs"
+started_at: 2026-07-04T04:08:53.787Z
+running_for_ms: 304993   
+---
+=== FREETEXT ===
+1915 US-2, Minot, ND -> 48.2096542,-101.3111905 | Minot North Dakota | US Highway 2
+US-2, Minot, ND -> 48.2165552,-101.3319942 | Minot North Dakota | US Highway 2
+Northern Plains Equipment, Minot, ND -> NO RESULTS
+3484 I-94 Business Loop East, Dickinson, ND -> NO RESULTS
+I-94 Business Loop East, Dickinson, ND -> 46.8798699,-102.7580113 | Dickinson North Dakota | Interstate 94 Business Loop East
+West Plains, Dickinson, ND -> 46.8879607,-102.7275527 | Dickinson North Dakota | Highway 10
+West Plains Dickinson ND -> 46.8879607,-102.7275527 | Dickinson North Dakota | Highway 10
+3484 Interstate 94 Business Loop, Dickinson, ND -> 46.8798699,-102.7580113 | Dickinson North Dakota | Interstate 94 Business Loop East
+West Plains, 3484 Interstate 94 Business Loop East, Dickinson, North Dakota -> NO RESULTS
+
+=== STRUCTURED ===
+{"street":"1915 US Highway 2","city":"Minot","state":"North Dakota"} -> 48.2096542,-101.3111905 | Minot North Dakota | US Highway 2
+{"street":"3484 I-94 Business Loop East","city":"Dickinson","state":"North Dakota"} -> NO RESULTS
+{"street":"I-94 Business Loop East","city":"Dickinson","state":"North Dakota"} -> 46.8798699,-102.7580113 | Dickinson North Dakota | Interstate 94 Business Loop East
+{"street":"West Plains","city":"Dickinson","state":"North Dakota"} -> NO RESULTS

@@ -1,0 +1,14 @@
+---
+pid: 15976
+cwd: "C:\Users\andre\truckeros"
+command: "curl.exe -s http://127.0.0.1:8000/health"
+started_at: 2026-06-19T21:28:44.238Z
+running_for_ms: 0
+---
+{"status":"ok","service":"or-tools","version":"0.3.1"}
+
+---
+exit_code: 0
+elapsed_ms: 643587
+ended_at: 2026-06-19T21:39:27.000Z
+---

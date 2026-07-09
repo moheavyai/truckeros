@@ -4,19 +4,47 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import AppHeader from '@/components/AppHeader'
+import ActiveCarrierBanner from '@/components/ActiveCarrierBanner'
+import { useOrganizationContext } from '@/lib/organization-context'
+import {
+  equipmentOrganizationIdForSave,
+  equipmentProfilesLoadOrFilter,
+  shouldUseOrganizationEquipmentFilter,
+} from '@/lib/equipment-persistence'
+import {
+  fetchCarrierPrimaryOwnerUserId,
+  resolveEquipmentScope,
+} from '@/lib/service-mode-scope'
 import VehicleDiagram from '@/components/VehicleDiagram'
 import TractorGraphic from '@/components/TractorGraphic'
 import type { Tractor, Trailer, RigConfiguration } from '@/types/equipment'
-import { computeRigDimensions, FUTURE_FEATURES } from '@/types/equipment'
+import {
+  computeRigDimensions,
+  computeRigEmptyWeightLbs,
+  primaryTrailerDimensions,
+  sortRigsForDisplay,
+  FUTURE_FEATURES,
+} from '@/types/equipment'
+import { formatDimensionDisplay, formatRigSummaryLine } from '@/lib/parse-dimension'
+import { formatLicensePlateDisplay } from '@/lib/license-plate'
+import { normalizeLicensePlateState } from '@/lib/us-states'
+import DimensionInput from '@/components/DimensionInput'
+import LicensePlateFields from '@/components/LicensePlateFields'
 
 type Tab = 'tractors' | 'trailers' | 'builder' | 'saved'
 
 export default function EquipmentPage() {
   const [user, setUser] = useState<any>(null)
+  const [ownOrganizationId, setOwnOrganizationId] = useState<string | null>(null)
   const [loadingAuth, setLoadingAuth] = useState(true)
+  const [carrierPrimaryOwnerUserId, setCarrierPrimaryOwnerUserId] = useState<string | null>(null)
+  const [carrierPrimaryOwnerError, setCarrierPrimaryOwnerError] = useState<string | null>(null)
+  const [loadingPrimaryOwner, setLoadingPrimaryOwner] = useState(false)
   const router = useRouter()
+  const { workspaceMode, effectiveOrganizationId } = useOrganizationContext(ownOrganizationId)
+  const isServiceModeReadOnly = workspaceMode === 'service'
 
-  const [activeTab, setActiveTab] = useState<Tab>('builder')
+  const [activeTab, setActiveTab] = useState<Tab>('saved')
 
   // Data
   const [tractors, setTractors] = useState<Tractor[]>([])
@@ -34,6 +62,8 @@ export default function EquipmentPage() {
   const [selectedTrailerIds, setSelectedTrailerIds] = useState<string[]>([])
   const [rigName, setRigName] = useState('')
   const [builderNote, setBuilderNote] = useState('')
+  const [loadedRigId, setLoadedRigId] = useState<string | null>(null)
+  const [settingDefaultRigId, setSettingDefaultRigId] = useState<string | null>(null)
 
   // Derived for builder
   const currentTractor = tractors.find((t) => t.id === selectedTractorId) || null
@@ -46,11 +76,19 @@ export default function EquipmentPage() {
   // Auth guard (consistent with dashboard + permit-test)
   useEffect(() => {
     const supabase = createClient()
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
         router.push('/login')
       } else {
         setUser(session.user)
+        const { data: profile } = await supabase
+          .from('member_profiles')
+          .select('organization_id')
+          .eq('user_id', session.user.id)
+          .maybeSingle()
+        if (profile?.organization_id) {
+          setOwnOrganizationId(profile.organization_id)
+        }
       }
       setLoadingAuth(false)
     })
@@ -61,22 +99,74 @@ export default function EquipmentPage() {
     return () => listener.subscription.unsubscribe()
   }, [router])
 
-  // Load all equipment on auth
+  useEffect(() => {
+    if (!user || workspaceMode !== 'service' || !effectiveOrganizationId) {
+      setCarrierPrimaryOwnerUserId(null)
+      setCarrierPrimaryOwnerError(null)
+      setLoadingPrimaryOwner(false)
+      return
+    }
+
+    setLoadingPrimaryOwner(true)
+    setCarrierPrimaryOwnerError(null)
+    const supabase = createClient()
+    void fetchCarrierPrimaryOwnerUserId(supabase, effectiveOrganizationId)
+      .then((result) => {
+        setCarrierPrimaryOwnerUserId(result.userId)
+        setCarrierPrimaryOwnerError(result.error)
+      })
+      .finally(() => setLoadingPrimaryOwner(false))
+  }, [user, workspaceMode, effectiveOrganizationId])
+
+  // Load all equipment on auth and when service-mode carrier scope changes
   useEffect(() => {
     if (!loadingAuth && user) {
       loadAll()
     }
-  }, [loadingAuth, user])
+  }, [loadingAuth, user, workspaceMode, effectiveOrganizationId, carrierPrimaryOwnerUserId])
 
   async function loadAll() {
     setLoading(true)
     const supabase = createClient()
     try {
-      const { data, error } = await supabase
-        .from('equipment_profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
+      if (workspaceMode === 'service' && !effectiveOrganizationId) {
+        setTractors([])
+        setTrailers([])
+        setRigs([])
+        return
+      }
+
+      const scope = resolveEquipmentScope({
+        workspaceMode,
+        ownUserId: user.id,
+        ownOrganizationId,
+        effectiveOrganizationId,
+        carrierPrimaryOwnerUserId,
+      })
+
+      if (!scope.canLoadEquipment) {
+        setTractors([])
+        setTrailers([])
+        setRigs([])
+        return
+      }
+
+      let query = supabase.from('equipment_profiles').select('*').order('created_at', { ascending: false })
+
+      if (shouldUseOrganizationEquipmentFilter(scope) && scope.organizationId && scope.rigOwnerUserId) {
+        query = query.or(
+          equipmentProfilesLoadOrFilter(scope.organizationId, scope.rigOwnerUserId)
+        )
+      } else if (scope.rigOwnerUserId) {
+        query = query.eq('user_id', scope.rigOwnerUserId)
+      } else {
+        setTractors([])
+        setTrailers([])
+        setRigs([])
+        return
+      }
+
+      const { data, error } = await query
 
       if (error) {
         console.warn('equipment_profiles load', error)
@@ -120,7 +210,10 @@ export default function EquipmentPage() {
           axle_spacings: Array.isArray(d.meta.axle_spacings) ? d.meta.axle_spacings : [],
           fifth_wheel_from_rear_in: d.meta.fifth_wheel_from_rear_in ?? null,
           unit_number: d.meta.unit_number ?? d.row.unit_number ?? null,
+          license_plate: d.meta.license_plate ?? d.row.license_plate ?? null,
+          license_plate_state: normalizeLicensePlateState(d.meta.license_plate_state ?? d.row.license_plate_state) ?? null,
           vin: d.meta.vin ?? d.row.vin ?? null,
+          empty_weight_lbs: d.meta.empty_weight_lbs ?? null,
           year: d.meta.year ?? d.row.year ?? null,
           make: d.meta.make ?? d.row.make ?? null,
           model: d.meta.model ?? d.row.model ?? null,
@@ -146,6 +239,12 @@ export default function EquipmentPage() {
           is_extendable: !!d.meta.is_extendable,
           extendable_extra_ft: d.meta.extendable_extra_ft ?? 0,
           trailer_type: d.meta.trailer_type ?? d.row.trailer_make ?? null,
+          license_plate: d.meta.license_plate ?? d.row.license_plate ?? null,
+          license_plate_state: normalizeLicensePlateState(d.meta.license_plate_state ?? d.row.license_plate_state) ?? null,
+          vin: d.meta.vin ?? d.row.vin ?? null,
+          empty_weight_lbs: d.meta.empty_weight_lbs ?? null,
+          width_ft: d.meta.width_ft ?? null,
+          deck_height_ft: d.meta.deck_height_ft ?? null,
           make: d.meta.make ?? d.row.trailer_make ?? null,
           model: d.meta.model ?? d.row.trailer_model ?? null,
           year: d.meta.year ?? d.row.trailer_year ?? null,
@@ -168,6 +267,8 @@ export default function EquipmentPage() {
         computed_kingpin_to_last_axle_ft: d.meta.computed_kingpin_to_last_axle_ft ?? null,
         // _notes is how the RIGBUILDER structured payload (and tractor/trailer saves) stores the plain note text
         notes: d.meta.notes ?? d.meta._notes ?? d.plainNotes ?? null,
+        is_default: d.meta.is_default ?? false,
+        source: 'legacy' as const,
         created_at: d.row.created_at,
         updated_at: d.row.updated_at,
       })) as RigConfiguration[]
@@ -178,27 +279,31 @@ export default function EquipmentPage() {
       // Will become FKs into dedicated tables after the profile migration.
       let properRigs: RigConfiguration[] = []
       try {
-        const { data: rigRows, error: rigErr } = await supabase
-          .from('rig_configurations')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-        if (rigErr) {
-          if (!isMissingRelation(rigErr)) console.warn('[equipment] rig_configurations load error', rigErr)
-        } else if (rigRows) {
-          properRigs = (rigRows as any[]).map((r) => ({
-            id: r.id,
-            user_id: r.user_id,
-            rig_name: r.rig_name || '',
-            tractor_id: r.tractor_id || '',
-            trailer_ids: Array.isArray(r.trailer_ids) ? r.trailer_ids : [],
-            computed_total_length_ft: r.computed_total_length_ft ?? null,
-            computed_total_axles: r.computed_total_axles ?? null,
-            computed_kingpin_to_last_axle_ft: r.computed_kingpin_to_last_axle_ft ?? null,
-            notes: r.notes || null,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
-          })) as RigConfiguration[]
+        if (scope.canLoadRigs && scope.rigOwnerUserId) {
+          const { data: rigRows, error: rigErr } = await supabase
+            .from('rig_configurations')
+            .select('*')
+            .eq('user_id', scope.rigOwnerUserId)
+            .order('created_at', { ascending: false })
+          if (rigErr) {
+            if (!isMissingRelation(rigErr)) console.warn('[equipment] rig_configurations load error', rigErr)
+          } else if (rigRows) {
+            properRigs = (rigRows as any[]).map((r) => ({
+              id: r.id,
+              user_id: r.user_id,
+              rig_name: r.rig_name || '',
+              tractor_id: r.tractor_id || '',
+              trailer_ids: Array.isArray(r.trailer_ids) ? r.trailer_ids : [],
+              computed_total_length_ft: r.computed_total_length_ft ?? null,
+              computed_total_axles: r.computed_total_axles ?? null,
+              computed_kingpin_to_last_axle_ft: r.computed_kingpin_to_last_axle_ft ?? null,
+              notes: r.notes || null,
+              is_default: r.is_default ?? false,
+              source: 'rig_configurations' as const,
+              created_at: r.created_at,
+              updated_at: r.updated_at,
+            })) as RigConfiguration[]
+          }
         }
       } catch (e) {
         if (!isMissingRelation(e)) console.warn('[equipment] rig_configurations load skipped (unexpected error)', e)
@@ -360,6 +465,7 @@ export default function EquipmentPage() {
 
   // ========== TRACTOR CRUD ==========
   function startNewTractor() {
+    if (isServiceModeReadOnly) return
     setEditingTractor({
       profile_name: '',
       overall_length_ft: 28,
@@ -369,6 +475,8 @@ export default function EquipmentPage() {
       axle_spacings: [220, 48],
       fifth_wheel_from_rear_in: 24,
       unit_number: '',
+      license_plate: '',
+      license_plate_state: '',
       make: '',
       model: '',
     })
@@ -376,6 +484,7 @@ export default function EquipmentPage() {
   }
 
   async function saveTractor() {
+    if (isServiceModeReadOnly) return
     if (!safeProfileName(editingTractor?.profile_name)) {
       alert('Profile name is required')
       return
@@ -385,6 +494,8 @@ export default function EquipmentPage() {
     let payloadData: any = { ...editingTractor }
     // Use the single robust normalizer (handles string/ array /null /garbage / all the examples in task)
     payloadData.axle_spacings = normalizeAxleSpacings(payloadData.axle_spacings)
+    payloadData.license_plate = (payloadData.license_plate || '').trim().toUpperCase() || null
+    payloadData.license_plate_state = normalizeLicensePlateState(payloadData.license_plate_state)
 
     // Tractor-specific: ensure Wheelbase is always the real-time auto-calculated value
     // from the individual axle spacing fields the user entered (1-2 + 2-3/2 for tandem center).
@@ -405,12 +516,17 @@ export default function EquipmentPage() {
       axle_spacings: payloadData.axle_spacings ?? null,
       fifth_wheel_from_rear_in: payloadData.fifth_wheel_from_rear_in ?? null,
       unit_number: payloadData.unit_number ?? null,
+      license_plate: payloadData.license_plate ?? null,
+      license_plate_state: payloadData.license_plate_state ?? null,
       vin: payloadData.vin ?? null,
+      empty_weight_lbs: payloadData.empty_weight_lbs ?? null,
       year: payloadData.year ?? null,
       make: payloadData.make ?? null,
       model: payloadData.model ?? null,
       _notes: plainNotes,
     }
+
+    const organizationId = equipmentOrganizationIdForSave(ownOrganizationId)
 
     const dbPayload: any = {
       user_id: user.id,
@@ -418,6 +534,8 @@ export default function EquipmentPage() {
       name: safeProfileName(payloadData.profile_name),
       profile_name: safeProfileName(payloadData.profile_name),
       unit_number: payloadData.unit_number || null,
+      license_plate: payloadData.license_plate || null,
+      license_plate_state: payloadData.license_plate_state || null,
       vin: payloadData.vin || null,
       year: payloadData.year || null,
       make: payloadData.make || null,
@@ -425,6 +543,9 @@ export default function EquipmentPage() {
       axles: payloadData.num_axles || null,
       axle_spacing: axleSpacingForDb(payloadData.axle_spacings),
       notes: `RIGBUILDER:v1:${JSON.stringify(structured)}`,
+    }
+    if (organizationId) {
+      dbPayload.organization_id = organizationId
     }
 
     const { error } = editingTractor.id
@@ -440,6 +561,7 @@ export default function EquipmentPage() {
   }
 
   async function deleteTractor(id: string) {
+    if (isServiceModeReadOnly) return
     if (!confirm('Delete this tractor profile? (Any rigs using it will need updating)')) return
     const supabase = createClient()
     const { error } = await supabase
@@ -456,6 +578,7 @@ export default function EquipmentPage() {
 
   // ========== TRAILER CRUD ==========
   function startNewTrailer() {
+    if (isServiceModeReadOnly) return
     setEditingTrailer({
       profile_name: '',
       overall_length_ft: 53,
@@ -472,6 +595,7 @@ export default function EquipmentPage() {
   }
 
   async function saveTrailer() {
+    if (isServiceModeReadOnly) return
     if (!safeProfileName(editingTrailer?.profile_name)) {
       alert('Profile name is required')
       return
@@ -481,6 +605,8 @@ export default function EquipmentPage() {
     let payloadData: any = { ...editingTrailer }
     // Use the single robust normalizer (handles string/ array /null /garbage / all the examples in task)
     payloadData.axle_spacings = normalizeAxleSpacings(payloadData.axle_spacings)
+    payloadData.license_plate = (payloadData.license_plate || '').trim().toUpperCase() || null
+    payloadData.license_plate_state = normalizeLicensePlateState(payloadData.license_plate_state)
 
     const plainNotes = payloadData.notes || ''
     const structured = {
@@ -495,11 +621,19 @@ export default function EquipmentPage() {
       is_extendable: !!payloadData.is_extendable,
       extendable_extra_ft: payloadData.extendable_extra_ft ?? 0,
       trailer_type: payloadData.trailer_type ?? null,
+      license_plate: payloadData.license_plate ?? null,
+      license_plate_state: payloadData.license_plate_state ?? null,
+      vin: payloadData.vin ?? null,
+      empty_weight_lbs: payloadData.empty_weight_lbs ?? null,
+      width_ft: payloadData.width_ft ?? null,
+      deck_height_ft: payloadData.deck_height_ft ?? null,
       make: payloadData.make ?? null,
       model: payloadData.model ?? null,
       year: payloadData.year ?? null,
       _notes: plainNotes,
     }
+
+    const organizationId = equipmentOrganizationIdForSave(ownOrganizationId)
 
     const dbPayload: any = {
       user_id: user.id,
@@ -507,12 +641,17 @@ export default function EquipmentPage() {
       name: safeProfileName(payloadData.profile_name),
       profile_name: safeProfileName(payloadData.profile_name),
       make: payloadData.make || payloadData.trailer_type || null,
+      license_plate: payloadData.license_plate || null,
+      license_plate_state: payloadData.license_plate_state || null,
       model: payloadData.model || null,
       year: payloadData.year || null,
       length_ft: payloadData.overall_length_ft || null,
       axles: payloadData.num_axles || null,
       axle_spacing: axleSpacingForDb(payloadData.axle_spacings),
       notes: `RIGBUILDER:v1:${JSON.stringify(structured)}`,
+    }
+    if (organizationId) {
+      dbPayload.organization_id = organizationId
     }
 
     const { error } = editingTrailer.id
@@ -528,6 +667,7 @@ export default function EquipmentPage() {
   }
 
   async function deleteTrailer(id: string) {
+    if (isServiceModeReadOnly) return
     if (!confirm('Delete this trailer profile?')) return
     const supabase = createClient()
     const { error } = await supabase
@@ -556,9 +696,65 @@ export default function EquipmentPage() {
     setSelectedTrailerIds([])
     setRigName('')
     setBuilderNote('')
+    setLoadedRigId(null)
+  }
+
+  async function setDefaultRig(rigId: string) {
+    if (isServiceModeReadOnly) return
+    const rig = rigs.find((r) => r.id === rigId)
+    if (!rig) return
+    if (rig.source !== 'rig_configurations') {
+      alert('Default rig can only be set on saved configurations in the rig database. Re-save this rig from the builder.')
+      return
+    }
+    setSettingDefaultRigId(rigId)
+    const supabase = createClient()
+    try {
+      const { error: clearErr } = await supabase
+        .from('rig_configurations')
+        .update({ is_default: false })
+        .eq('user_id', user.id)
+        .eq('is_default', true)
+      if (clearErr && !isMissingRelation(clearErr)) throw clearErr
+
+      const { error: setErr } = await supabase
+        .from('rig_configurations')
+        .update({ is_default: true })
+        .eq('user_id', user.id)
+        .eq('id', rigId)
+      if (setErr) {
+        const isUniqueViolation =
+          setErr.code === '23505' || /unique|duplicate key/i.test(setErr.message || '')
+        if (isUniqueViolation) {
+          alert(
+            'Another rig was set as default at the same time. Refresh the page and try again if needed.'
+          )
+          await loadAll()
+          return
+        }
+        throw setErr
+      }
+
+      setRigs((prev) =>
+        prev.map((r) => ({
+          ...r,
+          is_default: r.id === rigId,
+        }))
+      )
+      void loadAll()
+    } catch (e: any) {
+      alert('Failed to set default rig: ' + (e?.message || e))
+    } finally {
+      setSettingDefaultRigId(null)
+    }
+  }
+
+  function loadRigIntoPermitAgent(rig: RigConfiguration) {
+    router.push(`/permit-test?rigId=${encodeURIComponent(rig.id)}`)
   }
 
   async function saveCurrentRig() {
+    if (isServiceModeReadOnly) return
     if (!selectedTractorId || selectedTrailerIds.length === 0) {
       alert('Select a tractor and at least one trailer')
       return
@@ -580,8 +776,7 @@ export default function EquipmentPage() {
       ? dims.totalLengthFt - dims.kingpinPositionsFt[0]
       : null;
 
-    const { error } = await supabase.from('rig_configurations').insert({
-      user_id: user.id,
+    const rigPayload = {
       rig_name: name,
       name: name,
       tractor_id: selectedTractorId,
@@ -590,18 +785,34 @@ export default function EquipmentPage() {
       computed_total_axles: dims.totalAxles,
       computed_kingpin_to_last_axle_ft: kingpinToLastAxleFt,
       notes: builderNote.trim() || null,
-    })
+    }
+
+    const editingExisting =
+      loadedRigId && rigs.find((r) => r.id === loadedRigId)?.source === 'rig_configurations'
+
+    const { error } = editingExisting
+      ? await supabase
+          .from('rig_configurations')
+          .update(rigPayload)
+          .eq('id', loadedRigId!)
+          .eq('user_id', user.id)
+      : await supabase.from('rig_configurations').insert({
+          user_id: user.id,
+          ...rigPayload,
+        })
+
     if (error) {
       alert('Failed to save rig: ' + error.message)
       return
     }
-    alert(`Saved rig "${name}"`)
+    alert(editingExisting ? `Updated rig "${name}"` : `Saved rig "${name}"`)
     await loadAll()
     setActiveTab('saved')
     clearBuilder()
   }
 
   async function deleteRig(id: string) {
+    if (isServiceModeReadOnly) return
     if (!confirm('Delete this saved rig configuration?')) return
     const supabase = createClient()
     // Support both legacy rigs (in equipment_profiles) and optional rig_configurations table.
@@ -640,8 +851,28 @@ export default function EquipmentPage() {
     setSelectedTrailerIds(rig.trailer_ids || [])
     setRigName(rig.rig_name)
     setBuilderNote(rig.notes || '')
+    setLoadedRigId(rig.id)
     setActiveTab('builder')
     window.scrollTo({ top: 120, behavior: 'smooth' })
+  }
+
+  function renderDefaultRigButton(rig: RigConfiguration, className = '') {
+    if (isServiceModeReadOnly) return null
+    const isDefault = !!rig.is_default
+    const canSetDefault = rig.source === 'rig_configurations'
+    const busy = settingDefaultRigId === rig.id
+    if (isDefault) return null
+    return (
+      <button
+        type="button"
+        onClick={() => setDefaultRig(rig.id)}
+        disabled={!canSetDefault || busy}
+        title={canSetDefault ? 'Use this rig automatically in Permit Agent' : 'Re-save from Rig Builder to enable default'}
+        className={`px-4 py-1.5 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 ${className}`}
+      >
+        {busy ? 'Saving…' : 'Make Default Rig'}
+      </button>
+    )
   }
 
   // ========== RENDER ==========
@@ -660,9 +891,28 @@ export default function EquipmentPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <AppHeader user={user} activePage="equipment" />
+      <AppHeader user={user} activePage="equipment" ownOrganizationId={ownOrganizationId} />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
+        <ActiveCarrierBanner ownOrganizationId={ownOrganizationId} />
+        {isServiceModeReadOnly && (
+          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Service Mode: equipment is read-only. Switch to Carrier Mode in the workspace bar to add or edit tractors, trailers, and rigs.
+          </div>
+        )}
+        {workspaceMode === 'service' && !effectiveOrganizationId && (
+          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Select a carrier in the workspace bar above to view that carrier&apos;s equipment.
+          </div>
+        )}
+        {workspaceMode === 'service' && effectiveOrganizationId && loadingPrimaryOwner && (
+          <p className="mb-4 text-sm text-gray-600">Resolving carrier equipment owner…</p>
+        )}
+        {workspaceMode === 'service' && effectiveOrganizationId && carrierPrimaryOwnerError && (
+          <p className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Could not load carrier rigs: {carrierPrimaryOwnerError}. Tractor/trailer profiles may still load by organization.
+          </p>
+        )}
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div>
@@ -680,10 +930,10 @@ export default function EquipmentPage() {
         {/* Tabs */}
         <div className="flex gap-1 border-b mb-6">
           {([
-            { k: 'builder', label: 'Rig Builder' },
+            { k: 'saved', label: 'Saved Rigs' },
             { k: 'tractors', label: 'Tractors' },
             { k: 'trailers', label: 'Trailers' },
-            { k: 'saved', label: 'Saved Rigs' },
+            { k: 'builder', label: 'Rig Builder' },
           ] as const).map((t) => (
             <button
               key={t.k}
@@ -716,9 +966,14 @@ export default function EquipmentPage() {
                     className="w-full border border-gray-300 rounded-xl p-3 text-sm"
                   >
                     <option value="">— Select tractor —</option>
-                    {tractors.map((t) => (
-                      <option key={t.id} value={t.id}>{t.profile_name} {t.unit_number ? `(#${t.unit_number})` : ''} — {t.overall_length_ft || '?'} ft</option>
-                    ))}
+                    {tractors.map((t) => {
+                      const plate = formatLicensePlateDisplay(t.license_plate, t.license_plate_state)
+                      return (
+                        <option key={t.id} value={t.id}>
+                          {t.profile_name}{t.unit_number ? ` (#${t.unit_number})` : ''}{plate ? ` • ${plate}` : ''} — {t.overall_length_ft || '?'} ft
+                        </option>
+                      )
+                    })}
                   </select>
                   {tractors.length === 0 && <p className="text-xs text-amber-600 mt-1">No tractors yet. Add one in the Tractors tab.</p>}
                 </div>
@@ -734,11 +989,18 @@ export default function EquipmentPage() {
                       <option value="">— Select trailer to add —</option>
                       {trailers
                         .filter((tr) => !selectedTrailerIds.includes(tr.id))
-                        .map((tr) => (
-                          <option key={tr.id} value={tr.id}>{tr.profile_name} — {tr.overall_length_ft || '?'} ft</option>
-                        ))}
+                        .map((tr) => {
+                          const plate = formatLicensePlateDisplay(tr.license_plate, tr.license_plate_state)
+                          return (
+                            <option key={tr.id} value={tr.id}>
+                              {tr.profile_name}{plate ? ` • ${plate}` : ''} — {tr.overall_length_ft || '?'} ft
+                            </option>
+                          )
+                        })}
                     </select>
-                    <button onClick={startNewTrailer} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium">+ New Trailer</button>
+                    {!isServiceModeReadOnly && (
+                      <button onClick={startNewTrailer} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium">+ New Trailer</button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -748,13 +1010,38 @@ export default function EquipmentPage() {
                 <div className="mb-4">
                   <div className="text-xs font-semibold text-gray-600 mb-1">CURRENT COMBINATION ({selectedTrailerIds.length} trailer{selectedTrailerIds.length > 1 ? 's' : ''})</div>
                   <div className="flex flex-wrap gap-2">
-                    {currentTrailers.map((tr, idx) => (
-                      <div key={idx} className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1 rounded-full text-sm">
-                        {tr.profile_name}
-                        <button onClick={() => removeTrailerFromBuild(idx)} className="text-emerald-600 hover:text-red-600 ml-1">×</button>
-                      </div>
-                    ))}
+                    {currentTrailers.map((tr, idx) => {
+                      const plate = formatLicensePlateDisplay(tr.license_plate, tr.license_plate_state)
+                      return (
+                        <div key={idx} className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1 rounded-full text-sm">
+                          {tr.profile_name}{plate ? ` • ${plate}` : ''}
+                          <button onClick={() => removeTrailerFromBuild(idx)} className="text-emerald-600 hover:text-red-600 ml-1">×</button>
+                        </div>
+                      )
+                    })}
                   </div>
+                </div>
+              )}
+
+              {(currentTractor || currentTrailers.length > 0) && (
+                <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-gray-600">
+                  {currentTractor && (
+                    <div className="bg-gray-50 border rounded-lg px-3 py-2">
+                      <span className="font-semibold text-gray-700">Tractor plate:</span>{' '}
+                      <span className="font-mono text-gray-800">
+                        {formatLicensePlateDisplay(currentTractor.license_plate, currentTractor.license_plate_state) || '—'}
+                      </span>
+                    </div>
+                  )}
+                  {currentTrailers.map((tr, idx) => {
+                    const plate = formatLicensePlateDisplay(tr.license_plate, tr.license_plate_state)
+                    return (
+                      <div key={tr.id || idx} className="bg-gray-50 border rounded-lg px-3 py-2">
+                        <span className="font-semibold text-gray-700">Trailer {idx + 1} plate:</span>{' '}
+                        <span className="font-mono text-gray-800">{plate || '—'}</span>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
 
@@ -794,6 +1081,7 @@ export default function EquipmentPage() {
               })()}
 
               {/* Save controls */}
+              {!isServiceModeReadOnly && (
               <div className="mt-5 grid md:grid-cols-[1fr,auto] gap-3 items-end">
                 <div>
                   <label className="text-xs font-medium text-gray-600">Rig Name (saved for quick selection in analyses)</label>
@@ -810,17 +1098,27 @@ export default function EquipmentPage() {
                     className="mt-2 w-full border p-2 rounded-xl text-sm h-16"
                   />
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={clearBuilder} className="px-5 py-3 border rounded-xl text-sm">Clear</button>
-                  <button
-                    onClick={saveCurrentRig}
-                    disabled={!selectedTractorId || selectedTrailerIds.length === 0}
-                    className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white font-semibold rounded-xl text-sm"
-                  >
-                    Save Rig Configuration
-                  </button>
+                <div className="flex flex-col gap-2 items-stretch sm:items-end">
+                  <div className="flex gap-2">
+                    <button onClick={clearBuilder} className="px-5 py-3 border rounded-xl text-sm">Clear</button>
+                    <button
+                      onClick={saveCurrentRig}
+                      disabled={!selectedTractorId || selectedTrailerIds.length === 0}
+                      className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white font-semibold rounded-xl text-sm"
+                    >
+                      {loadedRigId && rigs.find((r) => r.id === loadedRigId)?.source === 'rig_configurations'
+                        ? 'Update Rig Configuration'
+                        : 'Save Rig Configuration'}
+                    </button>
+                  </div>
+                  {loadedRigId && (() => {
+                    const loadedRig = rigs.find((r) => r.id === loadedRigId)
+                    if (!loadedRig) return null
+                    return renderDefaultRigButton(loadedRig, 'w-full sm:w-auto text-center')
+                  })()}
                 </div>
               </div>
+              )}
             </div>
 
             {/* Future placeholders */}
@@ -835,13 +1133,15 @@ export default function EquipmentPage() {
           <div>
             <div className="flex justify-between items-center mb-3">
               <div className="font-semibold">My Tractors ({tractors.length})</div>
-              <button onClick={startNewTractor} className="px-4 py-2 bg-black text-white text-sm rounded-lg">+ New Tractor Profile</button>
+              {!isServiceModeReadOnly && (
+                <button onClick={startNewTractor} className="px-4 py-2 bg-black text-white text-sm rounded-lg">+ New Tractor Profile</button>
+              )}
             </div>
 
-            {editingTractor && (
+            {editingTractor && !isServiceModeReadOnly && (
               <div className="mb-6 bg-white border border-emerald-200 rounded-2xl p-5">
                 <div className="font-semibold mb-3">Tractor Profile</div>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                   {[
                     ['Profile Name *', 'profile_name', 'text'],
                     ['Overall Length (ft)', 'overall_length_ft', 'number'],
@@ -850,6 +1150,8 @@ export default function EquipmentPage() {
                     ['Wheelbase (auto-calculated, in)', 'wheelbase_in', 'number'],
                     ['5th Wheel from Rear (in)', 'fifth_wheel_from_rear_in', 'number'],
                     ['Unit #', 'unit_number', 'text'],
+                    ['Tractor VIN', 'vin', 'text'],
+                    ['Empty Weight (lbs)', 'empty_weight_lbs', 'number'],
                     ['Make', 'make', 'text'],
                     ['Model', 'model', 'text'],
                   ].map(([label, key, type]) => (
@@ -860,7 +1162,7 @@ export default function EquipmentPage() {
                           type="number"
                           value={computeWheelbase(editingTractor.axle_spacings) ?? (editingTractor as any)[key] ?? ''}
                           readOnly
-                          className="border p-2 rounded w-full mt-0.5 bg-gray-100 text-gray-600 cursor-not-allowed"
+                          className="border p-1.5 rounded w-full mt-0.5 bg-gray-100 text-gray-600 cursor-not-allowed text-sm"
                           title="Auto-calculated from axle spacings: 1-2 + (2-3 / 2) — center of tandem drive group for 5th wheel positioning"
                         />
                       ) : (
@@ -878,11 +1180,30 @@ export default function EquipmentPage() {
                               setEditingTractor({ ...editingTractor, [key]: v })
                             }
                           }}
-                          className="border p-2 rounded w-full mt-0.5"
+                          className="border p-1.5 rounded w-full mt-0.5 text-sm"
                         />
                       )}
                     </div>
                   ))}
+                  <LicensePlateFields
+                    idPrefix={`tractor-${editingTractor.id ?? 'new'}`}
+                    plate={editingTractor.license_plate}
+                    state={editingTractor.license_plate_state}
+                    onPlateChange={(value) =>
+                      setEditingTractor((prev) => (prev ? { ...prev, license_plate: value } : prev))
+                    }
+                    onStateChange={(value) =>
+                      setEditingTractor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              license_plate_state:
+                                normalizeLicensePlateState(value) ?? (value ? value.toUpperCase() : ''),
+                            }
+                          : prev
+                      )
+                    }
+                  />
                   <AxleSpacingsInputs
                     numAxles={editingTractor.num_axles}
                     spacings={editingTractor.axle_spacings}
@@ -925,6 +1246,13 @@ export default function EquipmentPage() {
                   <div className="text-[11px] text-gray-600 space-y-0.5">
                     <div>Length: <b>{t.overall_length_ft || '?'} ft</b> • Axles: <b>{t.num_axles || 3}</b></div>
                     <div>5th: {t.fifth_wheel_from_rear_in || '?'} in • WB: {t.wheelbase_in || '?'} in</div>
+                    {formatLicensePlateDisplay(t.license_plate, t.license_plate_state) && (
+                      <div>Plate: <span className="font-mono">{formatLicensePlateDisplay(t.license_plate, t.license_plate_state)}</span></div>
+                    )}
+                    {t.vin && <div>VIN: <span className="font-mono">{t.vin}</span></div>}
+                    {t.empty_weight_lbs ? (
+                      <div>Empty: <b>{Number(t.empty_weight_lbs).toLocaleString()} lbs</b></div>
+                    ) : null}
                   </div>
 
                   {/* Tractor graphic preview (now consistent via shared component) */}
@@ -936,10 +1264,12 @@ export default function EquipmentPage() {
                     />
                   </div>
 
-                  <div className="mt-auto pt-3 flex gap-2 text-xs">
-                    <button onClick={() => setEditingTractor(t)} className="text-emerald-700 hover:underline">Edit</button>
-                    <button onClick={() => deleteTractor(t.id)} className="text-red-600 hover:underline">Delete</button>
-                  </div>
+                  {!isServiceModeReadOnly && (
+                    <div className="mt-auto pt-3 flex gap-2 text-xs">
+                      <button onClick={() => setEditingTractor(t)} className="text-emerald-700 hover:underline">Edit</button>
+                      <button onClick={() => deleteTractor(t.id)} className="text-red-600 hover:underline">Delete</button>
+                    </div>
+                  )}
                 </div>
               ))}
               {tractors.length === 0 && <div className="text-sm text-gray-500 col-span-2">No tractors saved yet. Create your first one above.</div>}
@@ -952,19 +1282,23 @@ export default function EquipmentPage() {
           <div>
             <div className="flex justify-between items-center mb-3">
               <div className="font-semibold">My Trailers ({trailers.length})</div>
-              <button onClick={startNewTrailer} className="px-4 py-2 bg-black text-white text-sm rounded-lg">+ New Trailer Profile</button>
+              {!isServiceModeReadOnly && (
+                <button onClick={startNewTrailer} className="px-4 py-2 bg-black text-white text-sm rounded-lg">+ New Trailer Profile</button>
+              )}
             </div>
 
-            {editingTrailer && (
+            {editingTrailer && !isServiceModeReadOnly && (
               <div className="mb-6 bg-white border border-emerald-200 rounded-2xl p-5">
                 <div className="font-semibold mb-3">Trailer Profile</div>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                   {[
                     ['Profile Name *', 'profile_name', 'text'],
                     ['Overall Length (ft)', 'overall_length_ft', 'number'],
                     ['Kingpin from Front (in)', 'kingpin_distance_from_front_in', 'number'],
                     ['# Axles', 'num_axles', 'number'],
                     ['Kingpin → 1st Axle (in)', 'kingpin_to_first_axle_in', 'number'],
+                    ['Trailer VIN', 'vin', 'text'],
+                    ['Empty Weight (lbs)', 'empty_weight_lbs', 'number'],
                     ['Extendable Extra (ft)', 'extendable_extra_ft', 'number'],
                   ].map(([label, key, type]) => (
                     <div key={key}>
@@ -982,13 +1316,42 @@ export default function EquipmentPage() {
                           setEditingTrailer({ ...editingTrailer, [key]: v })
                         }
                       }}
-                        className="border p-2 rounded w-full mt-0.5"
+                        className="border p-1.5 rounded w-full mt-0.5 text-sm"
                       />
                     </div>
                   ))}
+                  <LicensePlateFields
+                    idPrefix={`trailer-${editingTrailer.id ?? 'new'}`}
+                    plate={editingTrailer.license_plate}
+                    state={editingTrailer.license_plate_state}
+                    onPlateChange={(value) =>
+                      setEditingTrailer((prev) => (prev ? { ...prev, license_plate: value } : prev))
+                    }
+                    onStateChange={(value) =>
+                      setEditingTrailer((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              license_plate_state:
+                                normalizeLicensePlateState(value) ?? (value ? value.toUpperCase() : ''),
+                            }
+                          : prev
+                      )
+                    }
+                  />
+                  <DimensionInput
+                    label="Trailer Width"
+                    value={editingTrailer.width_ft ?? ''}
+                    onChange={(ft) => setEditingTrailer({ ...editingTrailer, width_ft: ft })}
+                  />
+                  <DimensionInput
+                    label="Deck Height"
+                    value={editingTrailer.deck_height_ft ?? ''}
+                    onChange={(ft) => setEditingTrailer({ ...editingTrailer, deck_height_ft: ft })}
+                  />
                   <div>
                     <label className="text-[11px] text-gray-600">Trailer Type</label>
-                    <input value={editingTrailer.trailer_type || ''} onChange={(e) => setEditingTrailer({ ...editingTrailer, trailer_type: e.target.value })} className="border p-2 rounded w-full mt-0.5" />
+                    <input value={editingTrailer.trailer_type || ''} onChange={(e) => setEditingTrailer({ ...editingTrailer, trailer_type: e.target.value })} className="border p-1.5 rounded w-full mt-0.5 text-sm" />
                   </div>
                   <div className="flex items-center gap-4 pt-5 text-sm">
                     <label className="flex items-center gap-1.5 cursor-pointer">
@@ -1035,9 +1398,23 @@ export default function EquipmentPage() {
                 <div key={tr.id} className="bg-white border rounded-xl p-4 text-sm">
                   <div className="font-semibold">{tr.profile_name}</div>
                   <div className="text-xs text-gray-500">{tr.trailer_type || 'Trailer'} • {tr.overall_length_ft || '?'} ft • {tr.num_axles || 2} axles</div>
-                  <div className="text-[12px] mt-1 text-gray-600">
-                    Kingpin from nose: {tr.kingpin_distance_from_front_in || '?'} in • KP to axle: {tr.kingpin_to_first_axle_in || '?'} in
-                    {tr.has_lift_axle && ' • Lift axle'} {tr.is_extendable && ` • Extendable +${tr.extendable_extra_ft || 0} ft`}
+                  <div className="text-[12px] mt-1 text-gray-600 space-y-0.5">
+                    <div>
+                      Kingpin from nose: {tr.kingpin_distance_from_front_in || '?'} in • KP to axle: {tr.kingpin_to_first_axle_in || '?'} in
+                      {tr.has_lift_axle && ' • Lift axle'} {tr.is_extendable && ` • Extendable +${tr.extendable_extra_ft || 0} ft`}
+                    </div>
+                    {formatLicensePlateDisplay(tr.license_plate, tr.license_plate_state) && (
+                      <div>Plate: <span className="font-mono">{formatLicensePlateDisplay(tr.license_plate, tr.license_plate_state)}</span></div>
+                    )}
+                    {tr.vin && <div>VIN: <span className="font-mono">{tr.vin}</span></div>}
+                    {tr.empty_weight_lbs ? <div>Empty: <b>{Number(tr.empty_weight_lbs).toLocaleString()} lbs</b></div> : null}
+                    {(tr.width_ft || tr.deck_height_ft) ? (
+                      <div>
+                        {tr.width_ft ? <>Width: <b>{formatDimensionDisplay(Number(tr.width_ft))}</b></> : null}
+                        {tr.width_ft && tr.deck_height_ft ? ' • ' : null}
+                        {tr.deck_height_ft ? <>Deck: <b>{formatDimensionDisplay(Number(tr.deck_height_ft))}</b></> : null}
+                      </div>
+                    ) : null}
                   </div>
 
                   {/* Compact graphic preview - restored to bottom centered */}
@@ -1051,10 +1428,12 @@ export default function EquipmentPage() {
                     />
                   </div>
 
-                  <div className="mt-3 flex gap-2 text-xs">
-                    <button onClick={() => setEditingTrailer(tr)} className="text-emerald-700 hover:underline">Edit</button>
-                    <button onClick={() => deleteTrailer(tr.id)} className="text-red-600 hover:underline">Delete</button>
-                  </div>
+                  {!isServiceModeReadOnly && (
+                    <div className="mt-3 flex gap-2 text-xs">
+                      <button onClick={() => setEditingTrailer(tr)} className="text-emerald-700 hover:underline">Edit</button>
+                      <button onClick={() => deleteTrailer(tr.id)} className="text-red-600 hover:underline">Delete</button>
+                    </div>
+                  )}
                 </div>
               ))}
               {trailers.length === 0 && <div className="text-sm text-gray-500">No trailers saved. Create your first one.</div>}
@@ -1067,28 +1446,65 @@ export default function EquipmentPage() {
           <div>
             <div className="flex justify-between mb-3 items-center">
               <div className="font-semibold">Saved Rig Configurations ({rigs.length}) — ready to use in analyses</div>
-              <button onClick={() => setActiveTab('builder')} className="text-sm px-3 py-1.5 border rounded-lg">+ Build New Rig</button>
+              {!isServiceModeReadOnly && (
+                <button onClick={() => setActiveTab('builder')} className="text-sm px-3 py-1.5 border rounded-lg">+ Build New Rig</button>
+              )}
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
-              {rigs.map((rig) => {
+              {sortRigsForDisplay(rigs).map((rig) => {
                 const tr = tractors.find((t) => t.id === rig.tractor_id)
                 const rigTrailers = (rig.trailer_ids || [])
                   .map((id: string) => trailers.find((trr: Trailer) => trr.id === id))
                   .filter(Boolean) as Trailer[]
+                const primaryTrailer = primaryTrailerDimensions(rigTrailers)
+                const rigEmptyWt = computeRigEmptyWeightLbs(tr, rigTrailers)
+                const summaryLine = formatRigSummaryLine({
+                  name: rig.rig_name,
+                  lengthFt: rig.computed_total_length_ft,
+                  widthFt: primaryTrailer.widthFt,
+                  heightFt: primaryTrailer.deckHeightFt,
+                  weightLbs: rigEmptyWt,
+                })
                 return (
                   <div key={rig.id} className="bg-white border rounded-2xl p-5">
                     <div className="flex justify-between">
                       <div>
-                        <div className="font-semibold text-lg tracking-tight">{rig.rig_name}</div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="font-semibold text-lg tracking-tight">{rig.rig_name}</div>
+                          {rig.is_default && (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              Default
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs text-emerald-700">{rig.computed_total_length_ft?.toFixed(1) || '?'} ft total • {rig.computed_total_axles || '?'} axles</div>
                       </div>
-                      <button onClick={() => deleteRig(rig.id)} className="text-xs text-red-500 self-start">Delete</button>
+                      {!isServiceModeReadOnly && (
+                        <button onClick={() => deleteRig(rig.id)} className="text-xs text-red-500 self-start">Delete</button>
+                      )}
+                    </div>
+
+                    <div className="mt-2 text-[11px] font-mono text-gray-800 bg-gray-50 border rounded-lg px-2 py-1.5">
+                      {summaryLine}
                     </div>
 
                     <div className="mt-3 text-sm text-gray-600">
                       Tractor: <span className="font-medium text-gray-800">{tr?.profile_name || 'Unknown'}</span><br />
                       Trailers: {(rig.trailer_ids || []).length}
+                    </div>
+
+                    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-gray-600">
+                      <div>Tractor plate: <span className="font-mono text-gray-800">{formatLicensePlateDisplay(tr?.license_plate, tr?.license_plate_state) || '—'}</span></div>
+                      <div>Trailer plate: <span className="font-mono text-gray-800">{formatLicensePlateDisplay(primaryTrailer.licensePlate, primaryTrailer.licensePlateState) || '—'}</span></div>
+                      <div>Tractor VIN: <span className="font-mono text-gray-800">{tr?.vin || '—'}</span></div>
+                      <div>Trailer VIN: <span className="font-mono text-gray-800">{primaryTrailer.vin || '—'}</span></div>
+                      <div>Tractor empty: <b>{tr?.empty_weight_lbs ? `${Number(tr.empty_weight_lbs).toLocaleString()} lbs` : '—'}</b></div>
+                      <div>Trailer empty: <b>{primaryTrailer.emptyWeightLbs ? `${Number(primaryTrailer.emptyWeightLbs).toLocaleString()} lbs` : '—'}</b></div>
+                      <div>Rig empty: <b>{rigEmptyWt ? `${rigEmptyWt.toLocaleString()} lbs` : '—'}</b></div>
+                      <div>Trailer width: <b>{primaryTrailer.widthFt ? formatDimensionDisplay(Number(primaryTrailer.widthFt)) : '—'}</b></div>
+                      <div>Deck height: <b>{primaryTrailer.deckHeightFt ? formatDimensionDisplay(Number(primaryTrailer.deckHeightFt)) : '—'}</b></div>
+                      <div>Rig length: <b>{rig.computed_total_length_ft ? `${Number(rig.computed_total_length_ft).toFixed(1)} ft` : '—'}</b></div>
                     </div>
 
                     {/* Compact graphic preview of the full rig */}
@@ -1102,18 +1518,29 @@ export default function EquipmentPage() {
                       />
                     </div>
 
-                    <button
-                      onClick={() => loadRigIntoBuilder(rig)}
-                      className="mt-4 text-sm px-4 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
-                    >
-                      Load into Builder / Preview
-                    </button>
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => loadRigIntoPermitAgent(rig)}
+                        className="text-sm px-4 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                      >
+                        Load into Permit Agent
+                      </button>
+                      {!isServiceModeReadOnly && (
+                        <button
+                          onClick={() => loadRigIntoBuilder(rig)}
+                          className="text-sm px-4 py-1.5 border rounded-lg hover:bg-gray-50"
+                        >
+                          Edit in Builder
+                        </button>
+                      )}
+                      {renderDefaultRigButton(rig)}
+                    </div>
                   </div>
                 )
               })}
               {rigs.length === 0 && (
                 <div className="text-sm text-gray-500 col-span-2 bg-white border rounded-2xl p-6">
-                  No saved rigs yet. Use the <b>Rig Builder</b> tab to create your first tractor + trailer combination.
+                  No saved rigs yet. You&apos;re on <b>Saved Rigs</b> — open the <b>Rig Builder</b> tab to create your first tractor + trailer combination.
                 </div>
               )}
             </div>

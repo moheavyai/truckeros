@@ -11,6 +11,7 @@
 
 import type { LoadDetails } from '@/agents/permit-agent'
 import type { StatePermitRule } from '@/types/permit'
+import { needsLengthPermit } from '@/lib/permit-length'
 
 export interface CostBreakdown {
   total: number
@@ -78,7 +79,7 @@ export function calculateEstimatedCost(
   // Determine oversize conditions
   const isWidthOversize = load.width > 8.5
   const isHeightOversize = load.height > 13.5
-  const isLengthOversize = load.length > 53
+  const isLengthOversize = needsLengthPermit(load.length, load.trailerLengthFt)
   const isOverweight = load.weight > 80000
 
   const surcharges: CostBreakdown['surcharges'] = {}

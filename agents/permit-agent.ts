@@ -1,11 +1,20 @@
 // agents/permit-agent.ts
 
 import { buildIntelligentCorridor, type CorridorResult } from '@/lib/build-corridor'
+import { hasValidCoords } from '@/lib/location-stop'
 import { snapToStateHighway } from '@/lib/snap-highway'
 import type { RoutingEngine } from '@/lib/routing'
 import { supabase } from '@/lib/supabase'
 import type { StatePermitRule } from '@/types/permit'
 import { calculateEstimatedCost, type CostBreakdown } from '@/lib/cost-engine'
+import {
+  effectiveEnvelopeLengthThreshold,
+  needsLengthPermit,
+} from '@/lib/permit-length'
+import {
+  analyzeEscortRequirements,
+  type StateEscortDetail,
+} from '@/lib/escort-analysis'
 
 // NEW: Open State DOT corridor restrictions (priority 12 states)
 import {
@@ -30,15 +39,23 @@ function exceedsCorridorRestriction(load: LoadDetails, r: CorridorRestriction): 
 }
 
 export interface Address {
+  query?: string
   street?: string
   city: string
   state: string
   zip?: string
 }
 
+export type DropStop = Address & {
+  lat?: number
+  lon?: number
+}
+
 export interface LoadDetails {
   origin: Address
   destination: Address
+  /** Ordered delivery stops (pickup is origin; last drop syncs to destination). */
+  drops?: DropStop[]
   weight: number
   length: number
   width: number
@@ -61,6 +78,9 @@ export interface LoadDetails {
   // NEW: Optional raw special instructions / route preferences (e.g. "avoid CA, prefer southern route, I-40").
   // Threaded to buildIntelligentCorridor for filtering/reranking. Override (manualRoute array) takes precedence.
   specialInstructions?: string
+
+  // Trailer/rig length (ft), separate from routing envelope `length`.
+  trailerLengthFt?: number
 }
 
 export interface AnalyzedRouteOption {
@@ -72,6 +92,8 @@ export interface AnalyzedRouteOption {
 
   // Richer intelligence from state_permit_rules + DOT corridor data
   escortRequiredStates: string[]
+  escortWarnings?: string[]
+  escortDetails?: StateEscortDetail[]
   curfewNotes: string[]
   specialNotes: string[]
   seasonalWeightRestrictions?: string[]
@@ -125,11 +147,103 @@ function validateLoadDetails(details: LoadDetails): string[] {
   if (!details.origin?.state) missing.push('origin.state')
   if (!details.destination?.city) missing.push('destination.city')
   if (!details.destination?.state) missing.push('destination.state')
-  if (!details.weight || details.weight <= 0) missing.push('weight')
-  if (!details.length || details.length <= 0) missing.push('length')
-  if (!details.width || details.width <= 0) missing.push('width')
-  if (!details.height || details.height <= 0) missing.push('height')
+  if (!Number.isFinite(details.weight) || details.weight <= 0) missing.push('weight')
+  if (!Number.isFinite(details.length) || details.length <= 0) missing.push('length')
+  if (!Number.isFinite(details.width) || details.width <= 0) missing.push('width')
+  if (!Number.isFinite(details.height) || details.height <= 0) missing.push('height')
   return missing
+}
+
+type RoutedStop = { lat: number; lon: number; state?: string }
+
+function getOrderedStops(load: LoadDetails): RoutedStop[] {
+  const stops: RoutedStop[] = []
+  if (hasValidCoords(load.originLat, load.originLon)) {
+    stops.push({
+      lat: load.originLat!,
+      lon: load.originLon!,
+      state: load.origin?.state,
+    })
+  }
+  if (load.drops && load.drops.length > 0) {
+    for (const d of load.drops) {
+      if (hasValidCoords(d.lat, d.lon)) {
+        stops.push({ lat: d.lat!, lon: d.lon!, state: d.state })
+      }
+    }
+  } else if (hasValidCoords(load.destinationLat, load.destinationLon)) {
+    stops.push({
+      lat: load.destinationLat!,
+      lon: load.destinationLon!,
+      state: load.destination?.state,
+    })
+  }
+  return stops
+}
+
+function mergeCorridorLegs(legs: CorridorResult[]): CorridorResult {
+  const merged: CorridorResult = {
+    routeCorridor: [],
+    highways: [],
+    distanceMeters: 0,
+    durationSeconds: 0,
+    engine: legs[0]?.engine,
+    engineNote: legs.map((l) => l.engineNote).filter(Boolean).join('; ') || undefined,
+    userPreferenceNote: legs.map((l) => l.userPreferenceNote).filter(Boolean).join('; ') || undefined,
+  }
+
+  for (const leg of legs) {
+    for (const st of leg.routeCorridor) {
+      const last = merged.routeCorridor[merged.routeCorridor.length - 1]
+      if (last !== st) merged.routeCorridor.push(st)
+    }
+    if (leg.highways?.length) {
+      merged.highways = [...(merged.highways || []), ...leg.highways]
+    }
+    merged.distanceMeters = (merged.distanceMeters || 0) + (leg.distanceMeters || 0)
+    merged.durationSeconds = (merged.durationSeconds || 0) + (leg.durationSeconds || 0)
+    if (leg.permitReady) merged.permitReady = true
+    if (leg.permitWarnings?.length) {
+      merged.permitWarnings = [...(merged.permitWarnings || []), ...leg.permitWarnings]
+    }
+  }
+
+  return merged
+}
+
+async function buildMultiLegCorridor(load: LoadDetails): Promise<CorridorResult[]> {
+  const stops = getOrderedStops(load)
+  if (stops.length < 2) return []
+
+  const routingEngine: RoutingEngine = load.routingEngine || 'osrm'
+  const legs: CorridorResult[] = []
+
+  for (let i = 0; i < stops.length - 1; i++) {
+    const from = stops[i]
+    const to = stops[i + 1]
+    const oSnap = await snapToStateHighway(from.lat, from.lon)
+    const dSnap = await snapToStateHighway(to.lat, to.lon)
+    const corridors = await buildIntelligentCorridor(
+      oSnap.lat,
+      oSnap.lon,
+      dSnap.lat,
+      dSnap.lon,
+      from.state,
+      to.state,
+      routingEngine,
+      {
+        length: load.length,
+        width: load.width,
+        height: load.height,
+        weight: load.weight,
+      },
+      load.specialInstructions
+    )
+    if (corridors.length === 0) return []
+    legs.push(corridors[0])
+  }
+
+  return [mergeCorridorLegs(legs)]
 }
 
 /**
@@ -145,6 +259,8 @@ async function buildRouteCorridor(load: LoadDetails): Promise<Array<{
   highways?: string[]
   permitRequiredStates: string[]
   escortRequiredStates?: string[]
+  escortWarnings?: string[]
+  escortDetails?: StateEscortDetail[]
   curfewNotes?: string[]
   specialNotes?: string[]
   seasonalWeightRestrictions?: string[]
@@ -167,6 +283,29 @@ async function buildRouteCorridor(load: LoadDetails): Promise<Array<{
     const option = await analyzeCorridor(load, { routeCorridor, highways: [], distanceMeters: undefined, durationSeconds: undefined }, notes)
     analyzedOptions.push(option)
 
+    return analyzedOptions
+  }
+
+  // Multi-stop: build sequential legs when explicit drops are present
+  if (load.drops && load.drops.length > 0) {
+    const multiCorridors = await buildMultiLegCorridor(load)
+    if (multiCorridors.length === 0) return analyzedOptions
+
+    for (const corridor of multiCorridors) {
+      const notes: string[] = []
+      if (corridor.distanceMeters) {
+        const miles = (corridor.distanceMeters / 1609.34).toFixed(1)
+        const engineLabel = corridor.engine === 'graphhopper' ? 'GraphHopper (truck profile)' : 'OSRM'
+        notes.push(`Used multi-stop intelligent routing (${engineLabel}). Distance: ${miles} miles across ${load.drops.length + 1} stops`)
+      }
+      if (corridor.engineNote) notes.push(corridor.engineNote)
+      if (corridor.userPreferenceNote) notes.push(corridor.userPreferenceNote)
+
+      const option = await analyzeCorridor(load, corridor, notes)
+      ;(option as any).routingEngine = corridor.engine
+      ;(option as any).routingEngineNote = corridor.engineNote
+      analyzedOptions.push(option)
+    }
     return analyzedOptions
   }
 
@@ -243,7 +382,6 @@ async function analyzeCorridor(
   baseNotes: string[]
 ) {
   const permitRequiredStates = new Set<string>()
-  const escortRequiredStates = new Set<string>()
   const curfewNotes: string[] = []
   const specialNotes: string[] = []
   const seasonalNotes: string[] = []
@@ -262,6 +400,15 @@ async function analyzeCorridor(
 
   const routeCorridor = corridor.routeCorridor
   let rules: StatePermitRule[] | null = null
+  let escortAnalysis: {
+    escortRequiredStates: string[]
+    escortWarnings: string[]
+    escortDetails: StateEscortDetail[]
+  } = {
+    escortRequiredStates: [],
+    escortWarnings: [],
+    escortDetails: [],
+  }
 
   // Declare at function scope so the return statement can always reference it
   let dotNotes: string[] = []
@@ -281,6 +428,19 @@ async function analyzeCorridor(
 
     const ruleMap = new Map(rules?.map(r => [r.state_code, r]) || [])
 
+    escortAnalysis = analyzeEscortRequirements({
+      routeCorridor,
+      load: {
+        width: load.width,
+        length: load.length,
+        height: load.height,
+        weight: load.weight,
+      },
+      ruleMap,
+      highways: corridor.highways || [],
+    })
+    const escortStateSet = new Set(escortAnalysis.escortRequiredStates)
+
     // Per-state evaluation (much more accurate than global checks)
     routeCorridor.forEach(state => {
       const rule = ruleMap.get(state)
@@ -293,10 +453,12 @@ async function analyzeCorridor(
         return
       }
 
+      const needsEscort = escortStateSet.has(state)
+
       // Determine effective thresholds (fall back to legal_*)
       let permitWidth  = rule.permit_threshold_width_ft  ?? rule.legal_width_ft
       let permitHeight = rule.permit_threshold_height_ft ?? rule.legal_height_ft
-      let permitLength = rule.permit_threshold_length_ft ?? rule.legal_length_ft
+      let permitLengthRaw = rule.permit_threshold_length_ft ?? rule.legal_length_ft
       let permitWeight = rule.permit_threshold_weight_lbs ?? rule.legal_weight_lbs
 
       // Fallback to standard US oversize thresholds when the DB effective value
@@ -306,14 +468,24 @@ async function analyzeCorridor(
       // per-state DB values when present.
       if (permitWidth  == null || permitWidth  <= 0 || (typeof permitWidth === 'number' && Number.isNaN(permitWidth))) permitWidth  = 8.5
       if (permitHeight == null || permitHeight <= 0 || (typeof permitHeight === 'number' && Number.isNaN(permitHeight))) permitHeight = 13.5
-      if (permitLength == null || permitLength <= 0 || (typeof permitLength === 'number' && Number.isNaN(permitLength))) permitLength = 60
       if (permitWeight == null || permitWeight <= 0 || (typeof permitWeight === 'number' && Number.isNaN(permitWeight))) permitWeight = 80000
+
+      const permitLengthRawForCheck =
+        permitLengthRaw == null || permitLengthRaw <= 0 || Number.isNaN(permitLengthRaw)
+          ? null
+          : permitLengthRaw
+      const needsLength = needsLengthPermit(
+        load.length,
+        load.trailerLengthFt,
+        permitLengthRawForCheck
+      )
+      const permitLengthThreshold = effectiveEnvelopeLengthThreshold(permitLengthRawForCheck)
 
       // === Permit Required? ===
       const needsPermit =
         load.width  > permitWidth ||
         load.height > permitHeight ||
-        load.length > permitLength ||
+        needsLength ||
         load.weight > permitWeight
 
       if (needsPermit) {
@@ -323,27 +495,13 @@ async function analyzeCorridor(
         const exceeded: string[] = []
         if (load.width  > permitWidth)  exceeded.push(`width ${load.width} > ${permitWidth}`)
         if (load.height > permitHeight) exceeded.push(`height ${load.height} > ${permitHeight}`)
-        if (load.length > permitLength) exceeded.push(`length ${load.length} > ${permitLength}`)
+        if (needsLength) {
+          exceeded.push(`envelope length ${load.length} > ${permitLengthThreshold}`)
+        }
         if (load.weight > permitWeight) exceeded.push(`weight ${load.weight} > ${permitWeight}`)
 
         const label = getJurisdictionLabel(state)
         reasons.push(`${state} (${label}): Permit required — exceeds ${exceeded.join(', ')}`)
-      }
-
-      // === Escort Required? ===
-      const escortWidth  = rule.escort_threshold_width_ft
-      const escortHeight = rule.escort_threshold_height_ft
-      const escortLength = rule.escort_threshold_length_ft
-      const escortWeight = rule.escort_threshold_weight_lbs
-
-      const needsEscort =
-        (escortWidth  && load.width  > escortWidth) ||
-        (escortHeight && load.height > escortHeight) ||
-        (escortLength && load.length > escortLength) ||
-        (escortWeight && load.weight > escortWeight)
-
-      if (needsEscort) {
-        escortRequiredStates.add(state)
       }
 
       // === Collect rich contextual notes ===
@@ -365,7 +523,7 @@ async function analyzeCorridor(
 
     // Summary notes (Canadian-aware)
     const permitCount = permitRequiredStates.size
-    const escortCount = escortRequiredStates.size
+    const escortCount = escortAnalysis.escortRequiredStates.length
 
     if (permitCount > 0) {
       const hasCanadian = Array.from(permitRequiredStates).some(isCanadian)
@@ -373,7 +531,7 @@ async function analyzeCorridor(
       notes.push(`Permit required in ${permitCount} ${term} along this route.`)
     }
     if (escortCount > 0) {
-      notes.push(`Escort vehicle(s) likely required in ${escortCount} jurisdiction(s).`)
+      notes.push(`Escort(s) likely required in ${escortCount} jurisdiction(s).`)
     }
 
     // ============================================================
@@ -418,7 +576,9 @@ async function analyzeCorridor(
     routeCorridor,
     highways: corridor.highways || [],
     permitRequiredStates: Array.from(permitRequiredStates).sort(),
-    escortRequiredStates: Array.from(escortRequiredStates).sort(),
+    escortRequiredStates: escortAnalysis.escortRequiredStates,
+    escortWarnings: escortAnalysis.escortWarnings,
+    escortDetails: escortAnalysis.escortDetails,
     curfewNotes: Array.from(new Set(curfewNotes)),
     specialNotes: Array.from(new Set(specialNotes)),
     seasonalWeightRestrictions: Array.from(new Set(seasonalNotes)),
@@ -474,6 +634,8 @@ export async function processPermitRequest(loadDetails: LoadDetails): Promise<Pe
       highways: option.highways,
       permitRequiredStates: option.permitRequiredStates,
       escortRequiredStates: option.escortRequiredStates || [],
+      escortWarnings: option.escortWarnings || [],
+      escortDetails: option.escortDetails || [],
       curfewNotes: option.curfewNotes || [],
       specialNotes: option.specialNotes || [],
       seasonalWeightRestrictions: option.seasonalWeightRestrictions || [],

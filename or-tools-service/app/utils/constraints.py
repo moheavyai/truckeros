@@ -20,8 +20,8 @@ import re
 from typing import Any
 
 from ..config import (
+    ENVELOPE_PERMIT_LENGTH_FT,
     LEGAL_HEIGHT_FT,
-    LEGAL_LENGTH_FT,
     LEGAL_WEIGHT_LBS,
     LEGAL_WIDTH_FT,
     PENALTY_AXLE_OVER,
@@ -31,7 +31,69 @@ from ..config import (
     PENALTY_WEIGHT,
     PENALTY_WIDTH,
     PRIORITY_RESTRICTIONS,
+    TRAILER_LEGAL_LENGTH_FT,
 )
+
+
+def effective_envelope_length_threshold(state_threshold_ft: float | None) -> float:
+    """
+    Resolve envelope permit threshold from a state rule.
+
+    Only values above ENVELOPE_PERMIT_LENGTH_FT are true envelope permit rules.
+    Mid-range DB values (53–84.4 ft) are trailer/rig limits — remap to 84.5.
+    """
+    if state_threshold_ft is None or state_threshold_ft <= 0:
+        return ENVELOPE_PERMIT_LENGTH_FT
+    if state_threshold_ft <= ENVELOPE_PERMIT_LENGTH_FT:
+        return ENVELOPE_PERMIT_LENGTH_FT
+    return float(state_threshold_ft)
+
+
+def get_trailer_length_ft(load: dict[str, Any]) -> float | None:
+    """Extract trailer/rig length when provided separately from routing envelope."""
+    val = load.get("trailerLengthFt") or load.get("trailer_length_ft")
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def get_envelope_length_ft(load: dict[str, Any]) -> float:
+    """Routing envelope length (trailer + load + overhangs)."""
+    return float(load.get("length", 0) or 0)
+
+
+def needs_length_permit(
+    envelope_length_ft: float,
+    trailer_length_ft: float | None = None,
+    state_threshold_ft: float | None = None,
+) -> bool:
+    """
+    True when a length permit is required.
+
+    Safe harbor: trailer ≤ 53 ft AND envelope ≤ 84.5 ft → no length permit.
+    Otherwise flag when envelope exceeds the effective state threshold (default 84.5 ft).
+    Trailer length alone never triggers a length permit.
+    """
+    envelope = float(envelope_length_ft or 0)
+    trailer = float(trailer_length_ft) if trailer_length_ft is not None else None
+    threshold = effective_envelope_length_threshold(state_threshold_ft)
+
+    if (trailer is None or trailer <= TRAILER_LEGAL_LENGTH_FT) and envelope <= ENVELOPE_PERMIT_LENGTH_FT:
+        return False
+
+    return envelope > threshold
+
+
+def load_needs_length_permit(load: dict[str, Any], state_threshold_ft: float | None = None) -> bool:
+    """Convenience wrapper using load dict fields."""
+    return needs_length_permit(
+        get_envelope_length_ft(load),
+        get_trailer_length_ft(load),
+        state_threshold_ft,
+    )
 
 
 def _add_osow_penalty(load: dict[str, Any], from_idx: int, to_idx: int) -> int:
@@ -60,7 +122,7 @@ def _add_osow_penalty(load: dict[str, Any], from_idx: int, to_idx: int) -> int:
         penalty += PENALTY_WIDTH
     if h > LEGAL_HEIGHT_FT:
         penalty += PENALTY_HEIGHT
-    if l > LEGAL_LENGTH_FT:
+    if load_needs_length_permit(load):
         penalty += PENALTY_LENGTH
     if wt > LEGAL_WEIGHT_LBS:
         penalty += PENALTY_WEIGHT
@@ -85,7 +147,7 @@ def _add_osow_penalty(load: dict[str, Any], from_idx: int, to_idx: int) -> int:
 
     # Overhang contribution (front affects swept path / bridge on some corridors)
     front_oh, _ = _get_overhangs(load)
-    if front_oh > 3.0 and (l > 53 or wt > LEGAL_WEIGHT_LBS):
+    if front_oh > 3.0 and (load_needs_length_permit(load) or wt > LEGAL_WEIGHT_LBS):
         penalty += 3000
 
     return penalty
@@ -162,8 +224,9 @@ def exceeds_legal(load: dict[str, Any]) -> list[str]:
         out.append(f"width > {LEGAL_WIDTH_FT} ft")
     if float(load.get("height", 0) or 0) > LEGAL_HEIGHT_FT:
         out.append(f"height > {LEGAL_HEIGHT_FT} ft")
-    if float(load.get("length", 0) or 0) > LEGAL_LENGTH_FT:
-        out.append(f"length > {LEGAL_LENGTH_FT} ft")
+    if load_needs_length_permit(load):
+        env = get_envelope_length_ft(load)
+        out.append(f"envelope length {env} ft exceeds permit threshold")
     if float(load.get("weight", 0) or 0) > LEGAL_WEIGHT_LBS:
         out.append(f"weight > {LEGAL_WEIGHT_LBS} lbs")
     return out

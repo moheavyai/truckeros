@@ -1,0 +1,1826 @@
+diff --git a/app/permit-test/page.tsx b/app/permit-test/page.tsx
+index f265747..beb1bd2 100644
+--- a/app/permit-test/page.tsx
++++ b/app/permit-test/page.tsx
+@@ -5,7 +5,11 @@ import { createClient } from '@/lib/supabase/client'
+ import { useRouter } from 'next/navigation'
+ import VehicleDiagram from '@/components/VehicleDiagram'
+ import type { RigConfiguration, Tractor, Trailer } from '@/types/equipment'
+-import { computeRigDimensions } from '@/types/equipment'
++import {
++  computeRigDimensions,
++  computeRigEmptyWeightLbs,
++  primaryTrailerDimensions,
++} from '@/types/equipment'
+ import {
+   fetchGeocodeWithRetry,
+   isAddressReadyForGeocode,
+@@ -13,6 +17,9 @@ import {
+   isGeocodeFailure,
+ } from '@/lib/geocode-client'
+ import { formatHighwayForDisplay, formatHighwaysForDisplay } from '@/lib/format-highway-display'
++import { STATE_PORTAL_CONFIGS } from '@/lib/portal-assistant'
++import { formatDimensionDisplay, formatRigSummaryLine as buildRigSummaryLine } from '@/lib/parse-dimension'
++import DimensionInput from '@/components/DimensionInput'
+ 
+ type PermitPrimary = {
+   permitReady?: boolean
+@@ -119,6 +126,12 @@ export default function PermitTestPage() {
+     // Use '' for optional text/numeric fields (avoids "Year: 0" display bugs). Numbers only where they have real defaults.
+     unitNumber: '',
+     vin: '',
++    trailerVin: '',
++    tractorEmptyWeightLbs: '',
++    trailerEmptyWeightLbs: '',
++    rigEmptyWeightLbs: '',
++    trailerWidthFt: '',
++    trailerDeckHeightFt: '',
+     year: '',
+     make: '',
+     model: '',
+@@ -167,6 +180,19 @@ export default function PermitTestPage() {
+   const [migrationStatus, setMigrationStatus] = useState<any>(null)
+   const [checkingMigration, setCheckingMigration] = useState(false)
+ 
++  // OR-Tools service connection status
++  const [ortoolsHealth, setOrToolsHealth] = useState<{
++    connected: boolean
++    status: 'connected' | 'unreachable'
++    message?: string
++    version?: string | null
++    buildId?: string | null
++  } | null>(null)
++  const [checkingOrToolsHealth, setCheckingOrToolsHealth] = useState(false)
++  const [healthCheckCooldownRemaining, setHealthCheckCooldownRemaining] = useState(0)
++  const [restartingOrTools, setRestartingOrTools] = useState(false)
++  const [restartOrToolsMessage, setRestartOrToolsMessage] = useState<string | null>(null)
++
+   // Agent result + approval gate
+   const [agentResult, setAgentResult] = useState<any>(null)
+   const [savedToDatabase, setSavedToDatabase] = useState(false)
+@@ -184,10 +210,33 @@ export default function PermitTestPage() {
+ 
+   // Routing engine (kept for payload shape + quick mode force + voice; selector UI replaced by optimizationMode toggle)
+   const [routingEngine, setRoutingEngine] = useState<'osrm' | 'graphhopper'>('osrm')
+-
+-  // NEW: Optimization mode toggle for OR-Tools integration (quick = existing /api/analyze-permit flow; ortools = /api/optimize-route + normalize)
+-  // v0.3: default to 'ortools' (World-Class path with hard avoid enforcement + practical corridors)
+-  const [optimizationMode, setOptimizationMode] = useState<'quick' | 'ortools'>('ortools')
++  const optimizationMode = 'ortools' as const
++
++  const [routeProgress, setRouteProgress] = useState<'idle' | 'geocoding' | 'calculating' | 'ready' | 'error'>('idle')
++  const [routeProgressDetail, setRouteProgressDetail] = useState('')
++  const [showRigPicker, setShowRigPicker] = useState(false)
++  const [showRigDetails, setShowRigDetails] = useState(false)
++  const [showRouteDetails, setShowRouteDetails] = useState(false)
++  const [highwaysExpanded, setHighwaysExpanded] = useState(false)
++  const [savedRequestId, setSavedRequestId] = useState<string | null>(null)
++  const autoRouteTimeoutRef = useRef<NodeJS.Timeout | null>(null)
++  const lastRouteFingerprintRef = useRef<string>('')
++  const routeAnalysisAbortRef = useRef(0)
++  const ortoolsHealthCheckIdRef = useRef(0)
++  const ortoolsHealthAbortRef = useRef<AbortController | null>(null)
++  const hasCheckedHealthRef = useRef(false)
++  const isMountedRef = useRef(true)
++  const lastHealthCheckClickRef = useRef(0warning: in the working copy of 'app/permit-test/page.tsx', LF will be replaced by CRLF the next time Git touches it
+)
++  const healthCheckCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
++  const restartPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
++  const checkOrToolsHealthRef = useRef<
++    ((options?: { manual?: boolean; skipCooldown?: boolean }) => Promise<{ connected: boolean } | null>) | null
++  >(null)
++  const HEALTH_CHECK_COOLDOWN_MS = 10_000
++  const RESTART_HEALTH_POLL_DELAYS_MS = [3000, 6000, 10000, 15000] as const
++
++  const LEGAL_HEIGHT_FT = 13.5
++  const LEGAL_GROSS_LBS = 80000
+ 
+   // NEW (Intake v2): equipment profile selector + Quick Route Glance state (declared early so helpers below can reference safely)
+   const [equipmentProfiles, setEquipmentProfiles] = useState<any[]>([])
+@@ -205,6 +254,61 @@ export default function PermitTestPage() {
+   // NEW: Split of front overhang per requirements (Rig = contributes to envelope; Trailer = permit info only)
+   const [loadOverhangFrontTrailerFt, setLoadOverhangFrontTrailerFt] = useState<number>(0)
+ 
++  useEffect(() => {
++    const loadW = Number(formData.loadWidthFt) || 0
++    const loadH = Number(formData.loadHeightFt) || 0
++    const loadWt = Number(formData.loadWeightLbs) || 0
++    const trailerW = Number(formData.trailerWidthFt) || 0
++    const deckH = Number(formData.trailerDeckHeightFt) || 0
++    const tractorWt = Number(formData.tractorEmptyWeightLbs) || 0
++    const trailerWt = Number(formData.trailerEmptyWeightLbs) || 0
++    const rigEmpty =
++      tractorWt > 0 && trailerWt > 0 ? tractorWt + trailerWt : Number(formData.rigEmptyWeightLbs) || 0
++    const rigBaseLength =
++      selectedRigSnapshot?.overallLengthFt ??
++      (Number(formData.trailerLengthFt) || 0)
++    const totalLength =
++      rigBaseLength > 0 || loadOverhangFrontFt > 0 || loadOverhangRearFt > 0
++        ? rigBaseLength + loadOverhangFrontFt + loadOverhangRearFt
++        : 0
++    const overallWidth = trailerW > 0 || loadW > 0 ? Math.max(trailerW, loadW) : 0
++    const grossHeight = deckH > 0 || loadH > 0 ? deckH + loadH : 0
++    const grossWeight = rigEmpty > 0 || loadWt > 0 ? rigEmpty + loadWt : 0
++    setFormData((prev) => {
++      const next = { ...prev }
++      let changed = false
++      if (tractorWt > 0 && trailerWt > 0 && String(next.rigEmptyWeightLbs) !== String(rigEmpty)) {
++        next.rigEmptyWeightLbs = String(rigEmpty)
++        changed = true
++      }
++      if (totalLength > 0 && Math.abs(next.length - totalLength) > 0.01) {
++        next.length = totalLength
++        changed = true
++      }
++      if (overallWidth > 0 && Math.abs(next.width - overallWidth) > 0.01) {
++        next.width = overallWidth
++        changed = true
++      }
++      if (grossHeight > 0 && Math.abs(next.height - grossHeight) > 0.01) {
++        next.height = grossHeight
++        changed = true
++      }
++      if (grossWeight > 0 && Math.abs(next.weight - grossWeight) > 1) {
++        next.weight = grossWeight
++        next.grossLoadedWeight = grossWeight
++        changed = true
++        const n = Math.max(1, Math.min(12, Number(prev.axles) || 5))
++        next.axleWeights = Array.from({ length: n }, () => Math.round(grossWeight / n))
++      }
++      return changed ? next : prev
++    })
++  }, [
++    formData.loadWidthFt, formData.loadHeightFt, formData.loadWeightLbs, formData.trailerLengthFt,
++    formData.trailerWidthFt, formData.trailerDeckHeightFt, formData.tractorEmptyWeightLbs,
++    formData.trailerEmptyWeightLbs, formData.rigEmptyWeightLbs, loadOverhangFrontFt, loadOverhangRearFt,
++    selectedRigSnapshot?.overallLengthFt, formData.axles,
++  ])
++
+   // Full tractor/trailer objects (decoded from equipment_profiles RIGBUILDER payloads).
+   // Required so VehicleDiagram receives overall_length_ft, fifth_wheel, axle data etc. for full rig graphics.
+   const [tractors, setTractors] = useState<Tractor[]>([])
+@@ -369,7 +473,7 @@ export default function PermitTestPage() {
+ 
+   // Voice confirmation: reads back the current form values
+   function confirmWithVoice() {
+-    const engineLabel = optimizationMode === 'ortools' ? 'Full OR-Tools Optimization' : routingEngine
++    const engineLabel = 'Full OR-Tools Optimization'
+     const summary = `Origin: ${formData.origin.city} ${formData.origin.state}. Destination: ${formData.destination.city} ${formData.destination.state}. Weight: ${formData.weight} pounds. Length: ${formData.length} feet. Axles: ${formData.axles}. Gross: ${formData.grossLoadedWeight}. Routing: ${engineLabel}.`
+     speak(summary)
+     setVoiceStatus('Load Pilot is reading back your details...')
+@@ -408,7 +512,15 @@ export default function PermitTestPage() {
+         .select('*')
+         .eq('user_id', user.id)
+         .order('created_at', { ascending: false })
+-      if (!error) setRigs((data as any) || [])
++      if (!error) {
++        const loaded = (data as any) || []
++        setRigs(loaded)
++        if (loaded.length > 0 && !selectedRigId) {
++          const primaryRig =
++            loaded.find((r: RigConfiguration) => /primary/i.test(r.rig_name || '')) || loaded[0]
++          handleSelectRig(primaryRig)
++        }
++      }
+     } catch (e) {
+       console.warn('[intake] loadRigs failed:', e)
+     } finally {
+@@ -416,6 +528,79 @@ export default function PermitTestPage() {
+     }
+   }
+ 
++  function formatRigSummaryLine(): string {
++    const loadW = Number(formData.loadWeightLbs) || 0
++    const loadWt = Number(formData.loadWidthFt) || 0
++    const loadH = Number(formData.loadHeightFt) || 0
++    const trailerW = Number(formData.trailerWidthFt) || 0
++    const deckH = Number(formData.trailerDeckHeightFt) || 0
++    const rigEmpty = Number(formData.rigEmptyWeightLbs) || 0
++    const rigLen = (selectedRigSnapshot?.overallLengthFt ?? Number(formData.trailerLengthFt)) || 0
++    const envelopeLen =
++      rigLen > 0 || loadOverhangFrontFt > 0 || loadOverhangRearFt > 0
++        ? rigLen + loadOverhangFrontFt + loadOverhangRearFt
++        : rigLen
++    const envelopeW = trailerW > 0 || loadWt > 0 ? Math.max(trailerW, loadWt) : trailerW
++    const envelopeH = deckH > 0 || loadH > 0 ? deckH + loadH : deckH
++    const envelopeWt = rigEmpty > 0 || loadW > 0 ? rigEmpty + loadW : rigEmpty
++    return buildRigSummaryLine({
++      name: selectedRigSnapshot?.rigName || 'Custom rig',
++      lengthFt: envelopeLen || null,
++      widthFt: envelopeW || null,
++      heightFt: envelopeH || null,
++      weightLbs: envelopeWt || null,
++    })
++  }
++
++  function rigFieldsFromEquipment(
++    fullTractor: Tractor | null,
++    fullTrailers: Trailer[],
++    rig: RigConfiguration
++  ) {
++    const primary = primaryTrailerDimensions(fullTrailers)
++    const rigEmpty = computeRigEmptyWeightLbs(fullTractor, fullTrailers)
++    return {
++      unitNumber: fullTractor?.unit_number || '',
++      vin: fullTractor?.vin || '',
++      trailerVin: primary.vin || '',
++      tractorEmptyWeightLbs: fullTractor?.empty_weight_lbs ? String(fullTractor.empty_weight_lbs) : '',
++      trailerEmptyWeightLbs: primary.emptyWeightLbs ? String(primary.emptyWeightLbs) : '',
++      rigEmptyWeightLbs: rigEmpty ? String(rigEmpty) : '',
++      trailerWidthFt: primary.widthFt ? String(primary.widthFt) : '',
++      trailerDeckHeightFt: primary.deckHeightFt ? String(primary.deckHeightFt) : '',
++      year: fullTractor?.year != null ? String(fullTractor.year) : '',
++      make: fullTractor?.make || '',
++      model: fullTractor?.model || '',
++      axles: rig.computed_total_axles || fullTractor?.num_axles || 5,
++      trailerMake: fullTrailers[0]?.make || fullTrailers[0]?.trailer_type || '',
++      trailerModel: fullTrailers[0]?.model || '',
++      trailerYear: fullTrailers[0]?.year != null ? String(fullTrailers[0].year) : '',
++      trailerLengthFt: primary.lengthFt || fullTrailers[0]?.overall_length_ft || 53,
++      length: rig.computed_total_length_ft
++        ? Math.ceil(rig.computed_total_length_ft)
++        : primary.lengthFt || 60,
++      width: primary.widthFt || 8.5,
++      height: primary.deckHeightFt || 13.5,
++      weight: rigEmpty || 80000,
++      grossLoadedWeight: rigEmpty || 80000,
++    }
++  }
++
++  function buildRouteSummarySentence(primary: any): string {
++    const corridor = (primary?.routeCorridor || []).join('-')
++    const miles = primary?.distanceMiles ? `${Math.round(primary.distanceMiles).toLocaleString()} miles` : null
++    const permitStates = primary?.permitRequiredStates || []
++    const permitCount = permitStates.length
++    const cost = primary?.estimatedCost != null ? `$${Math.round(primary.estimatedCost).toLocaleString()} estimated` : null
++    const parts = [
++      corridor ? `Recommended route through ${corridor}` : 'Recommended route calculated',
++      miles,
++      permitCount > 0 ? `Permits needed in ${permitCount} state${permitCount === 1 ? '' : 's'}` : 'No permits flagged',
++      cost,
++    ].filter(Boolean)
++    return parts.join(' • ')
++  }
++
+   // NEW: Load + decode the structured tractor/trailer rows from equipment_profiles.
+   // This gives us the rich fields (overall_length_ft, fifth_wheel_from_rear_in, kingpin distances, axle_spacings etc.)
+   // that VehicleDiagram + computeRigDimensions require to render a *full* tractor + trailer rig instead of falling back to trailer-only.
+@@ -466,6 +651,7 @@ export default function PermitTestPage() {
+           fifth_wheel_from_rear_in: d.meta.fifth_wheel_from_rear_in ?? null,
+           unit_number: d.meta.unit_number ?? d.row.unit_number ?? null,
+           vin: d.meta.vin ?? d.row.vin ?? null,
++          empty_weight_lbs: d.meta.empty_weight_lbs ?? null,
+           year: d.meta.year ?? d.row.year ?? null,
+           make: d.meta.make ?? d.row.make ?? null,
+           model: d.meta.model ?? d.row.model ?? null,
+@@ -491,6 +677,10 @@ export default function PermitTestPage() {
+           is_extendable: !!d.meta.is_extendable,
+           extendable_extra_ft: d.meta.extendable_extra_ft ?? 0,
+           trailer_type: d.meta.trailer_type ?? d.row.trailer_make ?? null,
++          vin: d.meta.vin ?? d.row.vin ?? null,
++          empty_weight_lbs: d.meta.empty_weight_lbs ?? null,
++          width_ft: d.meta.width_ft ?? null,
++          deck_height_ft: d.meta.deck_height_ft ?? null,
+           make: d.meta.make ?? d.row.trailer_make ?? null,
+           model: d.meta.model ?? d.row.trailer_model ?? null,
+           year: d.meta.year ?? d.row.trailer_year ?? null,
+@@ -558,10 +748,8 @@ export default function PermitTestPage() {
+     }
+     setSelectedRigSnapshot(snap)
+ 
+-    // Helpful: also update the legacy length field so the routing envelope has a good starting value
+-    if (rig.computed_total_length_ft) {
+-      setFormData((prev) => ({ ...prev, length: Math.max(prev.length || 60, Math.ceil(rig.computed_total_length_ft!)) }))
+-    }
++    const synced = rigFieldsFromEquipment(fullTractor, fullTrailers, rig)
++    setFormData((prev) => ({ ...prev, ...synced }))
+     setGlance(null)
+   }
+ 
+@@ -591,6 +779,8 @@ export default function PermitTestPage() {
+         trailers: fullTrailers.length > 0 ? fullTrailers : (currentRig.trailer_ids || []).map((tid: string) => ({ id: tid })),
+       }
+       setSelectedRigSnapshot(snap)
++      const synced = rigFieldsFromEquipment(fullTractor, fullTrailers, currentRig)
++      setFormData((prev) => ({ ...prev, ...synced }))
+     }
+   }, [tractors, trailers, selectedRigId, rigs])
+ 
+@@ -791,19 +981,16 @@ export default function PermitTestPage() {
+     }
+   }
+ 
+-  const handleSubmit = async (e: React.FormEvent) => {
+-    e.preventDefault()
++  const runRouteAnalysis = async () => {
+     setResult(null)
+-
+-    // Last-chance geocoding: if user typed city/state but didn't wait for debounce,
+-    // try to geocode one final time before blocking submit.
+-    let currentData = formData
++    let currentData = formDataRef.current
+ 
+     const needsOriginGeocode = !currentData.originLat && currentData.origin.city?.trim() && currentData.origin.state?.length === 2
+     const needsDestGeocode = !currentData.destinationLat && currentData.destination.city?.trim() && currentData.destination.state?.length === 2
+ 
+     if (needsOriginGeocode || needsDestGeocode) {
+-      setGeocodeStatus('Finalizing geocoding before analysis...')
++      setRouteProgress('geocoding')
++      setRouteProgressDetail('Resolving addresses…')
+       setLoading(true)
+ 
+       const geocodePromises: Promise<void>[] = []
+@@ -837,22 +1024,39 @@ export default function PermitTestPage() {
+       }
+ 
+       await Promise.all(geocodePromises)
+-
+-      // Update state with whatever we got
+       setFormData(currentData)
+       setLoading(false)
+     }
+ 
+-    // Re-validate after possible last-chance geocoding
+     if (!validateFormWithData(currentData)) {
++      setRouteProgress('idle')
++      setRouteProgressDetail('')
++      return
++    }
++
++    const fingerprint = [
++      currentData.originLat,
++      currentData.originLon,
++      currentData.destinationLat,
++      currentData.destinationLon,
++      currentData.weight,
++      currentData.length,
++      currentData.width,
++      currentData.height,
++      manualRoute,
++    ].join('|')
++
++    if (fingerprint === lastRouteFingerprintRef.current && agentResult) {
+       return
+     }
+ 
++    const runId = ++routeAnalysisAbortRef.current
++    lastRouteFingerprintRef.current = fingerprint
+     setLoading(true)
++    setRouteProgress('calculating')
++    setRouteProgressDetail('Calculating best route…')
+ 
+     try {
+-      // Only send the original known LoadDetails keys + routing choice to the agent.
+-      // New rig/cargo fields are intentionally omitted here (they are extra context for snapshots only).
+       const analyzePayload = {
+         origin: currentData.origin,
+         destination: currentData.destination,
+@@ -868,84 +1072,90 @@ export default function PermitTestPage() {
+         specialInstructions: manualRoute,
+       }
+ 
+-      let agentData: any
+-      if (optimizationMode === 'ortools') {
+-        // OR-Tools fetch - no abort, long timeout, timing logs
+-        console.log('OR-Tools fetch started');
+-        const startTime = Date.now();
+-
+-        const optResponse = await fetch('/api/optimize-route', {
+-          method: 'POST',
+-          headers: { 'Content-Type': 'application/json' },
+-          body: JSON.stringify({
+-            ...analyzePayload,
+-            optimizationMode: 'ortools'
+-          }),
+-          // No signal / AbortController
+-        });
+-
+-        const elapsed = Date.now() - startTime;
+-        console.log(`OR-Tools fetch completed in ${elapsed} ms`);
+-
+-        const optData = await optResponse.json()
+-        if (!optResponse.ok) {
+-          console.error(`[or-tools] HTTP ${optResponse.status} error:`, optData)
+-          throw new Error(
+-            optData.error || optData.message || `OR-Tools optimization failed (HTTP ${optResponse.status}).`
+-          )
+-        }
+-        if (optData.status && optData.status !== 'ok') {
+-          console.error('[or-tools] submit non-ok:', optData)
+-          throw new Error(optData.error || optData.message || 'OR-Tools optimization failed.')
+-        }
+-        if (optData.fallback) {
+-          console.warn('[or-tools] OSRM fallback used:', optData.fallbackReason, optData.meta?.originalError)
+-        }
+-        agentData = normalizeOrToolsToAgentData(optData)
+-      } else {
+-        // Existing quick path (OSRM/GraphHopper via agent) — untouched.
+-        const agentResponse = await fetch('/api/analyze-permit', {
+-          method: 'POST',
+-          headers: { 'Content-Type': 'application/json' },
+-          body: JSON.stringify(analyzePayload),
+-        })
++      setRouteProgressDetail('Running OR-Tools optimization…')
++      const startTime = Date.now()
++      const optResponse = await fetch('/api/optimize-route', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ ...analyzePayload, optimizationMode: 'ortools' }),
++      })
++      console.log(`OR-Tools fetch completed in ${Date.now() - startTime} ms`)
+ 
+-        const quickData = await agentResponse.json()
++      if (runId !== routeAnalysisAbortRef.current) return
+ 
+-        if (!agentResponse.ok) {
+-          const rawError = quickData.error || quickData.message || 'Agent failed'
+-          console.error('[quick] analyze-permit error details:', rawError, quickData) // full for debug; user-facing is friendly (parity with or-tools sanitization)
+-          throw new Error('Permit analysis failed. Please check your inputs or try again.')
+-        }
+-        agentData = quickData
++      const optData = await optResponse.json()
++      if (!optResponse.ok) {
++        throw new Error(optData.error || optData.message || `Route optimization failed (HTTP ${optResponse.status}).`)
++      }
++      if (optData.status && optData.status !== 'ok') {
++        throw new Error(optData.error || optData.message || 'Route optimization failed.')
+       }
+ 
+-      // Store agent result for review (do not save yet)
++      const agentData = normalizeOrToolsToAgentData(optData)
+       setAgentResult(agentData)
+       setSavedToDatabase(false)
+-      setResult(null) // clear any previous error
++      setResult(null)
++      setRouteProgress('ready')
++      setRouteProgressDetail('Route ready')
+ 
+-      // Snap to results - scroll so the status banner is near the top of the viewport
+       setTimeout(() => {
+         if (resultsRef.current) {
+-          const headerOffset = 80 // account for sticky header
++          const headerOffset = 80
+           const elementPosition = resultsRef.current.getBoundingClientRect().top
+-          const offsetPosition = elementPosition + window.pageYOffset - headerOffset
+-
+-          window.scrollTo({
+-            top: offsetPosition,
+-            behavior: 'smooth'
+-          })
++          window.scrollTo({ top: elementPosition + window.pageYOffset - headerOffset, behavior: 'smooth' })
+         }
+       }, 50)
+-
+     } catch (error: any) {
++      if (runId !== routeAnalysisAbortRef.current) return
++      setRouteProgress('error')
++      setRouteProgressDetail(error.message || 'Route calculation failed')
+       setResult({ error: error.message })
+     } finally {
+-      setLoading(false)
++      if (runId === routeAnalysisAbortRef.current) {
++        setLoading(false)
++        void checkOrToolsHealthRef.current?.()
++      }
+     }
+   }
+ 
++  useEffect(() => {
++    const data = formDataRef.current
++    const addressesReady =
++      isAddressReadyForGeocode(data.origin) && isAddressReadyForGeocode(data.destination)
++    const coordsReady =
++      data.originLat != null && data.originLon != null &&
++      data.destinationLat != null && data.destinationLon != null
++    const dimsReady = data.weight > 0 && data.length > 0 && data.width > 0 && data.height > 0
++
++    if (!addressesReady) {
++      setRouteProgress('idle')
++      setRouteProgressDetail('')
++      return
++    }
++
++    if (isGeocoding.origin || isGeocoding.destination) {
++      setRouteProgress('geocoding')
++      setRouteProgressDetail('Geocoding addresses…')
++      return
++    }
++
++    if (!coordsReady || !dimsReady) return
++
++    if (autoRouteTimeoutRef.current) clearTimeout(autoRouteTimeoutRef.current)
++    autoRouteTimeoutRef.current = setTimeout(() => {
++      runRouteAnalysis()
++    }, 800)
++
++    return () => {
++      if (autoRouteTimeoutRef.current) clearTimeout(autoRouteTimeoutRef.current)
++    }
++  }, [
++    formData.originLat, formData.originLon, formData.destinationLat, formData.destinationLon,
++    formData.origin.city, formData.origin.state, formData.destination.city, formData.destination.state,
++    formData.weight, formData.length, formData.width, formData.height,
++    isGeocoding.origin, isGeocoding.destination, manualRoute,
++  ])
++
+   // New function: Approve & Save (Human Approval Gate)
+   const handleApproveAndSave = async () => {
+     if (!agentResult) return;
+@@ -1031,11 +1241,24 @@ export default function PermitTestPage() {
+ 
+       if (!saveResponse.ok) throw new Error(saveData.error || 'Failed to save')
+ 
++      const requestId = saveData.data?.id || saveData.data
++      setSavedRequestId(requestId)
+       setSavedToDatabase(true)
+       setResult({
+         agent: primary,
+         savedToDatabase: saveData.data,
+       })
++
++      const permitStates: string[] = primary.permitRequiredStates || []
++      const portalStates = permitStates.filter((s) => STATE_PORTAL_CONFIGS[s])
++      portalStates.forEach((state) => {
++        const url = STATE_PORTAL_CONFIGS[state].portalUrl
++        window.open(url, `_truckeros_portal_${state}`, 'noopener,noreferrer')
++      })
++
++      if (requestId) {
++        router.push(`/portal-assist?requestId=${requestId}`)
++      }
+     } catch (error: any) {
+       setResult({ error: error.message })
+     } finally {
+@@ -1257,9 +1480,193 @@ export default function PermitTestPage() {
+       setShowChangeRouteInput(true) // keep input open on error
+     } finally {
+       setLoading(false)
++      if (optimizationMode === 'ortools') {
++        void checkOrToolsHealthRef.current?.()
++      }
+     }
+   }
+ 
++  useEffect(() => {
++    isMountedRef.current = true
++    return () => {
++      isMountedRef.current = false
++      ortoolsHealthAbortRef.current?.abort()
++      if (healthCheckCooldownTimerRef.current) {
++        clearTimeout(healthCheckCooldownTimerRef.current)
++      }
++      if (restartPollTimeoutRef.current) {
++        clearTimeout(restartPollTimeoutRef.current)
++        restartPollTimeoutRef.current = null
++      }
++    }
++  }, [])
++
++  const startHealthCheckCooldown = useCallback(() => {
++    lastHealthCheckClickRef.current = Date.now()
++    setHealthCheckCooldownRemaining(HEALTH_CHECK_COOLDOWN_MS)
++    if (healthCheckCooldownTimerRef.current) {
++      clearTimeout(healthCheckCooldownTimerRef.current)
++    }
++    healthCheckCooldownTimerRef.current = setTimeout(() => {
++      healthCheckCooldownTimerRef.current = null
++      if (isMountedRef.current) setHealthCheckCooldownRemaining(0)
++    }, HEALTH_CHECK_COOLDOWN_MS)
++  }, [])
++
++  const checkOrToolsHealth = useCallback(async (options?: { manual?: boolean; skipCooldown?: boolean }) => {
++    if (options?.manual && !options?.skipCooldown) {
++      const elapsed = Date.now() - lastHealthCheckClickRef.current
++      if (elapsed < HEALTH_CHECK_COOLDOWN_MS) return null
++      startHealthCheckCooldown()
++    }
++
++    ortoolsHealthAbortRef.current?.abort()
++    const controller = new AbortController()
++    ortoolsHealthAbortRef.current = controller
++    const runId = ++ortoolsHealthCheckIdRef.current
++
++    if (!isMountedRef.current) return null
++    setCheckingOrToolsHealth(true)
++
++    try {
++      const res = await fetch('/api/ortools-health', { signal: controller.signal })
++      if (runId !== ortoolsHealthCheckIdRef.current || !isMountedRef.current) return null
++
++      if (!res.ok) {
++        const unreachable = {
++          connected: false,
++          status: 'unreachable' as const,
++          message: `Health check failed (HTTP ${res.status})`,
++        }
++        setOrToolsHealth(unreachable)
++        return { connected: false }
++      }
++
++      const data = await res.json()
++      if (runId !== ortoolsHealthCheckIdRef.current || !isMountedRef.current) return null
++
++      const health = {
++        connected: Boolean(data.connected),
++        status: data.status === 'connected' ? ('connected' as const) : ('unreachable' as const),
++        message: typeof data.message === 'string' ? data.message : undefined,
++        version: typeof data.version === 'string' ? data.version : null,
++        buildId: typeof data.buildId === 'string' ? data.buildId : null,
++      }
++      setOrToolsHealth(health)
++      return { connected: health.connected }
++    } catch (e) {
++      if (controller.signal.aborted || runId !== ortoolsHealthCheckIdRef.current || !isMountedRef.current) {
++        return null
++      }
++      setOrToolsHealth({
++        connected: false,
++        status: 'unreachable',
++        message: 'Failed to check OR-Tools health',
++      })
++      return { connected: false }
++    } finally {
++      if (runId === ortoolsHealthCheckIdRef.current && isMountedRef.current) {
++        setCheckingOrToolsHealth(false)
++      }
++    }
++  }, [startHealthCheckCooldown])
++
++  checkOrToolsHealthRef.current = checkOrToolsHealth
++
++  const waitForRestartPollDelay = useCallback((delayMs: number) => {
++    return new Promise<void>((resolve) => {
++      if (restartPollTimeoutRef.current) {
++        clearTimeout(restartPollTimeoutRef.current)
++      }
++      restartPollTimeoutRef.current = setTimeout(() => {
++        restartPollTimeoutRef.current = null
++        resolve()
++      }, delayMs)
++    })
++  }, [])
++
++  const restartOrToolsService = useCallback(async () => {
++    if (restartingOrTools) return
++
++    setRestartingOrTools(true)
++    setRestartOrToolsMessage(null)
++
++    try {
++      const res = await fetch('/api/restart-ortools', { method: 'POST' })
++      const data = await res.json().catch(() => ({}))
++
++      if (!res.ok) {
++        const fallback = typeof data.command === 'string' ? data.command : 'npm run restart:ortools'
++        setRestartOrToolsMessage(
++          data.message ||
++            data.error ||
++            `Restart failed (HTTP ${res.status}). Run \`${fallback}\` in a terminal.`
++        )
++        return
++      }
++
++      setRestartOrToolsMessage(
++        typeof data.message === 'string'
++          ? data.message
++          : 'Restart initiated — waiting for service to come back…'
++      )
++
++      let lastDelay = 0
++      let serviceRecovered = false
++
++      for (const delayMs of RESTART_HEALTH_POLL_DELAYS_MS) {
++        const waitMs = delayMs - lastDelay
++        lastDelay = delayMs
++        await waitForRestartPollDelay(waitMs)
++        if (!isMountedRef.current) return
++
++        const result = await checkOrToolsHealth({ skipCooldown: true })
++        if (result?.connected) {
++          serviceRecovered = true
++          setRestartOrToolsMessage('OR-Tools service is back online.')
++          break
++        }
++      }
++
++      if (!serviceRecovered && isMountedRef.current) {
++        setRestartOrToolsMessage(
++          'Restart initiated, but the service is still unreachable. Try Test Connection again in a few seconds.'
++        )
++      }
++    } catch {
++      setRestartOrToolsMessage(
++        'Restart request failed. Run `npm run restart:ortools` in a terminal at the repo root.'
++      )
++    } finally {
++      if (restartPollTimeoutRef.current) {
++        clearTimeout(restartPollTimeoutRef.current)
++        restartPollTimeoutRef.current = null
++      }
++      if (isMountedRef.current) {
++        setRestartingOrTools(false)
++      }
++    }
++  }, [restartingOrTools, checkOrToolsHealth, waitForRestartPollDelay])
++
++  // Auto-check OR-Tools health once per mount after auth (not on TOKEN_REFRESHED)
++  useEffect(() => {
++    if (!loadingAuth && user?.id && !hasCheckedHealthRef.current) {
++      hasCheckedHealthRef.current = true
++      checkOrToolsHealth()
++    }
++  }, [loadingAuth, user?.id, checkOrToolsHealth])
++
++  // Re-probe when user returns to tab if service was unreachable
++  useEffect(() => {
++    const onFocus = () => {
++      if (ortoolsHealth?.status === 'unreachable' && !checkingOrToolsHealth) {
++        void checkOrToolsHealth()
++      }
++    }
++    window.addEventListener('focus', onFocus)
++    return () => window.removeEventListener('focus', onFocus)
++  }, [ortoolsHealth?.status, checkingOrToolsHealth, checkOrToolsHealth])
++
+   // Check if the new columns have been added to permit_requests
+   async function checkMigrationStatus() {
+     setCheckingMigration(true)
+@@ -1346,10 +1753,105 @@ export default function PermitTestPage() {
+           <span className="text-3xl">🚛</span>
+           <div>
+             <h1 className="text-3xl font-bold tracking-tight">New Route Analysis</h1>
+-            <p className="text-sm text-gray-500">Submit load details for real-time state and provincial permit intelligence</p>
++            <p className="text-sm text-gray-500">Enter origin and destination — routing and permits calculate automatically</p>
+           </div>
+         </div>
+ 
++        {/* OR-Tools Service Connection Status */}
++        {(() => {
++          const isOrToolsChecking = checkingOrToolsHealth || ortoolsHealth === null
++          const isHealthProbeTimeout = ortoolsHealth?.message?.toLowerCase().includes('timed out') ?? false
++          return (
++            <div
++              className={`mt-4 p-4 rounded-xl border flex flex-wrap items-center gap-3 ${
++                isOrToolsChecking
++                  ? 'bg-gray-50 border-gray-200 text-gray-700'
++                  : ortoolsHealth?.connected
++                    ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
++                    : ortoolsHealth?.status === 'unreachable'
++                      ? 'bg-amber-50 border-amber-300 text-amber-900'
++                      : 'bg-gray-50 border-gray-200 text-gray-700'
++              }`}
++            >
++              <div className="flex flex-col gap-1 flex-1 min-w-[200px]">
++                <div className="flex items-center gap-2">
++                  <div
++                    className={`w-3 h-3 rounded-full shrink-0 ${
++                      isOrToolsChecking
++                        ? 'bg-gray-400 animate-pulse'
++                        : ortoolsHealth?.connected
++                          ? 'bg-emerald-500'
++                          : ortoolsHealth?.status === 'unreachable'
++                            ? 'bg-amber-500'
++                            : 'bg-gray-400'
++                    }`}
++                  />
++                  <span className="font-semibold">
++                    {isOrToolsChecking
++                      ? 'OR-Tools: Checking…'
++                      : ortoolsHealth?.connected
++                        ? 'OR-Tools: Connected'
++                        : ortoolsHealth?.status === 'unreachable'
++                          ? 'OR-Tools: Unreachable'
++                          : 'OR-Tools: Checking…'}
++                  </span>
++                  {ortoolsHealth?.message && !isOrToolsChecking && (
++                    <span className="text-xs opacity-80">— {ortoolsHealth.message}</span>
++                  )}
++                </div>
++                {!isOrToolsChecking && ortoolsHealth?.connected && (ortoolsHealth.version || ortoolsHealth.buildId) && (
++                  <p className="text-xs opacity-80 pl-5 font-mono">
++                    v{ortoolsHealth.version || '?'}
++                    {ortoolsHealth.buildId ? ` · build ${ortoolsHealth.buildId}` : ''}
++                  </p>
++                )}
++                {!isOrToolsChecking && ortoolsHealth?.status === 'unreachable' && (
++                  <div className="text-xs opacity-80 pl-5 space-y-0.5">
++                    <p>
++                      {isHealthProbeTimeout
++                        ? 'Quick 5s health probe timed out — the service may still be running but busy; full optimization can take several minutes.'
++                        : 'Health probe could not reach OR-Tools — ensure the service is running on port 8000.'}
++                    </p>
++                    <p>Route analysis may still fall back to OSRM corridor routing.</p>
++                  </div>
++                )}
++              </div>
++              <div className="flex flex-wrap items-center gap-2">
++                <button
++                  type="button"
++                  onClick={() => checkOrToolsHealth({ manual: true })}
++                  disabled={isOrToolsChecking || healthCheckCooldownRemaining > 0 || restartingOrTools}
++                  className="text-xs px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg disabled:opacity-50 font-medium transition-colors"
++                >
++                  {isOrToolsChecking
++                    ? 'Testing…'
++                    : healthCheckCooldownRemaining > 0
++                      ? 'Wait 10s'
++                      : 'Test Connection'}
++                </button>
++                <button
++                  type="button"
++                  onClick={() => void restartOrToolsService()}
++                  disabled={restartingOrTools || isOrToolsChecking}
++                  className="text-sm px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50 font-semibold shadow-sm transition-colors"
++                  title="Kill hung OR-Tools on port 8000 and start a fresh uvicorn process"
++                >
++                  {restartingOrTools ? 'Restarting…' : '🔄 Restart OR-Tools Service'}
++                </button>
++              </div>
++            </div>
++          )
++        })()}
++
++        {restartOrToolsMessage && (
++          <div className="mt-2 p-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-900 text-sm">
++            {restartOrToolsMessage}
++            <span className="block mt-1 text-xs text-indigo-700">
++              Manual fallback: <code className="font-mono bg-white/70 px-1 rounded">npm run restart:ortools</code>
++            </span>
++          </div>
++        )}
++
+         {/* Load Pilot Voice Agent Status */}
+         {(voiceStatus || isListening) && (
+           <div className={`mt-4 p-3 rounded-xl text-sm flex items-center gap-3 border ${isListening ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
+@@ -1378,7 +1880,7 @@ export default function PermitTestPage() {
+         </div>
+       </div>
+ 
+-      <form onSubmit={handleSubmit} className="space-y-8">
++      <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
+         {/* Form Card Wrapper for polished look */}
+         <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-8 shadow-sm">
+         {/* Validation Errors */}
+@@ -1391,63 +1893,87 @@ export default function PermitTestPage() {
+           </div>
+         )}
+ 
+-        {/* NEW: Rig Selector — FIRST decision per requirements. Clean, links to dedicated /equipment manager. */}
+-        <div className="border border-emerald-300 bg-emerald-50 rounded-2xl p-5">
+-          <div className="flex items-center justify-between mb-2">
+-            <div>
+-              <div className="font-semibold text-emerald-900 flex items-center gap-2 text-base">
+-                Rig Selection <span className="text-[10px] px-2 py-0.5 bg-emerald-200 text-emerald-800 rounded-full font-medium">FIRST STEP</span>
+-              </div>
+-              <p className="text-xs text-emerald-700">Choose a saved tractor + trailer combination (built in Equipment Manager) or go manage your fleet.</p>
+-            </div>
+-            <a href="/equipment" className="text-xs px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium whitespace-nowrap">Manage Equipment →</a>
++        {/* Primary rig — auto-loaded; change only when needed */}
++        <div className="flex items-center justify-between text-sm text-gray-600 py-1">
++          <div>
++            {loadingRigs ? (
++              <span>Loading your rig…</span>
++            ) : selectedRigSnapshot ? (
++              <span className="font-mono text-xs sm:text-sm text-gray-900 tracking-tight">{formatRigSummaryLine()}</span>
++            ) : rigs.length === 0 ? (
++              <span>No saved rig — <a href="/equipment" className="text-emerald-700 underline">add one in Equipment</a></span>
++            ) : (
++              <span>Custom dimensions</span>
++            )}
+           </div>
+-
+-          <select
+-            value={selectedRigId || ''}
+-            onChange={(e) => {
+-              const id = e.target.value
+-              if (!id) {
+-                handleSelectRig(null)
+-                return
+-              }
+-              const rig = rigs.find((r: any) => r.id === id)
+-              if (rig) handleSelectRig(rig as any)
+-            }}
+-            className="border border-emerald-300 bg-white p-2.5 rounded-xl text-sm w-full"
+-            disabled={loadingRigs}
++          <button
++            type="button"
++            onClick={() => setShowRigPicker((v) => !v)}
++            className="text-xs text-emerald-700 hover:text-emerald-900 underline underline-offset-2"
+           >
+-            <option value="">— Custom / No saved rig (enter dimensions below) —</option>
+-            {rigs.map((r: any) => (
+-              <option key={r.id} value={r.id}>
+-                {r.rig_name} — {r.computed_total_length_ft?.toFixed(1) || '?'} ft, {r.computed_total_axles || '?'} axles
+-              </option>
+-            ))}
+-          </select>
+-          {loadingRigs && <div className="text-xs text-emerald-600 mt-1">Loading your rigs…</div>}
+-          {rigs.length === 0 && !loadingRigs && (
+-            <div className="text-xs text-emerald-700 mt-1">No saved rigs yet. <a href="/equipment" className="underline">Build your first rig in the Equipment Manager</a>.</div>
+-          )}
++            Change Rig
++          </button>
++        </div>
++        {showRigPicker && (
++          <div className="border border-gray-200 bg-gray-50 rounded-xl p-3 space-y-2">
++            <select
++              value={selectedRigId || ''}
++              onChange={(e) => {
++                const id = e.target.value
++                if (!id) {
++                  handleSelectRig(null)
++                  return
++                }
++                const rig = rigs.find((r: any) => r.id === id)
++                if (rig) handleSelectRig(rig as any)
++                setShowRigPicker(false)
++              }}
++              className="border border-gray-300 bg-white p-2 rounded-lg text-sm w-full"
++              disabled={loadingRigs}
++            >
++              <option value="">— Custom dimensions —</option>
++              {rigs.map((r: any) => (
++                <option key={r.id} value={r.id}>
++                  {r.rig_name} — {r.computed_total_length_ft?.toFixed(1) || '?'} ft
++                </option>
++              ))}
++            </select>
++            <a href="/equipment" className="text-xs text-gray-500 hover:text-gray-700">Manage equipment →</a>
++          </div>
++        )}
+ 
+-          {/* Selected rig summary + mini graphical preview (when chosen) */}
+-          {selectedRigId && selectedRigSnapshot && (
+-            <div className="mt-3 p-3 bg-white border border-emerald-200 rounded-xl text-sm">
+-              <div className="font-medium text-emerald-900 mb-1">Selected: {selectedRigSnapshot.rigName}</div>
+-              <div className="text-xs text-gray-600 mb-2">Overall vehicle length (computed from 5th wheel + kingpin alignment): <b>{selectedRigSnapshot.overallLengthFt?.toFixed(1) || '?'} ft</b></div>
+-              {/* Compact diagram for visual confirmation */}
+-              <div className="mt-1">
+-                <VehicleDiagram
+-                  tractor={selectedRigSnapshot.tractor}
+-                  trailers={selectedRigSnapshot.trailers}
+-                  showDimensions={false}
+-                  height={140}
+-                  className="border-0 shadow-none"
+-                />
+-              </div>
+-              <button type="button" onClick={() => handleSelectRig(null)} className="text-[10px] mt-1 text-emerald-700 hover:text-red-600">Clear selection</button>
+-            </div>
+-          )}
++        <div className="flex items-center justify-between">
++          <button
++            type="button"
++            onClick={() => setShowRigDetails((v) => !v)}
++            className="text-xs text-gray-600 hover:text-gray-900 underline underline-offset-2"
++          >
++            {showRigDetails ? 'Hide Rig Details' : 'Show Rig Details'}
++          </button>
++          <a href="/equipment" className="text-xs text-gray-500 hover:text-emerald-700">Edit in Equipment →</a>
+         </div>
++        {showRigDetails && (
++          <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/80 space-y-3 text-sm">
++            <p className="text-xs text-gray-500">Read-only — edit tractor, trailer, and rig specs in Equipment Management.</p>
++            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">
++              {[
++                ['Tractor VIN', formData.vin || '—'],
++                ['Trailer VIN', formData.trailerVin || '—'],
++                ['Tractor empty', formData.tractorEmptyWeightLbs ? `${Number(formData.tractorEmptyWeightLbs).toLocaleString()} lbs` : '—'],
++                ['Trailer empty', formData.trailerEmptyWeightLbs ? `${Number(formData.trailerEmptyWeightLbs).toLocaleString()} lbs` : '—'],
++                ['Rig empty', formData.rigEmptyWeightLbs ? `${Number(formData.rigEmptyWeightLbs).toLocaleString()} lbs` : '—'],
++                ['Trailer width', formData.trailerWidthFt ? formatDimensionDisplay(Number(formData.trailerWidthFt)) : '—'],
++                ['Deck height', formData.trailerDeckHeightFt ? formatDimensionDisplay(Number(formData.trailerDeckHeightFt)) : '—'],
++                ['Rig length', selectedRigSnapshot?.overallLengthFt ? `${Number(selectedRigSnapshot.overallLengthFt).toFixed(1)} ft` : '—'],
++              ].map(([label, val]) => (
++                <div key={label}>
++                  <div className="text-[10px] text-gray-500">{label}</div>
++                  <div className="font-mono text-gray-800">{val}</div>
++                </div>
++              ))}
++            </div>
++          </div>
++        )}
+ 
+         {geocodeStatus && (
+           <div className={`text-sm px-3 py-2 rounded-lg border ${geocodeStatus.includes('successfully') ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
+@@ -1455,59 +1981,302 @@ export default function PermitTestPage() {
+           </div>
+         )}
+ 
+-        {/* Origin (Route section will follow Load in a future polish; Rig + Load now lead the flow) */}
+-        <div>
+-          <div className="flex items-center gap-2 mb-2">
+-            <h2 className="font-semibold flex items-center gap-2">
+-              Origin
+-              <button
+-                type="button"
+-                onClick={() => startVoiceInput('origin')}
+-                disabled={isListening}
+-                className="text-base hover:bg-gray-100 p-1 rounded transition disabled:opacity-50"
+-                title="Speak origin (e.g. 'Chicago Illinois')"
+-              >
+-                🎤
+-              </button>
+-            </h2>
+-            {formData.originLat && formData.originLon ? (
+-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">✓ Geocoded</span>
+-            ) : isGeocoding.origin ? (
+-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 font-medium">Geocoding...</span>
+-            ) : formData.origin.city && formData.origin.state?.length === 2 ? (
+-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">Needs geocode</span>
+-            ) : null}
++        {/* Legacy equipment profile selector (kept for backward compat with old saved profiles).
++           The primary path is now the clean Rig Selector at the top of the form (from dedicated Equipment page). */}
++        {equipmentProfiles.length > 0 && (
++          <div className="text-xs text-gray-500 bg-gray-50 border rounded p-2">
++            Legacy profiles available: <select value={selectedProfileId || ''} onChange={(e) => {
++              const p = equipmentProfiles.find((x: any) => x.id === e.target.value); if (p) handleSelectProfile(p)
++            }} className="border px-1 py-0.5 rounded text-xs"><option value="">None</option>{equipmentProfiles.map((p: any) => <option key={p.id} value={p.id}>{p.profile_name}</option>)}</select>
+           </div>
+-          <div className="grid grid-cols-2 gap-4">
+-            <input
+-              placeholder="Street (optional)"
+-              value={formData.origin.street}
+-              onChange={(e) => {
+-                const street = e.target.value
+-                setFormData({
+-                  ...formData,
+-                  origin: { ...formData.origin, street },
+-                  originLat: undefined,
+-                  originLon: undefined,
+-                })
+-                const latest = { ...formDataRef.current.origin, street }
+-                if (isAddressReadyForGeocode(latest)) {
+-                  debouncedGeocode('origin')
+-                }
+-              }}
+-              className="border p-2 rounded col-span-2"
+-            />
+-            <div>
++        )}
++
++        {/* Load Details (Rig + Cargo + Axle weights + Overhangs) — second major decision after Rig Selector */}
++        <div>
++          <h2 className="font-semibold mb-2 text-gray-800 flex items-center gap-2">
++            Load Details (Cargo, Axle Weights, Overhangs)
++            <button type="button" onClick={() => startVoiceInput('cargoDescription')} disabled={isListening} className="text-base p-1 hover:bg-gray-100 rounded" title="Speak cargo description">🎤</button>
++          </h2>
++          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
++            <div className="md:col-span-2">
++              <label className="block text-xs font-medium mb-1">Description — what are you hauling?</label>
+               <input
+-                placeholder="City"
+-                value={formData.origin.city}
+-                onChange={(e) => {
+-                  setFormData({
+-                    ...formData,
+-                    origin: { ...formData.origin, city: e.target.value },
+-                    originLat: undefined,
+-                    originLon: undefined,
+-                  })
++                value={formData.cargoDescription}
++                onChange={(e) => setFormData((p) => ({ ...p, cargoDescription: e.target.value }))}
++                className="border p-2 rounded w-full"
++                placeholder="e.g. Oversize transformer on lowboy, 42k lb compressor skid"
++              />
++            </div>
++            <div>
++              <label className="block text-xs font-medium mb-1">Manufacturer</label>
++              <input value={formData.cargoManufacturer} onChange={(e) => setFormData((p) => ({ ...p, cargoManufacturer: e.target.value }))} className="border p-2 rounded w-full" />
++            </div>
++            <div>
++              <label className="block text-xs font-medium mb-1">Make / Model / SN</label>
++              <input value={formData.cargoMakeModel} onChange={(e) => setFormData((p) => ({ ...p, cargoMakeModel: e.target.value }))} className="border p-2 rounded w-full" placeholder="Serial optional" />
++            </div>
++          </div>
++
++          {/* NEW: Specific Load Dimensions — placed immediately under Manufacturer / Make-Model/SN per requirements.
++              These are distinct from the top-level routing envelope (weight/length/width/height at top of form).
++              Static capture only for now — no calculations, validation, or auto-sync. */}
++          <div className="mb-3">
++            <div className="text-xs font-medium mb-1 text-gray-600">Load Dimensions (specific cargo)</div>
++            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
++              <div>
++                <label className="block text-[10px] text-gray-500">Load Weight (lbs)</label>
++                <input
++                  type="number"
++                  value={formData.loadWeightLbs || ''}
++                  onChange={(e) => setFormData((p) => ({ ...p, loadWeightLbs: e.target.value }))}
++                  className="border p-1.5 rounded w-full text-sm"
++                  placeholder="e.g. 42000"
++                />
++              </div>
++              <DimensionInput
++                label="Load Length"
++                value={formData.loadLengthFt || ''}
++                onChange={(ft) => setFormData((p) => ({ ...p, loadLengthFt: String(ft) }))}
++              />
++              <DimensionInput
++                label="Load Width"
++                value={formData.loadWidthFt || ''}
++                onChange={(ft) => setFormData((p) => ({ ...p, loadWidthFt: String(ft) }))}
++              />
++              <DimensionInput
++                label="Load Height"
++                value={formData.loadHeightFt || ''}
++                onChange={(ft) => setFormData((p) => ({ ...p, loadHeightFt: String(ft) }))}
++              />
++            </div>
++          </div>
++
++          {/* Load overhangs — FRONT SPLIT per requirements:
++              - Front of Rig: contributes to overall rig length envelope (used for routing/bridge)
++              - Front of Trailer: captured for permit documentation only (no envelope impact)
++              - Rear: unchanged, still contributes to envelope */}
++          <div className="mb-3 p-3 border rounded-lg bg-amber-50 text-sm">
++            <div className="font-medium text-amber-900 mb-1">Load Overhangs</div>
++            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
++              <div>
++                <DimensionInput
++                  label="Front of Rig Overhang (envelope)"
++                  value={loadOverhangFrontFt}
++                  onChange={(ft) => setLoadOverhangFrontFt(ft)}
++                />
++              </div>
++              <div>
++                <label className="text-xs text-gray-600">Front of Trailer Overhang (ft) <span className="text-amber-600 text-[9px]">(permit info only)</span></label>
++                <input
++                  type="number"
++                  step="0.5"
++                  value={loadOverhangFrontTrailerFt}
++                  onChange={(e) => setLoadOverhangFrontTrailerFt(parseFloat(e.target.value) || 0)}
++                  className="border p-1.5 rounded w-full"
++                />
++              </div>
++              <div>
++                <DimensionInput
++                  label="Rear Overhang (envelope)"
++                  value={loadOverhangRearFt}
++                  onChange={(ft) => setLoadOverhangRearFt(ft)}
++                />
++              </div>
++            </div>
++            <div className="text-[10px] text-amber-700 mt-1">
++              Front-of-rig + rear contribute to effective total length for routing. Trailer-front overhang is recorded for permit documentation only. All values captured in snapshot.
++            </div>
++          </div>
++
++          {/* Dynamic axle weights (driven by axles count) + auto gross + helpers */}
++          <div className="border rounded-lg p-3 bg-white">
++            <div className="flex items-center justify-between mb-2">
++              <div className="font-medium text-sm">Axle Weight Distribution (lbs) — auto from gross weight</div>
++              <div className="flex gap-2 text-xs">
++                <button type="button" onClick={() => {
++                  const n = Math.max(1, Math.min(12, Number(formData.axles) || 5))
++                  const even = Math.round((Number(formData.grossLoadedWeight) || 80000) / n)
++                  const arr = Array.from({ length: n }, () => even)
++                  setFormData((p) => ({ ...p, axleWeights: arr }))
++                }} className="px-2 py-0.5 border rounded hover:bg-gray-50">Distribute Evenly</button>
++                <button type="button" onClick={() => {
++                  const sum = (formData.axleWeights || []).slice(0, Math.max(1, Math.min(12, Number(formData.axles) || 5))).reduce((a: number, b: any) => a + (Number(b) || 0), 0)
++                  setFormData((p) => ({ ...p, grossLoadedWeight: sum }))
++                }} className="px-2 py-0.5 border rounded hover:bg-gray-50">Axles → Gross</button>
++              </div>
++            </div>
++
++            {(() => {
++              const n = Math.max(1, Math.min(12, Number(formData.axles) || 5))
++              const weights: number[] = formData.axleWeights || []
++              const sum = weights.slice(0, n).reduce((a, b) => a + (Number(b) || 0), 0)
++              const gross = Number(formData.grossLoadedWeight) || 0
++              return (
++                <>
++                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-2">
++                    {Array.from({ length: n }).map((_, i) => (
++                      <div key={i}>
++                        <label className="text-[10px] text-gray-500">Axle {i + 1}</label>
++                        <input
++                          type="number"
++                          value={weights[i] || 0}
++                          onChange={(e) => {
++                            const val = parseFloat(e.target.value) || 0
++                            setFormData((prev) => {
++                              const arr = [...(prev.axleWeights || [])]
++                              arr[i] = val
++                              const newSum = arr.slice(0, n).reduce((a, b) => a + (Number(b) || 0), 0)
++                              return { ...prev, axleWeights: arr, grossLoadedWeight: newSum || prev.grossLoadedWeight }
++                            })
++                          }}
++                          className="border p-1.5 rounded w-full text-sm"
++                        />
++                      </div>
++                    ))}
++                  </div>
++                  <div className="flex flex-wrap items-center gap-3 text-sm">
++                    <div>
++                      <span className="font-medium">Gross Loaded Weight</span>
++                      <input
++                        type="number"
++                        value={gross}
++                        onChange={(e) => setFormData((p) => ({ ...p, grossLoadedWeight: parseFloat(e.target.value) || 0 }))}
++                        className="ml-2 w-28 border p-1 rounded"
++                      /> lbs
++                    </div>
++                    <div className="text-xs text-gray-500">Sum of shown axles: <span className="font-mono">{sum.toLocaleString()}</span></div>
++                    {gross !== sum && gross > 0 && (
++                      <div className="text-amber-600 text-xs">⚠ Gross differs from axle sum (normal for 5th-wheel/kingpin load transfer)</div>
++                    )}
++                  </div>
++                </>
++              )
++            })()}
++          </div>
++          <p className="text-[10px] text-gray-500 mt-1">Auto-calc + distribute helpers match real carrier bridge-law workflows. Values are captured on save.</p>
++        </div>
++
++        {/* Routing envelope — auto-calculated from rig + load; sent to routing/agent */}
++        <div className="border border-emerald-200 bg-emerald-50/50 rounded-xl p-4">
++          <h2 className="font-semibold mb-1 text-emerald-900">Load Details (Routing Envelope)</h2>
++          <p className="text-xs text-emerald-800 mb-3">Auto-calculated from rig base length, overhangs, trailer, and load dimensions.</p>
++          <div className="grid grid-cols-2 gap-4">
++            <div>
++              <label className="block text-sm mb-1">Gross weight</label>
++              <div className="border p-2 rounded w-full bg-white text-sm font-mono">
++                {formData.weight > 0 ? `${formData.weight.toLocaleString()} lbs` : '—'}
++                {formData.weight > 0 && formData.weight <= LEGAL_GROSS_LBS && (
++                  <span className="text-emerald-600 font-medium ml-1">(legal)</span>
++                )}
++              </div>
++              <p className="text-[10px] text-gray-500 mt-0.5">Rig empty + load weight</p>
++            </div>
++            <div>
++              <label className="block text-sm mb-1">Gross length</label>
++              <div className="border p-2 rounded w-full bg-white text-sm font-mono">
++                {formatDimensionDisplay(formData.length) || '—'}
++              </div>
++              <p className="text-[10px] text-gray-500 mt-0.5">Rig length + front rig overhang + rear overhang</p>
++            </div>
++            <div>
++              <label className="block text-sm mb-1">Gross width</label>
++              <div className="border p-2 rounded w-full bg-white text-sm font-mono">
++                {formatDimensionDisplay(formData.width) || '—'}
++              </div>
++              <p className="text-[10px] text-gray-500 mt-0.5">max(trailer width, load width)</p>
++            </div>
++            <div>
++              <label className="block text-sm mb-1">Gross height</label>
++              <div className="border p-2 rounded w-full bg-white text-sm font-mono">
++                {formatDimensionDisplay(formData.height) || '—'}
++                {formData.height > 0 && formData.height <= LEGAL_HEIGHT_FT && (
++                  <span className="text-emerald-600 font-medium ml-1">(legal)</span>
++                )}
++              </div>
++              <p className="text-[10px] text-gray-500 mt-0.5">Deck height + load height</p>
++            </div>
++          </div>
++        </div>
++
++        {/* Route Preferences + Voice Input — before addresses so first auto-optimization includes instructions */}
++        <div>
++          <h2 className="font-semibold mb-2 flex items-center gap-2">
++            Special route instructions (avoid AR,IL; include Corinth MS; prefer southern on I-40...)
++            <button
++              type="button"
++              onClick={() => startVoiceInput('preferences')}
++              disabled={isListening}
++              className="text-base hover:bg-gray-100 p-1 rounded transition disabled:opacity-50"
++              title="Speak route preferences (e.g. 'avoid AR, avoid IL, include Corinth MS')"
++            >
++              🎤
++            </button>
++          </h2>
++          <p className="text-xs text-gray-500 mb-2">
++            Enter any route preferences here before entering addresses — they will be used in the first optimization.
++          </p>
++          <textarea
++            placeholder="E.g. avoid AR, avoid IL, include Corinth MS, prefer I-40 southern, stay on interstates..."
++            value={manualRoute}
++            onChange={(e) => setManualRoute(e.target.value)}
++            className="border p-3 rounded w-full text-sm min-h-[60px] resize-y"
++          />
++          <p className="text-[10px] text-gray-500 mt-1">Hard-enforced in OR-Tools routing. Voice or type.</p>
++        </div>
++
++        {/* Origin */}
++        <div>
++          <div className="flex items-center gap-2 mb-2">
++            <h2 className="font-semibold flex items-center gap-2">
++              Origin
++              <button
++                type="button"
++                onClick={() => startVoiceInput('origin')}
++                disabled={isListening}
++                className="text-base hover:bg-gray-100 p-1 rounded transition disabled:opacity-50"
++                title="Speak origin (e.g. 'Chicago Illinois')"
++              >
++                🎤
++              </button>
++            </h2>
++            {formData.originLat && formData.originLon ? (
++              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">✓ Geocoded</span>
++            ) : isGeocoding.origin ? (
++              <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 font-medium">Geocoding...</span>
++            ) : formData.origin.city && formData.origin.state?.length === 2 ? (
++              <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">Needs geocode</span>
++            ) : null}
++          </div>
++          <div className="grid grid-cols-2 gap-4">
++            <input
++              placeholder="Street (optional)"
++              value={formData.origin.street}
++              onChange={(e) => {
++                const street = e.target.value
++                setFormData({
++                  ...formData,
++                  origin: { ...formData.origin, street },
++                  originLat: undefined,
++                  originLon: undefined,
++                })
++                const latest = { ...formDataRef.current.origin, street }
++                if (isAddressReadyForGeocode(latest)) {
++                  debouncedGeocode('origin')
++                }
++              }}
++              className="border p-2 rounded col-span-2"
++            />
++            <div>
++              <input
++                placeholder="City"
++                value={formData.origin.city}
++                onChange={(e) => {
++                  setFormData({
++                    ...formData,
++                    origin: { ...formData.origin, city: e.target.value },
++                    originLat: undefined,
++                    originLon: undefined,
++                  })
+                   if (errors['origin.city']) {
+                     const { ['origin.city']: _, ...rest } = errors
+                     setErrors(rest)
+@@ -1803,206 +2572,7 @@ export default function PermitTestPage() {
+           </div>
+         </div>
+ 
+-        {/* Legacy equipment profile selector (kept for backward compat with old saved profiles).
+-           The primary path is now the clean Rig Selector at the top of the form (from dedicated Equipment page). */}
+-        {equipmentProfiles.length > 0 && (
+-          <div className="text-xs text-gray-500 bg-gray-50 border rounded p-2">
+-            Legacy profiles available: <select value={selectedProfileId || ''} onChange={(e) => {
+-              const p = equipmentProfiles.find((x: any) => x.id === e.target.value); if (p) handleSelectProfile(p)
+-            }} className="border px-1 py-0.5 rounded text-xs"><option value="">None</option>{equipmentProfiles.map((p: any) => <option key={p.id} value={p.id}>{p.profile_name}</option>)}</select>
+-          </div>
+-        )}
+-
+-        {/* Load Details (Rig + Cargo + Axle weights + Overhangs) — second major decision after Rig Selector */}
+-        <div>
+-          <h2 className="font-semibold mb-2 text-gray-800 flex items-center gap-2">
+-            Load Details (Cargo, Axle Weights, Overhangs)
+-            <button type="button" onClick={() => startVoiceInput('cargoDescription')} disabled={isListening} className="text-base p-1 hover:bg-gray-100 rounded" title="Speak cargo description">🎤</button>
+-          </h2>
+-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+-            <div className="md:col-span-2">
+-              <label className="block text-xs font-medium mb-1">Description — what are you hauling?</label>
+-              <input
+-                value={formData.cargoDescription}
+-                onChange={(e) => setFormData((p) => ({ ...p, cargoDescription: e.target.value }))}
+-                className="border p-2 rounded w-full"
+-                placeholder="e.g. Oversize transformer on lowboy, 42k lb compressor skid"
+-              />
+-            </div>
+-            <div>
+-              <label className="block text-xs font-medium mb-1">Manufacturer</label>
+-              <input value={formData.cargoManufacturer} onChange={(e) => setFormData((p) => ({ ...p, cargoManufacturer: e.target.value }))} className="border p-2 rounded w-full" />
+-            </div>
+-            <div>
+-              <label className="block text-xs font-medium mb-1">Make / Model / SN</label>
+-              <input value={formData.cargoMakeModel} onChange={(e) => setFormData((p) => ({ ...p, cargoMakeModel: e.target.value }))} className="border p-2 rounded w-full" placeholder="Serial optional" />
+-            </div>
+-          </div>
+-
+-          {/* NEW: Specific Load Dimensions — placed immediately under Manufacturer / Make-Model/SN per requirements.
+-              These are distinct from the top-level routing envelope (weight/length/width/height at top of form).
+-              Static capture only for now — no calculations, validation, or auto-sync. */}
+-          <div className="mb-3">
+-            <div className="text-xs font-medium mb-1 text-gray-600">Load Dimensions (specific cargo)</div>
+-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+-              <div>
+-                <label className="block text-[10px] text-gray-500">Load Weight (lbs)</label>
+-                <input
+-                  type="number"
+-                  value={formData.loadWeightLbs || ''}
+-                  onChange={(e) => setFormData((p) => ({ ...p, loadWeightLbs: e.target.value }))}
+-                  className="border p-1.5 rounded w-full text-sm"
+-                  placeholder="e.g. 42000"
+-                />
+-              </div>
+-              <div>
+-                <label className="block text-[10px] text-gray-500">Load Length (ft)</label>
+-                <input
+-                  type="number"
+-                  step="0.1"
+-                  value={formData.loadLengthFt || ''}
+-                  onChange={(e) => setFormData((p) => ({ ...p, loadLengthFt: e.target.value }))}
+-                  className="border p-1.5 rounded w-full text-sm"
+-                  placeholder="e.g. 48"
+-                />
+-              </div>
+-              <div>
+-                <label className="block text-[10px] text-gray-500">Load Width (ft)</label>
+-                <input
+-                  type="number"
+-                  step="0.1"
+-                  value={formData.loadWidthFt || ''}
+-                  onChange={(e) => setFormData((p) => ({ ...p, loadWidthFt: e.target.value }))}
+-                  className="border p-1.5 rounded w-full text-sm"
+-                  placeholder="e.g. 10.5"
+-                />
+-              </div>
+-              <div>
+-                <label className="block text-[10px] text-gray-500">Load Height (ft)</label>
+-                <input
+-                  type="number"
+-                  step="0.1"
+-                  value={formData.loadHeightFt || ''}
+-                  onChange={(e) => setFormData((p) => ({ ...p, loadHeightFt: e.target.value }))}
+-                  className="border p-1.5 rounded w-full text-sm"
+-                  placeholder="e.g. 11.5"
+-                />
+-              </div>
+-            </div>
+-          </div>
+-
+-          {/* Load overhangs — FRONT SPLIT per requirements:
+-              - Front of Rig: contributes to overall rig length envelope (used for routing/bridge)
+-              - Front of Trailer: captured for permit documentation only (no envelope impact)
+-              - Rear: unchanged, still contributes to envelope */}
+-          <div className="mb-3 p-3 border rounded-lg bg-amber-50 text-sm">
+-            <div className="font-medium text-amber-900 mb-1">Load Overhangs</div>
+-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+-              <div>
+-                <label className="text-xs text-gray-600">Front of Rig Overhang (ft) <span className="text-amber-600 text-[9px]">(envelope)</span></label>
+-                <input
+-                  type="number"
+-                  step="0.5"
+-                  value={loadOverhangFrontFt}
+-                  onChange={(e) => setLoadOverhangFrontFt(parseFloat(e.target.value) || 0)}
+-                  className="border p-1.5 rounded w-full"
+-                />
+-              </div>
+-              <div>
+-                <label className="text-xs text-gray-600">Front of Trailer Overhang (ft) <span className="text-amber-600 text-[9px]">(permit info only)</span></label>
+-                <input
+-                  type="number"
+-                  step="0.5"
+-                  value={loadOverhangFrontTrailerFt}
+-                  onChange={(e) => setLoadOverhangFrontTrailerFt(parseFloat(e.target.value) || 0)}
+-                  className="border p-1.5 rounded w-full"
+-                />
+-              </div>
+-              <div>
+-                <label className="text-xs text-gray-600">Rear Overhang (ft)</label>
+-                <input
+-                  type="number"
+-                  step="0.5"
+-                  value={loadOverhangRearFt}
+-                  onChange={(e) => setLoadOverhangRearFt(parseFloat(e.target.value) || 0)}
+-                  className="border p-1.5 rounded w-full"
+-                />
+-              </div>
+-            </div>
+-            <div className="text-[10px] text-amber-700 mt-1">
+-              Front-of-rig + rear contribute to effective total length for routing. Trailer-front overhang is recorded for permit documentation only. All values captured in snapshot.
+-            </div>
+-          </div>
+-
+-          {/* Dynamic axle weights (driven by axles count) + auto gross + helpers */}
+-          <div className="border rounded-lg p-3 bg-white">
+-            <div className="flex items-center justify-between mb-2">
+-              <div className="font-medium text-sm">Axle Weight Distribution (lbs) — auto-totals to Gross</div>
+-              <div className="flex gap-2 text-xs">
+-                <button type="button" onClick={() => {
+-                  const n = Math.max(1, Math.min(12, Number(formData.axles) || 5))
+-                  const even = Math.round((Number(formData.grossLoadedWeight) || 80000) / n)
+-                  const arr = Array.from({ length: n }, () => even)
+-                  setFormData((p) => ({ ...p, axleWeights: arr }))
+-                }} className="px-2 py-0.5 border rounded hover:bg-gray-50">Distribute Evenly</button>
+-                <button type="button" onClick={() => {
+-                  const sum = (formData.axleWeights || []).slice(0, Math.max(1, Math.min(12, Number(formData.axles) || 5))).reduce((a: number, b: any) => a + (Number(b) || 0), 0)
+-                  setFormData((p) => ({ ...p, grossLoadedWeight: sum }))
+-                }} className="px-2 py-0.5 border rounded hover:bg-gray-50">Axles → Gross</button>
+-              </div>
+-            </div>
+-
+-            {(() => {
+-              const n = Math.max(1, Math.min(12, Number(formData.axles) || 5))
+-              const weights: number[] = formData.axleWeights || []
+-              const sum = weights.slice(0, n).reduce((a, b) => a + (Number(b) || 0), 0)
+-              const gross = Number(formData.grossLoadedWeight) || 0
+-              return (
+-                <>
+-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-2">
+-                    {Array.from({ length: n }).map((_, i) => (
+-                      <div key={i}>
+-                        <label className="text-[10px] text-gray-500">Axle {i + 1}</label>
+-                        <input
+-                          type="number"
+-                          value={weights[i] || 0}
+-                          onChange={(e) => {
+-                            const val = parseFloat(e.target.value) || 0
+-                            setFormData((prev) => {
+-                              const arr = [...(prev.axleWeights || [])]
+-                              arr[i] = val
+-                              const newSum = arr.slice(0, n).reduce((a, b) => a + (Number(b) || 0), 0)
+-                              return { ...prev, axleWeights: arr, grossLoadedWeight: newSum || prev.grossLoadedWeight }
+-                            })
+-                          }}
+-                          className="border p-1.5 rounded w-full text-sm"
+-                        />
+-                      </div>
+-                    ))}
+-                  </div>
+-                  <div className="flex flex-wrap items-center gap-3 text-sm">
+-                    <div>
+-                      <span className="font-medium">Gross Loaded Weight</span>
+-                      <input
+-                        type="number"
+-                        value={gross}
+-                        onChange={(e) => setFormData((p) => ({ ...p, grossLoadedWeight: parseFloat(e.target.value) || 0 }))}
+-                        className="ml-2 w-28 border p-1 rounded"
+-                      /> lbs
+-                    </div>
+-                    <div className="text-xs text-gray-500">Sum of shown axles: <span className="font-mono">{sum.toLocaleString()}</span></div>
+-                    {gross !== sum && gross > 0 && (
+-                      <div className="text-amber-600 text-xs">⚠ Gross differs from axle sum (normal for 5th-wheel/kingpin load transfer)</div>
+-                    )}
+-                  </div>
+-                </>
+-              )
+-            })()}
+-          </div>
+-          <p className="text-[10px] text-gray-500 mt-1">Auto-calc + distribute helpers match real carrier bridge-law workflows. Values are captured on save.</p>
+-        </div>
+-
+-        {/* Quick Route Glance — pre-submission carrier preview (exact blue card + pill style from History) */}
++        {/* Quick Route Glance — pre-submission carrier preview (after addresses; needs origin/dest) */}
+         <div className="p-4 border-2 border-blue-100 bg-blue-50 rounded-xl">
+           <div className="flex items-center justify-between mb-2">
+             <div className="font-semibold text-blue-900 text-sm">Quick Route Glance</div>
+@@ -2034,127 +2604,24 @@ export default function PermitTestPage() {
+           {!glance && <div className="text-xs text-blue-600">Click the button for an instant visual before you run the full analysis.</div>}
+         </div>
+ 
+-        {/* Load Details (original 4 fields — still the envelope sent to the routing/agent) */}
+-        <div>
+-          <h2 className="font-semibold mb-2 flex items-center gap-2">
+-            Load Details (Routing Envelope)
+-            <button
+-              type="button"
+-              onClick={() => startVoiceInput('weight')}
+-              disabled={isListening}
+-              className="text-base hover:bg-gray-100 p-1 rounded transition disabled:opacity-50"
+-              title="Speak weight (e.g. 'ninety five thousand pounds')"
+-            >
+-              🎤
+-            </button>
+-          </h2>
+-          <div className="grid grid-cols-2 gap-4">
+-            {(['weight', 'length', 'width', 'height'] as const).map((field) => (
+-              <div key={field}>
+-                <label className="block text-sm mb-1 capitalize flex items-center gap-1.5">
+-                  {field}
+-                  <button
+-                    type="button"
+-                    onClick={() => startVoiceInput(field)}
+-                    disabled={isListening}
+-                    className="text-xs hover:bg-gray-100 p-0.5 rounded transition disabled:opacity-50"
+-                    title={`Speak ${field}`}
+-                  >
+-                    🎤
+-                  </button>
+-                </label>
+-                <input
+-                  type="number"
+-                  step="0.01"
+-                  min="0.1"
+-                  value={(formData as any)[field] || ''}
+-                  onChange={(e) => {
+-                    const val = parseFloat(e.target.value) || 0
+-                    setFormData({ ...formData, [field]: val })
+-                    if (errors[field]) {
+-                      const { [field]: _, ...rest } = errors
+-                      setErrors(rest)
+-                    }
+-                  }}
+-                  className={`border p-2 rounded w-full ${errors[field] ? 'border-red-500' : ''}`}
+-                />
+-                {errors[field] && <p className="text-red-500 text-xs mt-1">{errors[field]}</p>}
+-              </div>
+-            ))}
+-          </div>
+-        </div>
+-
+-        {/* Routing Optimization toggle — Quick OSRM (existing agent path) vs Full OR-Tools (new backend /optimize-route) */}
+-        <div>
+-          <h2 className="font-semibold mb-2">Routing Optimization</h2>
+-          <div className="flex gap-3">
+-            <button
+-              type="button"
+-              onClick={() => { setOptimizationMode('quick'); setRoutingEngine('osrm') }}
+-              className={`flex-1 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+-                optimizationMode === 'quick'
+-                  ? 'bg-black text-white border-black'
+-                  : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+-              }`}
+-            >
+-              <div className="font-semibold">Quick OSRM</div>
+-              <div className="text-[10px] opacity-70 mt-0.5">Fast baseline routing • Instant analysis</div>
+-            </button>
+-            <button
+-              type="button"
+-              onClick={() => setOptimizationMode('ortools')}
+-              className={`flex-1 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+-                optimizationMode === 'ortools'
+-                  ? 'bg-emerald-600 text-white border-emerald-700'
+-                  : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+-              }`}
+-            >
+-              <div className="font-semibold">World-Class OR-Tools Optimization</div>
+-              <div className="text-[10px] opacity-70 mt-0.5">Full VRP + hard avoid enforcement • OSOW corridors • entry/exit + permitReady</div>
+-            </button>
++        {(routeProgress !== 'idle' || loading) && (
++          <div className={`rounded-2xl p-4 border flex items-center gap-3 ${
++            routeProgress === 'error' ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'
++          }`}>
++            {loading && routeProgress !== 'error' && (
++              <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
++            )}
++            <div className="min-w-0">
++              <p className={`text-sm font-medium ${routeProgress === 'error' ? 'text-red-800' : 'text-blue-900'}`}>
++                {routeProgress === 'error' ? 'Route calculation failed' : routeProgressDetail || 'Calculating best route…'}
++              </p>
++              {routeProgress === 'calculating' && (
++                <p className="text-xs text-blue-700 mt-0.5">Best route and permit analysis run automatically when addresses are complete</p>
++              )}
++            </div>
+           </div>
+-          <p className="text-[11px] text-gray-500 mt-1.5">
+-            Quick OSRM: existing fast path via Permit Agent (backward-compatible). World-Class OR-Tools Optimization: dedicated VRP solver with *hard* special-instructions enforcement (avoids in matrix), intelligent OSOW-friendly corridor selection (practical vias), robust state extraction, accurate permit-ready output.
+-          </p>
+-        </div>
+-
+-        {/* Route Preferences + Voice Input */}
+-        <div>
+-          <h2 className="font-semibold mb-2 flex items-center gap-2">
+-            Special route instructions (avoid AR,IL; include Corinth MS; prefer southern on I-40...)
+-            <button
+-              type="button"
+-              onClick={() => startVoiceInput('preferences')}
+-              disabled={isListening}
+-              className="text-base hover:bg-gray-100 p-1 rounded transition disabled:opacity-50"
+-              title="Speak route preferences (e.g. 'avoid AR, avoid IL, include Corinth MS')"
+-            >
+-              🎤
+-            </button>
+-          </h2>
+-          <textarea
+-            placeholder="E.g. avoid AR, avoid IL, include Corinth MS, prefer I-40 southern, stay on interstates..."
+-            value={manualRoute}
+-            onChange={(e) => setManualRoute(e.target.value)}
+-            className="border p-3 rounded w-full text-sm min-h-[60px] resize-y"
+-          />
+-          <p className="text-[10px] text-gray-500 mt-1">For Full OR-Tools: hard-enforced (avoids in matrix). For Quick: ranking bias. Voice or type.</p>
+-        </div>
++        )}
+         </div> {/* End form card */}
+-
+-        <button
+-          type="submit"
+-          disabled={loading || Object.keys(errors).length > 0}
+-          className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-xl text-base transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+-        >
+-          {loading ? (
+-            <>
+-              <span className="animate-spin">⏳</span> {optimizationMode === 'ortools' ? 'Optimizing with OR-Tools...' : 'Analyzing Route with Permit Agent...'}
+-            </>
+-          ) : (
+-            optimizationMode === 'ortools' ? 'Optimize with OR-Tools' : 'Submit to Permit Agent'
+-          )}
+-        </button>
+       </form>
+ 
+       {/* Results */}
+@@ -2203,32 +2670,38 @@ export default function PermitTestPage() {
+ 
+             return (
+               <>
+-                {/* Status Banner - routeRequiresPermit unifies OR-Tools permitReady vs quick-path permitRequiredStates */}
+-                {(() => {
+-                  const requiresPermit = routeRequiresPermit(primary)
+-                  const bannerMessage = primary.message ||
+-                    (primary.permitReady !== undefined
+-                      ? (primary.permitReady
+-                        ? 'OR-Tools flags permit review needed; see Readiness card.'
+-                        : 'OR-Tools reports route is permit ready.')
+-                      : (requiresPermit
+-                        ? 'Permit requirements detected for this route.'
+-                        : 'No permit requirements flagged for this route.'))
+-
+-                  return (
+-                    <div className={`p-4 rounded-lg border ${requiresPermit ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800'}`}>
+-                      <div className="flex items-center gap-3">
+-                        <span className={`text-2xl ${requiresPermit ? 'text-red-600' : 'text-emerald-600'}`}>✅</span>
+-                        <div>
+-                          <div className="font-semibold text-lg">
+-                            {requiresPermit ? 'Permit Required' : 'No Permit Required'}
+-                          </div>
+-                          <div className="text-sm opacity-90">{bannerMessage}</div>
+-                        </div>
+-                      </div>
++                {/* Simplified review — one summary line + state pills */}
++                <div className="p-5 border border-gray-200 rounded-2xl bg-white shadow-sm space-y-4">
++                  <p className="text-base text-gray-800 leading-relaxed">
++                    {buildRouteSummarySentence(primary)}
++                  </p>
++                  {primary.routeCorridor && primary.routeCorridor.length > 0 && (
++                    <div className="flex flex-wrap gap-2">
++                      {primary.routeCorridor.map((state: string) => {
++                        const requires = stateRequiresPermit(primary, state)
++                        return (
++                          <span
++                            key={state}
++                            className={`px-3 py-1.5 rounded-full text-sm font-semibold shadow-sm ${
++                              requires
++                                ? 'bg-red-500 text-white'
++                                : 'bg-emerald-500 text-white'
++                            }`}
++                          >
++                            {state}
++                          </span>
++                        )
++                      })}
+                     </div>
+-                  )
+-                })()}
++                  )}
++                  <button
++                    type="button"
++                    onClick={() => setShowRouteDetails((v) => !v)}
++                    className="text-xs text-gray-500 hover:text-gray-800 underline underline-offset-2"
++                  >
++                    {showRouteDetails ? 'Hide details' : 'Show route details'}
++                  </button>
++                </div>
+                 {process.env.NODE_ENV !== 'production' && (() => { console.log('[border-coords-prefill]', { borderCrossings: primary?.borderCrossings, legsEntryExit: primary?.legs?.map((l: any) => ({ from: l.from, to: l.to, highways: l.highways })), routeCorridor: primary?.routeCorridor }); return null; })()}
+ 
+                 {/* Approval Gate Buttons + Change Route (only before saving) */}
+@@ -2247,7 +2720,7 @@ export default function PermitTestPage() {
+                         disabled={loading}
+                         className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-8 py-3 rounded-lg text-lg disabled:bg-gray-400"
+                       >
+-                        {loading ? 'Processing...' : 'Approve and Proceed'}
++                        {loading ? 'Opening portals…' : 'Approve & Open All Portals'}
+                       </button>
+                       <button
+                         onClick={() => setShowChangeRouteInput(!showChangeRouteInput)}
+@@ -2298,8 +2771,7 @@ export default function PermitTestPage() {
+                   </div>
+                 )}
+ 
+-                {/* Visual Corridor Map - Primary Recommendation */}
+-                {primary.routeCorridor && primary.routeCorridor.length > 0 && (
++                {showRouteDetails && primary.routeCorridor && primary.routeCorridor.length > 0 && (
+                   <div className="p-5 border-2 border-blue-200 rounded-xl bg-white shadow-sm">
+                     <div className="flex justify-between items-start mb-4">
+                       <div>
+@@ -2380,10 +2852,14 @@ export default function PermitTestPage() {
+                   </div>
+                 )}
+ 
+-                {/* Major Highways — richer entry/exit + per-leg when legs provided by OR-Tools; fallback for quick path */}
+                 {primary.highways && primary.highways.length > 0 && (
+-                  <div className="p-4 border rounded-lg bg-white">
+-                    <h3 className="font-semibold mb-2 text-gray-700">Major Highways</h3>
++                  <details
++                    className="p-4 border rounded-lg bg-white"
++                    open={highwaysExpanded}
++                    onToggle={(e) => setHighwaysExpanded((e.target as HTMLDetailsElement).open)}
++                  >
++                    <summary className="font-semibold text-gray-700 cursor-pointer select-none">Major Highways</summary>
++                    <div className="mt-2">
+                     {primary.legs && Array.isArray(primary.legs) && primary.legs.length > 0 ? (
+                       <div className="space-y-1 text-sm text-gray-800">
+                         {primary.legs.map((leg: any, i: number) => {
+@@ -2401,11 +2877,12 @@ export default function PermitTestPage() {
+                     ) : (
+                       <p className="text-sm text-gray-800 break-words">{primary.highways.map((h: string) => formatHighwayForDisplay(h)).join(" → ")}</p>
+                     )}
+-                  </div>
++                    </div>
++                  </details>
+                 )}
+ 
+                 {/* Permit Readiness + Warnings (OR-Tools richer fields; only when present for backward compat) */}
+-                {primary.permitReady !== undefined && (
++                {showRouteDetails && primary.permitReady !== undefined && (
+                   <div className="p-4 border rounded-lg bg-white">
+                     <h3 className="font-semibold mb-2 text-gray-700">Permit Readiness</h3>
+                     <div className="flex items-center gap-2 mb-2">

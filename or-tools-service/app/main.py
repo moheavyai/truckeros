@@ -21,7 +21,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import CORS_ORIGINS, SERVICE_VERSION
+from .config import BUILD_ID, CORS_ORIGINS, SERVICE_VERSION
 from .routers.route import router as route_router
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,12 @@ app.include_router(route_router)
 # Also expose health at root level for convenience
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "or-tools", "version": SERVICE_VERSION}
+    return {
+        "status": "ok",
+        "service": "or-tools",
+        "version": SERVICE_VERSION,
+        "buildId": BUILD_ID,
+    }
 
 
 # Root hint

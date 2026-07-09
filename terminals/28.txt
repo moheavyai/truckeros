@@ -1,0 +1,37 @@
+---
+pid: 13736
+cwd: "C:\Users\andre\truckeros"
+command: "cd C:\\Users\\andre\\truckeros; npx tsc --noEmit 2>&1 | Select-Object -First 30"
+started_at: 2026-07-07T19:43:44.406Z
+running_for_ms: 165017   
+---
+app/api/admin/migrate/route.test.ts(182,17): error TS2540: Cannot assign to 'NODE_ENV' because it is a read-only property.
+app/api/admin/migrate/route.test.ts(191,17): error TS2540: Cannot assign to 'NODE_ENV' because it is a read-only property.
+app/api/admin/migrate/route.test.ts(250,17): error TS2540: Cannot assign to 'NODE_ENV' because it is a read-only property.
+app/api/admin/migrate/route.test.ts(297,17): error TS2540: Cannot assign to 'NODE_ENV' because it is a read-only property.
+app/api/analyze-permit/route.ts(32,32): error TS2339: Property 'message' does not exist on type 'NormalizeDropsResult'.
+  Property 'message' does not exist on type '{ ok: true; drops: StopWithCoords[]; }'.
+app/api/analyze-permit/route.ts(33,30): error TS2339: Property 'message' does not exist on type 'NormalizeDropsResult'.
+  Property 'message' does not exist on type '{ ok: true; drops: StopWithCoords[]; }'.
+app/api/geocode/route.ts(176,26): error TS2339: Property 'userMessage' does not exist on type '{ ok: true; value: Required<Pick<GeocodeInput, "limit">> & GeocodeInput; } | { ok: false; userMessage: string; }'.
+  Property 'userMessage' does not exist on type '{ ok: true; value: Required<Pick<GeocodeInput, "limit">> & GeocodeInput; }'.
+app/api/geocode/route.ts(176,62): error TS2339: Property 'userMessage' does not exist on type '{ ok: true; value: Required<Pick<GeocodeInput, "limit">> & GeocodeInput; } | { ok: false; userMessage: string; }'.
+  Property 'userMessage' does not exist on type '{ ok: true; value: Required<Pick<GeocodeInput, "limit">> & GeocodeInput; }'.
+app/api/geocode/route.ts(245,34): error TS2339: Property 'importance' does not exist on type 'GeocodeDto'.
+app/api/optimize-route/route.ts(37,33): error TS2339: Property 'message' does not exist on type 'NormalizeDropsResult'.
+  Property 'message' does not exist on type '{ ok: true; drops: StopWithCoords[]; }'.
+app/api/profile-change-requests/route.test.ts(149,40): error TS2339: Property 'mock' does not exist on type '(supabase: SupabaseClient<any, "public", "public", any, any>, actor: MemberProfile, form: MemberProfileFormData, baseline?: MemberProfileFormData) => Promise<...>'.
+app/api/restart-ortools/route.test.ts(57,17): error TS2540: Cannot assign to 'NODE_ENV' because it is a read-only property.
+app/api/restart-ortools/route.test.ts(62,17): error TS2540: Cannot assign to 'NODE_ENV' because it is a read-only property.
+app/api/restart-ortools/route.test.ts(78,17): error TS2540: Cannot assign to 'NODE_ENV' because it is a read-only property.
+app/permit-test/page.tsx(302,7): error TS2322: Type 'string' is not assignable to type 'number'.
+app/permit-test/page.tsx(303,7): error TS2322: Type 'string' is not assignable to type 'number'.
+app/permit-test/page.tsx(304,7): error TS2322: Type 'string' is not assignable to type 'number'.
+app/permit-test/page.tsx(305,7): error TS2322: Type 'string' is not assignable to type 'number'.
+app/permit-test/page.tsx(307,7): error TS2322: Type 'string' is not assignable to type 'number'.
+app/permit-test/page.tsx(544,7): error TS2322: Type 'string' is not assignable to type 'number'.
+app/permit-test/page.tsx(545,7): error TS2322: Type 'string' is not assignable to type 'number'.
+app/permit-test/page.tsx(546,7): error TS2322: Type 'string' is not assignable to type 'number'.
+app/permit-test/page.tsx(547,7): error TS2322: Type 'string' is not assignable to type 'number'.
+app/permit-test/page.tsx(549,7): error TS2322: Type 'string' is not assignable to type 'number'.
+lib/db-migrate.test.ts(51,17): error TS2540: Cannot assign to 'NODE_ENV' because it is a read-only property.

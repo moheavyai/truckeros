@@ -11,7 +11,9 @@ Central configuration for the OR-Tools backend service.
 
 from __future__ import annotations
 
+import hashlib
 import os
+from pathlib import Path
 from typing import Final
 
 # --- Networking / External ---
@@ -22,6 +24,18 @@ OPTIMIZE_ROUTE_TIMEOUT_S: Final[float] = float(os.getenv("OPTIMIZE_ROUTE_TIMEOUT
 # --- Server ---
 DEFAULT_PORT: Final[int] = int(os.getenv("PORT", "8001"))
 SERVICE_VERSION: Final[str] = "0.3.1"  # v0.3.1 World-Class Routing: hard avoid (leg-state matrix), intelligent suggest vias, robust step-ref corridor (ported+improved from TS), accurate for avoids+includes like Calvert AL->NE "avoid AR, avoid IL, include Corinth MS"
+
+
+def _compute_build_id() -> str:
+    """Short fingerprint of solver source for stale-process detection."""
+    solver = Path(__file__).resolve().parent / "services" / "ortools_solver.py"
+    try:
+        return hashlib.sha256(solver.read_bytes()).hexdigest()[:12]
+    except OSError:
+        return "unknown"
+
+
+BUILD_ID: Final[str] = _compute_build_id()
 
 # --- CORS (used in main.py) ---
 CORS_ORIGINS: Final[list[str]] = [
@@ -50,6 +64,12 @@ LEGAL_WIDTH_FT: Final[float] = 8.5
 LEGAL_HEIGHT_FT: Final[float] = 13.5
 LEGAL_LENGTH_FT: Final[float] = 60.0  # conservative for many combos
 LEGAL_WEIGHT_LBS: Final[float] = 80000.0
+
+# Trailer/rig length vs overall envelope (trailer + load + overhangs) for permit flagging.
+# Trailer <= TRAILER_LEGAL_LENGTH_FT alone does NOT trigger a length permit.
+# Envelope permit threshold is ENVELOPE_PERMIT_LENGTH_FT unless a state rule sets higher.
+TRAILER_LEGAL_LENGTH_FT: Final[float] = 53.0
+ENVELOPE_PERMIT_LENGTH_FT: Final[float] = 84.5
 
 # --- Penalty equivalents (meters in distance_callback for VRP ordering) ---
 # These bias the solver toward orders that avoid "bad" arcs for OSOW loads.
@@ -160,6 +180,41 @@ HIGHWAY_STATE_HINTS: Final[dict[str, str]] = {
     "I-55": "MS", "I-57": "MO", "I-44": "MO", "I-24": "TN", "I-22": "MS",
     "I-85": "GA", "I-20": "AL", "I-10": "LA", "I-35": "OK", "I-29": "MO",
     "I-64": "MO", "I-72": "IL", "I-75": "GA", "I-4": "FL",
+    "I-90": "SD", "I-25": "WY", "US 81": "NE", "US 83": "NE",
+}
+
+# Approximate lat/lon bounds (min_lat, max_lat, min_lon, max_lon) for geometry fallback
+# when OSRM step refs lack state route numbers (common on I-35/I-80/I-90 long-haul).
+STATE_LAT_LON_BOUNDS: Final[dict[str, tuple[float, float, float, float]]] = {
+    "AL": (30.2, 35.0, -88.5, -84.9), "AZ": (31.3, 37.0, -114.8, -109.0),
+    "AR": (33.0, 36.5, -94.6, -89.6), "CA": (32.5, 42.0, -124.5, -114.1),
+    "CO": (37.0, 41.0, -109.1, -102.0), "CT": (40.9, 42.1, -73.7, -71.8),
+    "DE": (38.4, 39.8, -75.8, -75.0), "FL": (24.5, 31.0, -87.6, -80.0),
+    "GA": (30.4, 35.0, -85.6, -80.8), "ID": (42.0, 49.0, -117.2, -111.0),
+    "IL": (37.0, 42.5, -91.5, -87.5), "IN": (37.8, 41.8, -88.1, -84.8),
+    "IA": (40.4, 43.5, -96.15, -90.1), "KS": (37.0, 40.0, -102.1, -94.6),
+    "KY": (36.5, 39.2, -89.6, -81.9), "LA": (29.0, 33.0, -94.0, -89.0),
+    "ME": (43.0, 47.5, -71.1, -66.9), "MD": (37.9, 39.7, -79.5, -75.0),
+    "MA": (41.2, 42.9, -73.5, -69.9), "MI": (41.7, 48.3, -90.4, -82.4),
+    "MN": (43.5, 49.4, -97.2, -89.5), "MS": (30.2, 35.0, -91.7, -88.1),
+    "MO": (36.0, 40.6, -95.8, -89.1), "MT": (44.4, 49.0, -116.1, -104.0),
+    "NE": (40.0, 43.0, -104.1, -95.3), "NV": (35.0, 42.0, -120.0, -114.0),
+    "NH": (42.7, 45.3, -72.6, -70.6), "NJ": (38.9, 41.4, -75.6, -73.9),
+    "NM": (31.3, 37.0, -109.1, -103.0), "NY": (40.5, 45.0, -79.8, -71.9),
+    "NC": (33.8, 36.6, -84.3, -75.5), "ND": (45.9, 49.0, -104.1, -96.5),
+    "OH": (38.4, 42.0, -84.8, -80.5), "OK": (33.6, 37.0, -103.0, -94.4),
+    "OR": (42.0, 46.3, -124.6, -116.5), "PA": (39.7, 42.3, -80.5, -74.7),
+    "RI": (41.1, 42.0, -71.9, -71.1), "SC": (32.0, 35.2, -83.4, -78.5),
+    "SD": (42.5, 45.95, -104.1, -96.4), "TN": (35.0, 36.7, -90.3, -81.6),
+    "TX": (25.8, 36.5, -106.6, -93.5), "UT": (37.0, 42.0, -114.1, -109.0),
+    "VT": (42.7, 45.0, -73.4, -71.5), "VA": (36.5, 39.5, -83.7, -75.2),
+    "WA": (45.5, 49.0, -124.8, -116.9), "WV": (37.2, 40.6, -82.7, -77.7),
+    "WI": (42.5, 47.1, -92.9, -86.8), "WY": (41.0, 45.0, -111.1, -104.06),
+}
+
+STATE_CENTROIDS: Final[dict[str, tuple[float, float]]] = {
+    st: ((b[0] + b[1]) / 2.0, (b[2] + b[3]) / 2.0)
+    for st, b in STATE_LAT_LON_BOUNDS.items()
 }
 
 # Huge cost for matrix entries whose *actual OSRM leg geometry* crosses an avoided state.

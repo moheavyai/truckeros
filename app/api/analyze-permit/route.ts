@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processPermitRequest, type LoadDetails } from '@/agents/permit-agent'
+import { normalizeDrops } from '@/lib/location-stop'
 import { savePermitRequestForUser } from '@/lib/permit-requests'
 
 /**
@@ -23,15 +24,29 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
+    const dropsResult = normalizeDrops(body.drops)
+    if (!dropsResult.ok) {
+      return NextResponse.json(
+        {
+          status: 'invalid',
+          message: dropsResult.message,
+          error: dropsResult.message,
+        },
+        { status: 400 }
+      )
+    }
+
     // Map incoming form data to the LoadDetails shape expected by the agent
     const loadDetails: LoadDetails = {
       origin: {
+        query: body.origin?.query || '',
         street: body.origin?.street || '',
         city: body.origin?.city || '',
         state: body.origin?.state || '',
         zip: body.origin?.zip || '',
       },
       destination: {
+        query: body.destination?.query || '',
         street: body.destination?.street || '',
         city: body.destination?.city || '',
         state: body.destination?.state || '',
@@ -45,6 +60,7 @@ export async function POST(request: NextRequest) {
       originLon: body.originLon ? Number(body.originLon) : undefined,
       destinationLat: body.destinationLat ? Number(body.destinationLat) : undefined,
       destinationLon: body.destinationLon ? Number(body.destinationLon) : undefined,
+      drops: dropsResult.drops.length > 0 ? dropsResult.drops : undefined,
       // Support the "Change Route" manual override feature
       manualRoute: Array.isArray(body.manualRoute) ? body.manualRoute : undefined,
       // Thread specialInstructions (primary) or fallback string manualRoute for prefs (array manualRoute is for override only)
@@ -55,6 +71,8 @@ export async function POST(request: NextRequest) {
       vehicleInfo: body.vehicleInfo,
       // Routing engine choice (GraphHopper truck profile vs OSRM)
       routingEngine: body.routingEngine === 'graphhopper' ? 'graphhopper' : 'osrm',
+      trailerLengthFt:
+        body.trailerLengthFt != null ? Number(body.trailerLengthFt) : undefined,
     }
 
     const result = await processPermitRequest(loadDetails)

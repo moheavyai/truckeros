@@ -1,5 +1,7 @@
 // lib/geocoding.ts
 
+import { NOMINATIM_BASE_URL, nominatimHeaders } from '@/lib/nominatim-config'
+
 export interface ReverseGeocodeResult {
   state?: string
   country?: string
@@ -11,12 +13,10 @@ export interface ReverseGeocodeResult {
 export async function reverseGeocode(lat: number, lon: number): Promise<ReverseGeocodeResult | null> {
   try {
     // Higher zoom = much better state accuracy (old zoom=5 was too coarse)
-    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&addressdetails=1`
+    const url = `${NOMINATIM_BASE_URL}/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&addressdetails=1`
 
     const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'TruckerOS/1.0 (andrehampton1@outlook.com)',
-      },
+      headers: nominatimHeaders(),
     })
 
     if (!res.ok) {

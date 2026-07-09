@@ -5,16 +5,21 @@
   "scripts": {
     "dev": "next dev --webpack",
     "dev:turbo": "next dev --turbo",
+    "prebuild": "vitest run",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "safety:backup": "powershell -File ./scripts/backup-and-push.ps1",
-    "test:safety": "powershell -Command \"if (-not (Get-Module -ListAvailable -Name Pester)) { Write-Error 'Pester not installed. Run: Install-Module Pester -Scope CurrentUser -Force'; exit 1 }; $r = Invoke-Pester -Path ./scripts/backup-and-push.Tests.ps1 -PassThru; if ($r.FailedCount -gt 0) { exit 1 }\""
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "restart:ortools": "powershell -NoProfile -ExecutionPolicy Bypass -File ./restart-ortools.ps1",
+    "safety:backup": "powershell -ExecutionPolicy Bypass -File ./scripts/backup-and-push.ps1",
+    "test:safety": "powershell -ExecutionPolicy Bypass -Command \"if (-not (Get-Module -ListAvailable -Name Pester)) { Write-Error 'Pester not installed. Run: Install-Module Pester -Scope CurrentUser -Force'; exit 1 }; $r = Invoke-Pester -Path ./scripts/backup-and-push.Tests.ps1 -PassThru; if ($r.FailedCount -gt 0) { exit 1 }\""
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.45.0",
     "next": "16.2.6",
+    "pg": "^8.16.3",
     "react": "^19.0.0-rc-02c0e824-20241028",
     "react-dom": "^19.0.0-rc-02c0e824-20241028"
   },
@@ -28,6 +33,7 @@
     "eslint-config-next": "16.2.6",
     "postcss": "^8",
     "tailwindcss": "^4.3.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.6"
   }
 }

@@ -1,0 +1,99 @@
+---
+pid: 24360
+cwd: "C:\Users\andre\truckeros"
+command: "cd C:\\Users\\andre\\truckeros; npm test 2>&1"
+started_at: 2026-07-04T04:16:39.261Z
+running_for_ms: 179980   
+---
+
+> truckeros@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.6 C:/Users/andre/truckeros
+
+ ↓ scripts/geocode-report.integration.test.ts (1 test | 1 skipped)
+ ↓ lib/geocode-live.integration.test.ts (4 tests | 4 skipped)
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] non-ok HTTP 503 from http://127.0.0.1:8000/health
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] responded in 2ms status=200
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] connected service=or-tools version=1.0.0 buildId=abc123def456
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] responded in 1ms status=503
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] responded in 0ms status=200
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on connection refused
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on timeout
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+ ✓ app/api/ortools-health/route.test.ts (5 tests) 41ms
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] unexpected body status=degraded service=undefined
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on connection refused
+[ortools-health] probe failed after 0ms: fetch failed
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on timeout
+[ortools-health] probe failed after 0ms: The operation was aborted
+
+stderr | app/api/optimize-route/route.test.ts > POST /api/optimize-route > falls back to OSRM with query and normalized drops when OR-Tools is unreachable
+[optimize-route] OR-Tools fetch failed after 2ms: ECONNREFUSED 127.0.0.1:8000
+[optimize-route] OR-Tools unreachable, falling back to OSRM: unreachable ECONNREFUSED 127.0.0.1:8000
+
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > falls back to OSRM with query and normalized drops when OR-Tools is unreachable
+[optimize-route] calling OR-Tools url=http://127.0.0.1:8000/optimize-route timeout_ms=180000
+
+ ✓ app/api/optimize-route/route.test.ts (4 tests) 31ms
+ ✓ app/api/geocode/route.test.ts (7 tests) 48ms
+ ✓ app/api/analyze-permit/route.test.ts (2 tests) 26ms
+ ✓ lib/geocode-client.test.ts (11 tests) 1560ms
+   ✓ fetchGeocodeWithRetry > retries 429 then succeeds  506ms
+   ✓ fetchGeocodeWithRetry > retries 500 then fails  531ms
+   ✓ fetchGeocodeWithRetry > retries network throw then fails retryable  502ms
+ ✓ lib/location-stop.test.ts (23 tests) 25ms
+ ✓ lib/geocode-query.test.ts (13 tests) 17ms
+ ✓ agents/permit-agent.test.ts (2 tests) 12ms
+ ✓ lib/build-corridor.test.ts (10 tests) 22ms
+stdout | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > spawns detached restart script on Windows for authenticated users
+[restart-ortools] restart initiated by user user-123
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when restart script is missing
+[restart-ortools] restart script not found: C:\Users\andre\truckeros\restart-ortools.ps1
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when spawn throws synchronously
+[restart-ortools] failed to spawn restart script: spawn EACCES
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when child emits an error event
+[restart-ortools] failed to spawn restart script: ENOENT: powershell.exe not found
+
+
+stdout | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 429 when restart is requested within 60 seconds
+[restart-ortools] restart initiated by user user-123
+
+ ✓ app/api/restart-ortools/route.test.ts (8 tests) 35ms
+ ✓ lib/ortools-config.test.ts (15 tests) 12ms
+ ✓ lib/geocode-server.test.ts (9 tests) 14ms
+ ✓ lib/permit-length.test.ts (9 tests) 10ms
+
+ Test Files  13 passed | 2 skipped (15)
+      Tests  118 passed | 5 skipped (123)
+   Start at  00:16:44
+   Duration  8.68s (transform 5.15s, setup 0ms, collect 11.63s, tests 1.85s, environment 7ms, prepare 8.39s)
+

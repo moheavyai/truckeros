@@ -1,0 +1,62 @@
+---
+pid: 19516
+cwd: "C:\Users\andre\truckeros"
+command: "cd C:\\Users\\andre\\truckeros; $env:LIVE_GEOCODE='1'; npx vitest run scripts/geocode-report.integration.test.ts"
+started_at: 2026-07-04T04:12:56.125Z
+running_for_ms: 64992    
+---
+
+ RUN  v3.2.6 C:/Users/andre/truckeros
+
+stdout | scripts/geocode-report.integration.test.ts > geocode report > prints live geocode results for summary
+
+=== Geocode Test Results ===
+
+stdout | scripts/geocode-report.integration.test.ts > geocode report > prints live geocode results for summary
+
+Pickup: "Case IH plant, Grand Island, NE"
+  lat: 40.924271
+  lon: -98.338685
+  city: Grand Island
+  state: NE
+  road: 
+  winning variant: raw (Case IH plant, Grand Island, NE)
+
+stdout | scripts/geocode-report.integration.test.ts > geocode report > prints live geocode results for summary
+
+Drop 1: "Northern Plains Equipment, 1915 US-2, Minot, ND"
+  lat: 48.2096542
+  lon: -101.3111905
+  city: Minot
+  state: ND
+  road: US Highway 2
+  winning variant: raw (Northern Plains Equipment, 1915 US-2, Minot, ND)
+
+stdout | scripts/geocode-report.integration.test.ts > geocode report > prints live geocode results for summary
+
+Drop 2: "West Plains, 3484 I94 Business Loop E, Dickinson, ND"
+  lat: 46.8798699
+  lon: -102.7580113
+  city: Dickinson
+  state: ND
+  road: Interstate 94 Business Loop East
+  winning variant: street-city-state (3484 Interstate 94 Business Loop East, Dickinson, ND)
+
+stdout | scripts/geocode-report.integration.test.ts > geocode report > prints live geocode results for summary
+
+Drop 2 partial: "West Plains Dickinson I94 Business Loop E"
+  lat: 46.8798699
+  lon: -102.7580113
+  city: Dickinson
+  state: ND
+  road: Interstate 94 Business Loop East
+  winning variant: raw (West Plains Dickinson I94 Business Loop E)
+
+ ✓ scripts/geocode-report.integration.test.ts (1 test) 27459ms
+   ✓ geocode report > prints live geocode results for summary  27457ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  00:12:58
+   Duration  28.39s (transform 110ms, setup 0ms, collect 127ms, tests 27.46s, environment 0ms, prepare 190ms)
+

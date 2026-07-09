@@ -53,12 +53,15 @@ from ..config import (
     SOLVER_SOLUTION_LIMIT,
     SOLVER_TIME_LIMIT_S,
     STATE_ABBR,
+    STATE_CENTROIDS,
+    STATE_LAT_LON_BOUNDS,
     STATE_NAME_TO_CODE,
 )
 from ..utils.constraints import (
     _add_osow_penalty,
     check_violations,
     compute_permit_ready,
+    load_needs_length_permit,
 )
 
 logger = logging.getLogger(__name__)
@@ -143,16 +146,40 @@ async def get_table_matrix(
 
 
 
-MULTI_STATE_HWYS: set[str] = {"I-35", "I-40", "I-44", "I-55", "I-57", "I-70", "I-75"}
+MULTI_STATE_HWYS: set[str] = {
+    "I-35", "I-40", "I-44", "I-55", "I-57", "I-70", "I-75", "I-80", "I-90", "I-29", "I-25",
+    "US 81",
+}
+
+
+def _ok_mt_corridor_profile(plain_hwys: set[str]) -> str | None:
+    """Western (I-70/I-25 via CO/WY) vs eastern (I-35/I-80/I-90) OK→MT corridor."""
+    western = plain_hwys & {"I-70", "I-25"}
+    eastern = plain_hwys & {"I-35", "I-80", "I-90"}
+    if western and not eastern:
+        return "western"
+    if eastern and not western:
+        return "eastern"
+    if western and eastern:
+        return "western" if "I-25" in plain_hwys else "eastern"
+    return None
 
 
 
 
 def complete_corridor_with_highways(states: list[str], highways: list[str]) -> list[str]:
-    """Port of lib/build-corridor.ts completeCorridorWithHighways (MO/TN southern corridor heuristics)."""
-    original = list(states)
+    """Port of lib/build-corridor.ts completeCorridorWithHighways (southern + OK→MT heuristics)."""
     result = list(states)
     plain_hwys = {h.split(" (")[0] for h in (highways or [])}
+
+    if (plain_hwys & {"I-35", "I-40"}) and "MO" in result and "OK" not in result:
+        result.insert(result.index("MO") + 1, "OK")
+    if "AR" in result and "TX" in result and "OK" not in result:
+        result.insert(result.index("AR") + 1, "OK")
+    if plain_hwys & {"I-35"} and "MO" in result and "KS" not in result:
+        mo_idx = result.index("MO")
+        if mo_idx > 0:
+            result.insert(mo_idx, "KS")
 
     if plain_hwys & {"I-44", "I-55", "I-24"}:
         if "KS" in result and "MO" not in result:
@@ -160,9 +187,66 @@ def complete_corridor_with_highways(states: list[str], highways: list[str]) -> l
         if "TN" not in result and "MO" in result:
             result.insert(result.index("MO") + 1, "TN")
 
+    if "OK" in result and "MT" in result:
+        profile = _ok_mt_corridor_profile(plain_hwys)
+        if profile is None and len(result) <= 2 and plain_hwys & {"I-70", "I-25"}:
+            profile = "western"
+        if profile == "western":
+            if "KS" not in result:
+                result.insert(result.index("OK") + 1, "KS")
+            if "CO" not in result and "KS" in result:
+                result.insert(result.index("KS") + 1, "CO")
+            if "WY" not in result and "CO" in result:
+                result.insert(result.index("CO") + 1, "WY")
+        elif profile == "eastern":
+            for drop in ("CO", "WY"):
+                while drop in result:
+                    result.remove(drop)
+            if "KS" not in result:
+                result.insert(result.index("OK") + 1, "KS")
+            if "NE" not in result:
+                anchor = "KS" if "KS" in result else "OK"
+                result.insert(result.index(anchor) + 1, "NE")
+            if "SD" not in result and "NE" in result:
+                result.insert(result.index("NE") + 1, "SD")
+
     seen: set[str] = set()
     deduped = [s for s in result if not (s in seen or seen.add(s))]
     return deduped if has_plausible_transitions(deduped) else list(states)
+
+
+
+
+def _border_crossings_match_corridor(
+    crossings: list[dict[str, Any]], states: list[str]
+) -> bool:
+    """True when extracted crossings follow the same state sequence as routeCorridor."""
+    if len(states) < 2:
+        return True
+    if len(crossings) != len(states) - 1:
+        return False
+    for i, c in enumerate(crossings):
+        if c.get("exitState") != states[i] or c.get("entryState") != states[i + 1]:
+            return False
+    return True
+
+def synthesize_border_crossings_from_corridor(
+    states: list[str], highways: list[str]
+) -> list[dict[str, Any]]:
+    """Build border crossings from repaired corridor when step attribution yields none."""
+    if len(states) < 2:
+        return []
+    hwy = highways[0].split(" (")[0] if highways else "unknown"
+    return [
+        {
+            "exitState": states[i],
+            "entryState": states[i + 1],
+            "highway": hwy,
+            "lat": None,
+            "lon": None,
+        }
+        for i in range(len(states) - 1)
+    ]
 
 
 def _insert_missing_stop_states_in_visit_order(
@@ -748,6 +832,55 @@ def build_stops_from_load(
         o_stop["state"] = o_state
     stops.append(o_stop)
 
+    # Explicit multi-stop drops (ordered delivery stops from permit-test form)
+    explicit_drops: list[dict[str, Any]] = []
+    if isinstance(load, dict):
+        raw_drops = load.get("drops") or []
+        if isinstance(raw_drops, list):
+            explicit_drops = [d for d in raw_drops if isinstance(d, dict)]
+    elif hasattr(load, "drops") and getattr(load, "drops", None):
+        explicit_drops = [
+            d.model_dump() if hasattr(d, "model_dump") else dict(d)
+            for d in (load.drops or [])
+        ]
+
+    has_explicit_drops = False
+    if explicit_drops:
+        for i, drop in enumerate(explicit_drops):
+            lat_raw = drop.get("lat")
+            lon_raw = drop.get("lon")
+            if lat_raw is None or lon_raw is None:
+                raise ValueError(f"drops[{i}] missing lat/lon coordinates")
+            try:
+                dlat_chk, dlon_chk = float(lat_raw), float(lon_raw)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"drops[{i}] invalid lat/lon coordinates") from exc
+            if not (math.isfinite(dlat_chk) and math.isfinite(dlon_chk)):
+                raise ValueError(f"drops[{i}] requires finite lat/lon coordinates")
+        has_explicit_drops = True
+    for i, drop in enumerate(explicit_drops):
+        lat = drop.get("lat")
+        lon = drop.get("lon")
+        if lat is None or lon is None:
+            continue
+        try:
+            dlat, dlon = float(lat), float(lon)
+        except (TypeError, ValueError):
+            continue
+        if not (math.isfinite(dlat) and math.isfinite(dlon)):
+            continue
+        d_stop: dict[str, Any] = {
+            "name": drop.get("query") or drop.get("city") or f"drop_{i + 1}",
+            "lat": dlat,
+            "lon": dlon,
+            "is_via": False,
+            "is_drop": True,
+        }
+        dst = drop.get("state")
+        if dst:
+            d_stop["state"] = str(dst).upper().strip()
+        stops.append(d_stop)
+
     # special instructions
     special = None
     if hasattr(load, "get_special_instructions"):
@@ -802,19 +935,21 @@ def build_stops_from_load(
                 included.append(sv)
         vias = included
 
-    # dedupe vias by rounded coord
-    seen_keys: set[str] = set()
-    for v in vias:
-        k = f"{round(v['lat'], 2)},{round(v['lon'], 2)}"
-        if k not in seen_keys:
-            seen_keys.add(k)
-            v["is_via"] = True
-            stops.append(v)
+    # dedupe vias by rounded coord (skip when explicit drops define the route)
+    if not has_explicit_drops:
+        seen_keys: set[str] = set()
+        for v in vias:
+            k = f"{round(v['lat'], 2)},{round(v['lon'], 2)}"
+            if k not in seen_keys:
+                seen_keys.add(k)
+                v["is_via"] = True
+                stops.append(v)
 
-    d_stop: dict[str, Any] = {"name": "destination", "lat": d_lat, "lon": d_lon, "is_via": False}
-    if d_state:
-        d_stop["state"] = d_state
-    stops.append(d_stop)
+    if not has_explicit_drops:
+        d_stop: dict[str, Any] = {"name": "destination", "lat": d_lat, "lon": d_lon, "is_via": False}
+        if d_state:
+            d_stop["state"] = d_state
+        stops.append(d_stop)
     return stops
 
 
@@ -985,6 +1120,152 @@ def crosses_avoided_state(steps: list[dict[str, Any]], avoided: list[str]) -> bo
     return bool(trav & av_set)
 
 
+
+_COMPASS_SUFFIX_CODES: frozenset[str] = frozenset({"NE", "NW", "SE", "SW"})
+
+
+def _is_highway_compass_suffix(part: str, code: str) -> bool:
+    """True when NE/NW/SE/SW is a highway cardinal suffix (e.g. 'I 35 NE'), not Nebraska etc."""
+    if code not in _COMPASS_SUFFIX_CODES:
+        return False
+    # State highway route number: NE 2, NE-92
+    if re.search(rf"\b{re.escape(code)}[\s-]*\d", part, re.IGNORECASE):
+        return False
+    stripped = part.strip()
+    # Standalone segment is the state code (e.g. ';NE' part or 'NE' alone)
+    if re.fullmatch(rf"{re.escape(code)}", stripped, re.IGNORECASE):
+        return False
+    # Compass suffix immediately after interstate/US number: I 35 NE, I-80 SW
+    if re.search(
+        rf"\b(?:I[\s-]?\d+|US[\s-]?\d+)[\s-]+{re.escape(code)}\s*$",
+        stripped,
+        re.IGNORECASE,
+    ):
+        return True
+    return False
+
+
+def _state_from_coordinates(lat: float, lon: float) -> str | None:
+    """Infer US state from lat/lon using approximate bounds (no network)."""
+    if not (math.isfinite(lat) and math.isfinite(lon)):
+        return None
+    matches: list[str] = []
+    for st, (min_lat, max_lat, min_lon, max_lon) in STATE_LAT_LON_BOUNDS.items():
+        if min_lat <= lat <= max_lat and min_lon <= lon <= max_lon:
+            matches.append(st)
+    if not matches:
+        return None
+    if len(matches) == 1:
+        return matches[0]
+
+    def _dist2(code: str) -> float:
+        c_lat, c_lon = STATE_CENTROIDS[code]
+        return (lat - c_lat) ** 2 + (lon - c_lon) ** 2
+
+    return min(matches, key=_dist2)
+
+
+def _step_coordinate_samples(step: dict[str, Any]) -> list[tuple[float, float]]:
+    """Sample lat/lon points from an OSRM step (maneuver + denser geometry walk)."""
+    points: list[tuple[float, float]] = []
+    seen: set[tuple[float, float]] = set()
+
+    def _add(lat: float, lon: float) -> None:
+        if not (math.isfinite(lat) and math.isfinite(lon)):
+            return
+        key = (round(lat, 4), round(lon, 4))
+        if key not in seen:
+            seen.add(key)
+            points.append((lat, lon))
+
+    man: list[float] = (step.get("maneuver") or {}).get("location") or []
+    if isinstance(man, (list, tuple)) and len(man) >= 2:
+        _add(float(man[1]), float(man[0]))
+    coords: list[list[float]] = (step.get("geometry") or {}).get("coordinates") or []
+    if coords:
+        n = len(coords)
+        if n <= 6:
+            indices = range(n)
+        else:
+            indices = sorted({
+                0,
+                n // 4,
+                n // 2,
+                (3 * n) // 4,
+                n - 1,
+                *range(0, n, max(1, n // 8)),
+            })
+        for idx in indices:
+            c = coords[idx]
+            if isinstance(c, (list, tuple)) and len(c) >= 2:
+                _add(float(c[1]), float(c[0]))
+    return points
+
+
+def _state_from_step_geometry(step: dict[str, Any]) -> str | None:
+    for lat, lon in _step_coordinate_samples(step):
+        st = _state_from_coordinates(lat, lon)
+        if st:
+            return st
+    return None
+
+
+def _extract_state_codes_from_step_ref(step: dict[str, Any]) -> list[str]:
+    """All state codes from step ref/name in traversal order (port of extractStateHintsFromSteps per-step)."""
+    if not isinstance(step, dict):
+        return []
+    ref = str(step.get("ref") or step.get("name") or "")
+    if not ref:
+        return []
+    valid_codes: set[str] = set(STATE_ABBR)
+    valid_codes.update({"AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"})
+    found: list[str] = []
+    parts = [p.strip() for p in re.split(r"[;,\|]", ref) if p.strip()]
+    for part in parts:
+        for m in re.finditer(r"\b([A-Z]{2})[\s-]?(\d{1,4})\b", part):
+            code = m.group(1).upper()
+            if code in valid_codes and code not in found:
+                found.append(code)
+        for m in re.finditer(r"\b([A-Z]{2})\b", part):
+            code = m.group(1).upper()
+            if code not in valid_codes:
+                continue
+            if _is_highway_compass_suffix(part, code):
+                continue
+            if code not in found:
+                found.append(code)
+        for m in re.finditer(r"\b([A-Za-z]+(?:\s+[A-Za-z]+)?)\b", part):
+            nm = m.group(1).strip().lower()
+            if nm in STATE_NAME_TO_CODE:
+                code = STATE_NAME_TO_CODE[nm]
+                if code not in found:
+                    found.append(code)
+    return found
+
+
+def extract_state_hints_from_steps(steps: list[dict[str, Any]]) -> list[str]:
+    """Ordered first-seen state codes from all step refs (port of lib/build-corridor.ts)."""
+    states: list[str] = []
+    for step in steps or []:
+        for code in _extract_state_codes_from_step_ref(step):
+            if code not in states:
+                states.append(code)
+    return states
+
+
+def _discover_states_for_step(step: dict[str, Any]) -> list[str]:
+    """Ordered states attributable to one step: ref hints, primary, then geometry."""
+    discovered = _extract_state_codes_from_step_ref(step)
+    primary = _get_primary_state_for_step(step)
+    if primary and primary not in discovered:
+        discovered.append(primary)
+    if not discovered:
+        geo = _state_from_step_geometry(step)
+        if geo:
+            discovered.append(geo)
+    return discovered
+
+
 # =============================================================================
 # Border crossing extraction (new for this upgrade): entry/exit = actual state borders on hwys
 # Pure helpers, placed with other extract_ fns for reviewability/testability. No side effects.
@@ -1007,8 +1288,6 @@ def _get_primary_state_for_step(step: dict[str, Any]) -> str | None:
     if not isinstance(step, dict):
         return None
     ref = str(step.get("ref") or step.get("name") or "")
-    if not ref:
-        return None
     valid_codes: set[str] = set(STATE_ABBR)
     valid_codes.update({"AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"})
     parts = [p.strip() for p in re.split(r"[;,\|]", ref) if p.strip()]
@@ -1018,15 +1297,10 @@ def _get_primary_state_for_step(step: dict[str, Any]) -> str | None:
             code = m.group(1).upper()
             if code in valid_codes:
                 candidates.append(code)
-        # robust actual geometry: standalone abbr (e.g. "MS" alone or "via MS")
-        # smallest robust fix: ignore common directionals (NE/NW etc) when they appear as suffix/dir without
-        # their own hwy number (prevents spurious NE in corridor for OK-IL etc on refs like "... NE" or "NE " road names)
+        # Standalone abbr (e.g. "MS" alone). NE/NW/SE/SW only skipped when highway compass suffix.
         for m in re.finditer(r"\b([A-Z]{2})\b", part):
             code = m.group(1).upper()
-            if code in valid_codes:
-                if code in {"NE", "NW", "SE", "SW"}:
-                    if not re.search(rf"\b{code}[\s-]*\d", part):
-                        continue  # dir not state hwy ref
+            if code in valid_codes and not _is_highway_compass_suffix(part, code):
                 candidates.append(code)
         # state name parsing in ref/name for completeness (uses config map)
         for m in re.finditer(r"\b([A-Za-z]+(?:\s+[A-Za-z]+)?)\b", part):
@@ -1042,6 +1316,10 @@ def _get_primary_state_for_step(step: dict[str, Any]) -> str | None:
             # Prevents spurious MS/IL mismatches on first leg access or rural segments for OK-IL etc.
             if h not in MULTI_STATE_HWYS:
                 candidates.append(HIGHWAY_STATE_HINTS[h])
+    if not candidates:
+        geo = _state_from_step_geometry(step)
+        if geo:
+            candidates.append(geo)
     return candidates[-1] if candidates else None
 
 
@@ -1058,6 +1336,22 @@ def _get_primary_highway_for_step(step: dict[str, Any]) -> str | None:
         if h:
             return h
     return None
+
+
+def _resolve_bookend_states(load: Any, stops: list[dict[str, Any]]) -> tuple[str | None, str | None]:
+    """Authoritative origin/destination state from load payload, then stop bookends."""
+    o_st = stops[0].get("state") if stops else None
+    d_st = stops[-1].get("state") if stops else None
+    if isinstance(load, dict):
+        lo = load.get("origin") or {}
+        ld = load.get("destination") or {}
+        load_o = (lo.get("state") or load.get("originState") or load.get("origin_state") or "").upper().strip()
+        load_d = (ld.get("state") or load.get("destState") or load.get("destinationState") or load.get("dest_state") or "").upper().strip()
+        if load_o:
+            o_st = load_o
+        if load_d:
+            d_st = load_d
+    return o_st, d_st
 
 
 def extract_border_crossings(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1124,7 +1418,7 @@ def extract_border_crossings(steps: list[dict[str, Any]]) -> list[dict[str, Any]
                 "lon": round(lon, 4) if lon is not None else None,
             })
             if lat is None or lon is None:
-                print(f"[ORT] {time.time():.3f} BORDER no usable point for change {prev_state}->{curr} (step attrib/geo gap at line); transition still recorded")
+                logger.debug("[ORT] BORDER no usable point for change %s->%s", prev_state, curr)
         prev_state = curr
         prev_step = step
     return crossings
@@ -1149,7 +1443,12 @@ def are_adjacent(a: str, b: str) -> bool:
         "OK": ["KS", "MO", "AR", "CO", "NM", "TX"],
         "KS": ["CO", "MO", "NE", "OK"],
         "IA": ["IL", "MN", "MO", "NE", "SD", "WI"],
-        # permissive for others
+        "SD": ["IA", "MN", "MT", "ND", "NE", "WY"],
+        "WY": ["CO", "ID", "MT", "NE", "SD", "UT"],
+        "MT": ["ID", "ND", "SD", "WY"],
+        "ND": ["MN", "MT", "SD"],
+        "CO": ["AZ", "KS", "NE", "NM", "OK", "UT", "WY"],
+        "ID": ["MT", "NV", "OR", "UT", "WA", "WY"],
     }
     aN = known.get(a)
     if not aN:
@@ -1228,22 +1527,61 @@ def build_corridor_from_steps(
     prev_state: str | None = corridor[-1] if corridor else None
     in_access_prefix = True  # for first-leg access/local roads from exact origin: attribute to o_state until confident hwy state change (robust no-jump for rural starts)
     for step in steps or []:
-        curr = _get_primary_state_for_step(step)
-        if curr is None:
+        step_states = _discover_states_for_step(step)
+        if not step_states:
             if in_access_prefix and origin_state:
-                curr = origin_state  # treat initial unattributed steps (local to interstate) as o_state for corridor continuity
+                step_states = [str(origin_state).upper().strip()]
             else:
                 continue
         else:
-            in_access_prefix = False  # first confident attribution seen; later Nones are normal gaps
-        if prev_state is None or curr != prev_state:
-            if curr not in corridor:
-                corridor.append(curr)
-            prev_state = curr
+            in_access_prefix = False
+        for curr in step_states:
+            if not curr:
+                continue
+            if prev_state is None or curr != prev_state:
+                if not corridor or corridor[-1] != curr:
+                    corridor.append(curr)
+                prev_state = curr
     if dest_state:
         d = str(dest_state).upper().strip()
         if d and d in STATE_ABBR and (not corridor or corridor[-1] != d):
             corridor.append(d)
+    # Merge ref hints when walk is sparse or implausible (e.g. OK->MT with bare I-35/I-80 refs).
+    if steps and (len(corridor) < 3 or not has_plausible_transitions(corridor)):
+        for hint in extract_state_hints_from_steps(steps):
+            if not corridor or corridor[-1] != hint:
+                if hint not in corridor:
+                    corridor.append(hint)
+                elif corridor[-1] != hint:
+                    pass
+        if not has_plausible_transitions(corridor):
+            geo_states: list[str] = []
+            for step in steps:
+                g = _state_from_step_geometry(step)
+                if g and (not geo_states or geo_states[-1] != g):
+                    geo_states.append(g)
+            if geo_states and (
+                len(geo_states) > len(corridor)
+                or (
+                    not has_plausible_transitions(corridor)
+                    and has_plausible_transitions(geo_states)
+                )
+            ):
+                corridor = geo_states
+                if origin_state:
+                    o = str(origin_state).upper().strip()
+                    if o and o in STATE_ABBR and (not corridor or corridor[0] != o):
+                        corridor.insert(0, o)
+                if dest_state:
+                    d = str(dest_state).upper().strip()
+                    if d and d in STATE_ABBR and (not corridor or corridor[-1] != d):
+                        corridor.append(d)
+    if origin_state and dest_state:
+        o = str(origin_state).upper().strip()
+        d = str(dest_state).upper().strip()
+        if o == "OK" and d == "MT" and (len(corridor) <= 2 or not has_plausible_transitions(corridor)):
+            hwys = curate_major_highways(extract_highways_from_steps(steps))
+            corridor = complete_corridor_with_highways([o, d], hwys)
     return corridor
 
 
@@ -1386,7 +1724,7 @@ def calculate_estimated_cost(
 
     is_w = float(load.get("width", 0)) > 8.5
     is_h = float(load.get("height", 0)) > 13.5
-    is_l = float(load.get("length", 0)) > 53
+    is_l = load_needs_length_permit(load)
     is_wt = float(load.get("weight", 0)) > 80000
 
     surcharges: dict[str, float] = {}
@@ -1533,17 +1871,14 @@ async def _build_route_info_from_order(
     print(f"[ORT] {time.time():.3f} BORDER_EXTRACT + CORRIDOR_WALK START steps={len(all_steps)} order={order} (detailed for abort debugging)")
     logger.info("[ORT] BORDER_EXTRACT START steps=%d order=%s", len(all_steps), order)
     t_border = time.time()
+    o_st, d_st = _resolve_bookend_states(load, stops)
     try:
         border_crossings = extract_border_crossings(all_steps)
-        o_st = stops[0].get("state") if stops else None
-        d_st = stops[-1].get("state") if stops else None
         states = build_corridor_from_steps(all_steps, o_st, d_st)
     except Exception as e:
         print(f"[ORT] {time.time():.3f} BORDER_EXTRACT/CORRIDOR ABORT/EXC {type(e).__name__}: {e} -- using fallback empty")
         logger.error("[ORT] BORDER_EXTRACT ABORT %s: %s\n%s", type(e).__name__, e, traceback.format_exc())
         border_crossings = []
-        o_st = stops[0].get("state") if stops else None
-        d_st = stops[-1].get("state") if stops else None
         states = build_corridor_from_steps([], o_st, d_st)
     border_e = time.time() - t_border
     print(f"[ORT] {time.time():.3f} BORDER_EXTRACT + CORRIDOR_WALK DONE crossings={len(border_crossings)} corridor={states} elapsed={border_e:.3f}")
@@ -1552,6 +1887,8 @@ async def _build_route_info_from_order(
     # Guarantee corridor includes all VRP stop states inserted in visit order (not appended at end).
     ordered_stops = [stops[i] for i in order]
     states = _insert_missing_stop_states_in_visit_order(states, ordered_stops)
+
+    states = complete_corridor_with_highways(states, final_highways)
 
     # extend stop guarantee for direct AL-NE (TN missed by walk attr; see summary 98925e13)
     if len(stops or []) == 2:
@@ -1567,6 +1904,8 @@ async def _build_route_info_from_order(
                 states.insert(states.index("NE"), "TN")
             else:
                 states.append("TN")
+        if o_st == "OK" and d_st == "MT" and (len(states) <= 2 or not has_plausible_transitions(states)):
+            states = complete_corridor_with_highways(["OK", "MT"], final_highways)
         if o_st == "KS" and d_st == "FL":
             av_set = set(avoided_states or [])
             for st, anchor in (("MO", "KS"), ("TN", "MO")):
@@ -1596,6 +1935,19 @@ async def _build_route_info_from_order(
         if av in states:
             all_warnings.append(f"Avoided state {av} appears in derived corridor (verify geometry or use manual override)")
 
+    if o_st and o_st in STATE_ABBR:
+        states = [s for s in states if s != o_st]
+        states.insert(0, o_st)
+    if d_st and d_st in STATE_ABBR:
+        states = [s for s in states if s != d_st]
+        states.append(d_st)
+
+    if len(states) > 1 and (
+        not border_crossings
+        or not _border_crossings_match_corridor(border_crossings, states)
+    ):
+        border_crossings = synthesize_border_crossings_from_corridor(states, final_highways)
+
     dim_warnings = check_violations(load, final_highways, states)
     all_warnings.extend(dim_warnings)
 
@@ -1603,13 +1955,13 @@ async def _build_route_info_from_order(
     hh = float(load.get("height", 0) or 0)
     ll = float(load.get("length", 0) or 0)
     wtt = float(load.get("weight", 0) or 0)
-    if ww > 8.5 or hh > 13.5 or ll > 53 or wtt > 80000:
+    if ww > 8.5 or hh > 13.5 or load_needs_length_permit(load) or wtt > 80000:
         all_warnings.append("Oversize or heavy load (dimensions over standard legal) — permits required in routeCorridor states")
-    # Thresholds (8.5/13.5/53/80000) match calculate_estimated_cost surcharge is_* logic; 53 is common trailer max (LEGAL_LENGTH_FT=60 in config for reference only).
+    # Length permit uses envelope > 84.5 ft (not trailer <=53); width/height/weight thresholds unchanged.
 
     # Note: compute uses stricter keywords (only "exceeds posted" for hard posted restrictions);
     # general oversize warning is phrased to remain soft (see above).
-    # Fix: explicitly trigger permitReady for oversize loads (width>8.5, length>53, etc.) even if no "exceeds posted" dim warning.
+    # Fix: explicitly trigger permitReady for oversize loads (width>8.5, envelope length permit, etc.) even if no "exceeds posted" dim warning.
     permit_ready = compute_permit_ready(all_warnings, critical_keywords=["exceeds posted"])
     if any("Oversize or heavy load" in str(w) for w in all_warnings):
         permit_ready = True
@@ -1698,7 +2050,12 @@ async def optimize_route(load_details: Any, max_alts: int = MAX_ALTS) -> dict[st
         d_coords = (d_lat, d_lon)
 
     stops = build_stops_from_load(load_details, o_coords, d_coords)
+    async with httpx.AsyncClient(timeout=30.0) as snap_all_client:
+        for s in stops:
+            slat, slon, _ = await snap_to_state_highway(s["lat"], s["lon"], snap_all_client)
+            s["lat"], s["lon"] = slat, slon
     n = len(stops)
+    has_fixed_drop_order = any(s.get("is_drop") for s in stops)
     # Robustness: ensure origin state on stops[0] for corridor prefix/safety/bookend (origin_state from load; coords alone don't carry state, so fallback to load fields if build didn't attach -- addresses reliance on load state when coords explicit)
     if stops and not stops[0].get("state"):
         ost = None
@@ -1795,7 +2152,18 @@ async def optimize_route(load_details: Any, max_alts: int = MAX_ALTS) -> dict[st
     primary_order = None
     seen_orders: set[tuple[int, ...]] = set()
 
-    if assignment:
+    if has_fixed_drop_order and n >= 2:
+        primary_order = list(range(n))
+        try:
+            route_info = await _build_route_info_from_order(primary_order, stops, load, dist_matrix)
+            solutions.append(route_info)
+            seen_orders.add(tuple(primary_order))
+        except Exception as e:
+            print(f"[ORT] fixed-order multi-stop build failed: {e}")
+            logger.error("[ORT] fixed-order multi-stop build failed: %s", e)
+            primary_order = None
+
+    if assignment and not (has_fixed_drop_order and solutions):
         primary_order = _extract_order(assignment)
         if primary_order:
             try:
@@ -1814,7 +2182,7 @@ async def optimize_route(load_details: Any, max_alts: int = MAX_ALTS) -> dict[st
                 raise
 
     # Real alternative solves via different first-solution strategies
-    if n > 2 and len(solutions) < max_alts + 1:
+    if not has_fixed_drop_order and n > 2 and len(solutions) < max_alts + 1:
         alt_strats = [
             routing_enums_pb2.FirstSolutionStrategy.SAVINGS,
             routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION,

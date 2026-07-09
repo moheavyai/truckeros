@@ -1,0 +1,534 @@
+---
+pid: 23764
+cwd: "C:\Users\andre\truckeros"
+command: "cd C:\\Users\\andre\\truckeros; npm test"
+started_at: 2026-07-08T21:39:55.193Z
+running_for_ms: 69992    
+---
+
+> truckeros@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.6 C:/Users/andre/truckeros
+
+ ❯ app/permit-test/load-details-ui.test.ts (4 tests | 1 failed) 45ms
+   ✓ Permit test page — load details cargo fields > imports load-details-options helpers and cargo snapshot builder 5ms
+   ✓ Permit test page — load details cargo fields > initializes formData with sensible defaults 2ms
+   ✓ Permit test page — load details cargo fields > renders compact single-row controls under Description 4ms
+   × Permit test page — load details cargo fields > uses buildPermitCargoSnapshot in both save handlers only 31ms
+     → expected 'const handleApproveAndSave = async ()…' to contain 'cargo: buildPermitCargoSnapshot(cargo…'
+ ❯ lib/routing-envelope-display.test.ts (7 tests | 1 failed) 24ms
+   ✓ getGrossHeightDisplay > returns empty display for zero or missing height 4ms
+   ✓ getGrossHeightDisplay > shows standard legal height when calculated height is at legal limit 1ms
+   ✓ getGrossHeightDisplay > shows standard legal height when calculated height is below legal limit 0ms
+   ✓ getGrossHeightDisplay > shows actual calculated height when above legal limit 0ms
+   ✓ getGrossHeightDisplay > treats heights just over 13.5 ft as oversize 0ms
+   ✓ permit-test routing envelope gross height UI > uses display helper without exposing low deck+load helper copy 2ms
+   × permit-test inline header nav > shows Dashboard and History only (no badge, no New Analysis) 13ms
+     → expected '{/* Professional Header */}\n      <h…' not to match /href="\/equipment"/equipment"
+ ↓ lib/team-member-profiles-api.live.test.ts (1 test | 1 skipped)
+ ↓ lib/equipment-persistence.live.test.ts (2 tests | 2 skipped)
+stderr | app/api/admin/migrate/route.test.ts > GET /api/admin/migrate > flags missing equipment_profiles license plate columns
+[admin/migrate] schema check failed for equipment_profiles: column equipment_profiles.license_plate does not exist
+
+stderr | app/api/admin/migrate/route.test.ts > GET /api/admin/migrate > flags missing rig_configurations table as needsMigration
+[admin/migrate] schema check failed for rig_configurations: relation "rig_configurations" does not exist
+
+ ✓ app/api/admin/migrate/route.test.ts (16 tests) 67ms
+stderr | app/api/admin/migrate/route.test.ts > POST /api/admin/migrate > returns needsManualRun when runMigrationSql throws
+[admin/migrate] POST live migration: connection refused { correlationId: 'fff52be8-3afc-440a-85b1-df5b71825857' }
+ ✓ lib/portal-assistant.test.ts (19 tests) 305ms
+
+stderr | app/api/admin/migrate/route.test.ts > POST /api/admin/migrate > returns partial success when SQL applies but columns remain missing
+[admin/migrate] schema check failed for rig_configurations: column rig_configurations.is_default does not exist
+
+ ✓ lib/portal-equipment-display.test.ts (2 tests) 29ms
+ ✓ lib/parse-dimension.test.ts (4 tests) 45ms
+ ❯ app/profile/profile-ui.test.ts (38 tests | 7 failed) 105ms
+   ✓ Profile page UI > documents source-only inspection as accepted RTL limitation without a render harness 6ms
+   ✓ Profile page UI > uses AppHeader with profile activePage 1ms
+   ✓ Profile page UI > guards auth and always clears loading state 1ms
+   ✓ Profile page UI > allows save on first visit when no profile row exists yet 2ms
+   ✓ Profile page UI > renders landing sections with carrier card and team roster 1ms
+   ✓ Profile page UI > orders driver identity fields before CDL state and date of birth in member edit card 1ms
+   ✓ Profile page UI > caps date of birth at today and announces save feedback 1ms
+   ✓ Profile page UI > renders team roster with add, edit, and delete actions 2ms
+   ✓ Profile page UI > shows member edit card with contextual save placement and team-member-only roles 2ms
+   ✓ Profile page UI > hides standalone User Roles section on own profile and shows Owner/Admin badge on landing 2ms
+   × Profile page UI > auto-assigns bootstrap Owner roles on mount and carrier save 12ms
+     → expected -1 to be greater than 36994
+   ✓ Profile page UI > renders unified owner bootstrap setup card with contact fields and Owner Operator toggle 11ms
+   ✓ Profile page UI > routes all profile saves through the team-member-profiles API 3ms
+   ✓ Profile page UI > shows editing banner from list display name and fetches profile on cache miss 2ms
+   ✓ Profile page UI > highlights active editing row and uses contextual save labels 1ms
+   ✓ Profile page UI > confirms delete, refreshes team list, and shows update success for others 1ms
+   ✓ Profile page UI > shows read-only carrier summary after first save with edit toggle for carrier managers 4ms
+   × Profile page UI > places Save Carrier Info inside the carrier card with carrier-only payload and scoped feedback 2ms
+     → expected -1 to be greater than 36994
+   ✓ Profile page UI > shows read-only org carrier block with expand collapse in member edit card 3ms
+   ✓ Profile page UI > enforces viewer write restrictions and role edit permissions in UI 1ms
+   ✓ Profile page UI > shows team member permission editor with global/custom toggles 1ms
+   × Profile page UI > implements driver restricted field permissions and change request flow 2ms
+     → expected -1 to be greater than -1
+   ✓ Profile page UI > uses showLandingView for roster spacing and delegates isFieldDisabled to canEditProfileField 1ms
+   ✓ Profile page UI > shows driver pending changes list with withdraw action 1ms
+   ✓ Profile page UI > uses shouldShowLandingProfileView for editingLabel and avoids undefined helper typo 1ms
+   ✓ Profile page UI > shows global save feedback banner outside member edit card 1ms
+   ✓ Profile page UI > shows driver edit-my-profile action and admin pending profile changes UI 3ms
+   ✓ Profile page UI > shows account link requests for primary owners with approve and reject actions 1ms
+   ✓ Profile page UI > resets carrier form expansion when switching edit targets or saving 3ms
+   × Profile page UI > uses separate saving flags with mutual exclusion across save actions 5ms
+     → expected -1 to be greater than 36994
+   × Profile page UI > refreshes own profile from API response on self-save 3ms
+     → expected -1 to be greater than -1
+   × Profile page UI > persists bootstrap via single full save with welcome message 2ms
+     → expected -1 to be greater than -1
+   ✓ Profile page UI > keeps editing team member after save instead of always resetting to self 1ms
+   ✓ Profile page UI > prompts before discarding unsaved edits when switching members 1ms
+   × Profile page UI > snapshots save payload from prior target before any await in handleSave 5ms
+     → expected '}' to match /const savePayload = buildSavePayloadF…/
+   ✓ Profile page UI > disables cancel editing while save is in flight 1ms
+   ✓ Profile page UI > supports save and invite, re-invite, dev invite testing, and accept-as-current-user 6ms
+   ✓ Profile page UI > wires DevAccountSwitcher in AppHeader for dev account switching 1ms
+ ✓ app/api/geocode/route.test.ts (7 tests) 53ms
+ ✓ app/permit-test/permit-profile-ui.test.ts (19 tests) 50ms
+ ✓ app/api/profile-change-requests/route.test.ts (7 tests) 54ms
+stderr | app/api/profile-change-requests/route.test.ts > /api/profile-change-requests > GET maps forbidden errors to 403
+[profile-change-requests] GET error: Error: Forbidden – only primary owners can list org change requests
+    at C:\Users\andre\truckeros\app\api\profile-change-requests\route.test.ts:40:7
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at file:///C:/Users/andre/truckeros/node_modules/@vitest/runner/dist/chunk-hooks.js:752:20
+
+stderr | app/api/profile-change-requests/route.test.ts > /api/profile-change-requests > POST maps forbidden errors to 403
+[profile-change-requests] POST error: Error: Forbidden – only driver accounts use profile change requests
+    at C:\Users\andre\truckeros\app\api\profile-change-requests\route.test.ts:101:7
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at file:///C:/Users/andre/truckeros/node_modules/@vitest/runner/dist/chunk-hooks.js:752:20
+
+ ✓ lib/geocode-client.test.ts (11 tests) 1571ms
+   ✓ fetchGeocodeWithRetry > retries 429 then succeeds  516ms
+   ✓ fetchGeocodeWithRetry > retries 500 then fails  521ms
+   ✓ fetchGeocodeWithRetry > retries network throw then fails retryable  506ms
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] non-ok HTTP 503 from http://127.0.0.1:8000/health
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] responded in 2ms status=200
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] connected service=or-tools version=1.0.0 buildId=abc123def456
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] responded in 1ms status=503
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] responded in 0ms status=200
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on connection refused
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on timeout
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+ ✓ app/api/ortools-health/route.test.ts (5 tests) 41ms
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] unexpected body status=degraded service=undefined
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on connection refused
+[ortools-health] probe failed after 1ms: fetch failed
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on timeout
+[ortools-health] probe failed after 0ms: The operation was aborted
+
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > falls back to OSRM with query and normalized drops when OR-Tools is unreachable
+[optimize-route] calling OR-Tools url=http://127.0.0.1:8000/optimize-route timeout_ms=180000
+
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > post-processes successful OR-Tools response with escort enrichment
+[optimize-route] calling OR-Tools url=http://127.0.0.1:8000/optimize-route timeout_ms=180000
+
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > post-processes successful OR-Tools response with escort enrichment
+[optimize-route] OR-Tools responded in 0ms status=200
+
+ ✓ app/api/optimize-route/route.test.ts (5 tests) 45ms
+stderr | app/api/optimize-route/route.test.ts > POST /api/optimize-route > falls back to OSRM with query and normalized drops when OR-Tools is unreachable
+[optimize-route] OR-Tools fetch failed after 3ms: ECONNREFUSED 127.0.0.1:8000
+[optimize-route] OR-Tools unreachable, falling back to OSRM: unreachable ECONNREFUSED 127.0.0.1:8000
+ ✓ app/api/portal-submissions/route.test.ts (5 tests) 44ms
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when restart script is missing
+[restart-ortools] restart script not found: C:\Users\andre\truckeros\restart-ortools.ps1
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when spawn throws synchronously
+[restart-ortools] failed to spawn restart script: spawn EACCES
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when child emits an error event
+[restart-ortools] failed to spawn restart script: ENOENT: powershell.exe not found
+
+ ✓ lib/profile-change-requests.test.ts (19 tests) 37ms
+stdout | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > spawns detached restart script on Windows for authenticated users
+[restart-ortools] restart initiated by user user-123
+
+stdout | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 429 when restart is requested within 60 seconds
+[restart-ortools] restart initiated by user user-123
+
+ ✓ app/api/restart-ortools/route.test.ts (8 tests) 35ms
+ ✓ lib/portal-review-display.test.ts (12 tests) 33ms
+ ✓ lib/member-profile.test.ts (110 tests) 67ms
+ ✓ app/portal-assist/portal-assist-ui.test.ts (18 tests) 26ms
+ ✓ app/api/team-invites/route.test.ts (4 tests) 36ms
+ ✓ app/api/team-invites/accept/route.test.ts (4 tests) 37ms
+ ✓ lib/team-invites.test.ts (9 tests) 14ms
+ ✓ lib/team-member-profiles-api.test.ts (32 tests) 64ms
+ ✓ lib/site-wide-cleanup.test.ts (1 test) 37ms
+ ✓ lib/team-invite-helpers.test.ts (4 tests) 9ms
+ ✓ lib/location-stop.test.ts (23 tests) 26ms
+ ✓ lib/geocode-query.test.ts (18 tests) 22ms
+ ✓ lib/db-migrate.test.ts (9 tests) 24ms
+ ✓ app/api/analyze-permit/route.test.ts (2 tests) 26ms
+ ✓ lib/permit-requests.test.ts (10 tests) 21ms
+ ✓ lib/permit-profile-autofill.test.ts (30 tests) 24ms
+ ✓ lib/migrations.test.ts (17 tests) 56ms
+ ✓ lib/admin-auth.test.ts (9 tests) 21ms
+ ✓ lib/service-mode-scope.test.ts (8 tests) 21ms
+stderr | lib/service-mode-scope.test.ts > service-mode-scope > fetchCarrierPrimaryOwnerUserId returns error when query fails
+[service-mode] fetchCarrierPrimaryOwnerUserId failed: { message: 'RLS denied' }
+
+ ✓ lib/build-corridor.test.ts (10 tests) 20ms
+ ✓ lib/escort-analysis.test.ts (13 tests) 20ms
+ ✓ agents/permit-agent.test.ts (4 tests) 25ms
+ ✓ lib/member-profile-permissions.test.ts (15 tests) 20ms
+ ✓ lib/profile-persistence.test.ts (11 tests) 16ms
+ ✓ lib/geocode-server.test.ts (9 tests) 15ms
+ ✓ app/equipment/default-rig-button.test.ts (3 tests) 33ms
+ ✓ lib/profile-field-permissions.test.ts (11 tests) 17ms
+ ✓ lib/ortools-config.test.ts (15 tests) 13ms
+ ✓ lib/load-details-options.test.ts (6 tests) 12ms
+ ✓ lib/organization-context.test.ts (8 tests) 14ms
+ ✓ lib/forced-carrier-owner.test.ts (4 tests) 11ms
+ ✓ lib/invite-notifications.test.ts (4 tests) 15ms
+ ✓ components/OverhangFeetInput.test.ts (4 tests) 12ms
+ ✓ app/history/history-ui.test.ts (3 tests) 10ms
+ ✓ lib/enrich-route-escorts.test.ts (3 tests) 11ms
+ ✓ lib/license-plate.test.ts (7 tests) 11ms
+ ✓ lib/permit-cargo-snapshot.test.ts (4 tests) 9ms
+ ✓ components/carrier-context-ui.test.ts (5 tests) 11ms
+ ✓ components/AppHeader.test.ts (4 tests) 10ms
+ ✓ lib/permit-length.test.ts (9 tests) 10ms
+ ✓ lib/carrier-link-requests.test.ts (3 tests) 9ms
+ ✓ app/carriers/carriers-ui.test.ts (3 tests) 8ms
+ ✓ types/equipment.test.ts (6 tests) 13ms
+ ✓ components/LicensePlateFields.test.ts (3 tests) 9ms
+ ✓ lib/team-permissions.test.ts (14 tests) 12ms
+ ✓ lib/equipment-persistence.test.ts (6 tests) 9ms
+ ✓ lib/deletion-requests.test.ts (2 tests) 6ms
+ ✓ types/member-profile.test.ts (2 tests) 10ms
+ ✓ components/DimensionInput.test.ts (1 test) 8ms
+ ✓ app/equipment/equipment-scope-ui.test.ts (3 tests) 11ms
+ ↓ lib/geocode-live.integration.test.ts (3 tests | 3 skipped)
+ ↓ scripts/geocode-report.integration.test.ts (1 test | 1 skipped)
+
+ Test Files  3 failed | 62 passed | 4 skipped (69)
+      Tests  9 failed | 682 passed | 7 skipped (698)
+   Start at  17:39:57
+   Duration  12.05s (transform 7.80s, setup 0ms, collect 15.05s, tests 3.52s, environment 30ms, prepare 19.39s)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  lib/routing-envelope-display.test.ts > permit-test inline header nav > shows Dashboard and History only (no badge, no New Analysis)
+AssertionError: expected '{/* Professional Header */}\n      <h…' not to match /href="\/equipment"/equipment"
+
+- Expected: 
+/href="\/equipment"/
+
++ Received: 
+"{/* Professional Header */}
+      <header className=\"border-b bg-white sticky top-0 z-50\">
+        <div className=\"max-w-7xl mx-auto px-6 py-4 flex items-center justify-between\">
+          <div className=\"flex items-center gap-3\">
+            <a href=\"/\" className=\"flex items-center gap-2.5\">
+              <div className=\"w-8 h-8 bg-black rounded flex items-center justify-center\">
+                <span className=\"text-white text-lg font-bold tracking-tighter\">T</span>
+              </div>
+              <span className=\"text-xl font-semibold tracking-tight\">TruckerOS</span>
+            </a>
+          </div>
+
+          <div className=\"flex items-center gap-4 text-sm\">
+            <a href=\"/dashboard\" className=\"text-gray-700 hover:text-black font-medium\">Dashboard</a>
+            <a href=\"/equipment\" className=\"text-gray-700 hover:text-black font-medium\">Equipment</a>
+            <a href=\"/history\" className=\"text-gray-700 hover:text-black font-medium\">History</a>
+            {workspaceMode === 'service' && (
+              <a href=\"/carriers\" className=\"text-gray-700 hover:text-black font-medium\">Carriers</a>
+            )}
+            <div className=\"w-px h-4 bg-gray-300 mx-1\" />
+            {user && <span className=\"text-gray-600 hidden md:inline text-sm\">{user.email}</span>}
+            <button 
+              onClick={handleLogout} 
+              className=\"px-4 py-1.5 text-sm border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors\"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <CarrierContextBar ownOrganizationId={ownOrganizationId} />
+      <ActiveCarrierBanner ownOrganizationId={ownOrganizationId} />
+
+      <div className=\"mb-8\">
+        <div>
+          <h1 className=\"text-3xl font-bold tracking-tight\">"
+
+ ❯ lib/routing-envelope-display.test.ts:77:24
+     75|     expect(header).not.toMatch(/href="\/permit-test"/)
+     76|     expect(header).not.toContain('New Analysis')
+     77|     expect(header).not.toMatch(/href="\/equipment"/)
+       |                        ^
+     78|     expect(header).not.toMatch(/href="\/portal-assist"/)
+     79|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  app/permit-test/load-details-ui.test.ts > Permit test page — load details cargo fields > uses buildPermitCargoSnapshot in both save handlers only
+AssertionError: expected 'const handleApproveAndSave = async ()…' to contain 'cargo: buildPermitCargoSnapshot(cargo…'
+
+- Expected
++ Received
+
+- cargo: buildPermitCargoSnapshot(cargoFormData, selectedDriverKey)
++ const handleApproveAndSave = async () => {
++     if (!agentResult) return;
++
++     // Always derive the primary option correctly (supports both single and multi-option shapes)
++     const primary = getPrimary(agentResult, null)
++
++     // Open portals synchronously in the click gesture (before await) to reduce popup blocking
++     openStatePortals(getPortalStatesForAnalysis(primary), { staggerMs: 0 })
++
++     setLoading(true)
++
++     try {
++       const supabase = createClient()
++       const { data: { session } } = await supabase.auth.getSession()
++       if (!session) {
++         setResult({ error: 'You must be logged in to save' })
++         setLoading(false)
++         return
++       }
++
++       // Note: user_id is no longer sent from the client.
++       // The server-side /api/permit-requests endpoint (via lib/permit-requests.ts)
++       // always derives the correct user_id from the authenticated JWT for security.
++       const syncedSave = syncDestinationFromDrops(formData)
++       const resolvedPieces = resolvePiecesForSubmit(formData, numberOfPiecesDraft)
++       if (numberOfPiecesDraft != null) {
++         setNumberOfPiecesDraft(null)
++         setFormData((p) => ({ ...p, numberOfPieces: resolvedPieces }))
++       }
++       const cargoFormData = { ...formData, numberOfPieces: resolvedPieces }
++       const savePayload = {
++         origin_city: syncedSave.origin.city,
++         origin_state: syncedSave.origin.state,
++         destination_city: syncedSave.destination.city,
++         destination_state: syncedSave.destination.state,
++         origin_query: syncedSave.origin.query,
++         destination_query: syncedSave.destination.query,
++         drops: syncedSave.drops.map((d) => ({
++           id: d.id,
++           query: d.query,
++           street: d.street,
++           city: d.city,
++           state: d.state,
++           zip: d.zip,
++           lat: d.lat,
++           lon: d.lon,
++         })),
++         weight: formData.weight,
++         length: formData.length,
++         width: formData.width,
++         height: formData.height,
++         route_corridor: primary.routeCorridor || [],
++         permit_required_states: primary.permitRequiredStates || [],
++         requires_permit: (primary.permitRequiredStates?.length || 0) > 0,
++         reasons: primary.reasons || [],
++         notes: primary.notes || [],
++         estimated_cost: primary.estimatedCost || 0,
++         cost_breakdown: null,
++         distance_miles: primary.distanceMiles || null,
++         duration_hours: primary.durationHours || null,
++
++         // Rich snapshots (full rig + cargo) so History and analytics see exactly what the carrier submitted
++         equipment: {
++           // Legacy fields kept for compatibility
++           unitNumber: formData.unitNumber, vin: formData.vin, year: formData.year, make: formData.make, model: formData.model,
++           axles: formData.axles, axleSpacing: formData.axleSpacing, tireWidthIn: formData.tireWidthIn,
++           registeredGvwLbs: formData.registeredGvwLbs, kingpinSettingIn: formData.kingpinSettingIn,
++           trailerMake: formData.trailerMake, trailerModel: formData.trailerModel, trailerYear: formData.trailerYear, trailerLengthFt: formData.trailerLengthFt,
++           profileId: selectedProfileId,
++           // NEW smart rig snapshot (preferred when Rig Selector used)
++           rig: selectedRigSnapshot || null,
++           selectedRigId,
++           // Updated overhang snapshot (front split)
++           loadOverhangs: {
++             frontOfRigFt: loadOverhangFrontFt,
++             frontOfTrailerFt: loadOverhangFrontTrailerFt,
++             rearFt: loadOverhangRearFt,
++           },
++         },
++         cargo: buildPermitCargoSnapshot(cargoFormData, selectedDriverKey, {
++           organizationId: permitOrganizationId,
++         }),
++       }
++
++       const saveResponse = await fetch('/api/permit-requests', {
++         method: 'POST',
++         headers: {
++           'Content-Type': 'application/json',
++           'Authorization': `Bearer ${session.access_token}`,
++         },
++         body: JSON.stringify(savePayload),
++       })
++
++       const saveData = await saveResponse.json()
++
++       if (!saveResponse.ok) throw new Error(saveData.error || 'Failed to save')
++
++       const requestId = saveData.data?.id || saveData.data
++       setSavedRequestId(requestId)
++       setSavedToDatabase(true)
++       setResult({
++         agent: primary,
++         savedToDatabase: saveData.data,
++       })
++
++       if (requestId) {
++         router.push(`/portal-assist?requestId=${requestId}&step=review`)
++       }
++     } catch (error: any) {
++       setResult({ error: error.message })
++     } finally {
++       setLoading(false)
++     }
++   }
++
++   // Approve a specific route option (from the list of alternatives)
++   
+
+ ❯ app/permit-test/load-details-ui.test.ts:118:25
+    116| 
+    117|     expect(approveSave).toContain('resolvePiecesForSubmit(formData, nu…
+    118|     expect(approveSave).toContain('cargo: buildPermitCargoSnapshot(car…
+       |                         ^
+    119|     expect(approveSpecific).toContain('resolvePiecesForSubmit(formData…
+    120|     expect(approveSpecific).toContain('cargo: buildPermitCargoSnapshot…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  app/profile/profile-ui.test.ts > Profile page UI > auto-assigns bootstrap Owner roles on mount and carrier save
+AssertionError: expected -1 to be greater than 36994
+ ❯ handleSaveCarrierInfoSlice app/profile/profile-ui.test.ts:59:15
+     57|   const end = source.indexOf('async function handleSave(e: React.FormE…
+     58|   expect(start).toBeGreaterThan(-1)
+     59|   expect(end).toBeGreaterThan(start)
+       |               ^
+     60|   return source.slice(start, end)
+     61| }
+ ❯ app/profile/profile-ui.test.ts:216:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  app/profile/profile-ui.test.ts > Profile page UI > places Save Carrier Info inside the carrier card with carrier-only payload and scoped feedback
+AssertionError: expected -1 to be greater than 36994
+ ❯ handleSaveCarrierInfoSlice app/profile/profile-ui.test.ts:59:15
+     57|   const end = source.indexOf('async function handleSave(e: React.FormE…
+     58|   expect(start).toBeGreaterThan(-1)
+     59|   expect(end).toBeGreaterThan(start)
+       |               ^
+     60|   return source.slice(start, end)
+     61| }
+ ❯ app/profile/profile-ui.test.ts:359:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  app/profile/profile-ui.test.ts > Profile page UI > implements driver restricted field permissions and change request flow
+AssertionError: expected -1 to be greater than -1
+ ❯ handleSaveSlice app/profile/profile-ui.test.ts:66:17
+     64|   const start = source.indexOf('async function handleSave(e: React.For…
+     65|   const end = source.indexOf('const isProfileBootstrap', start)
+     66|   expect(start).toBeGreaterThan(-1)
+       |                 ^
+     67|   expect(end).toBeGreaterThan(start)
+     68|   return source.slice(start, end)
+ ❯ app/profile/profile-ui.test.ts:425:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  app/profile/profile-ui.test.ts > Profile page UI > uses separate saving flags with mutual exclusion across save actions
+AssertionError: expected -1 to be greater than 36994
+ ❯ handleSaveCarrierInfoSlice app/profile/profile-ui.test.ts:59:15
+     57|   const end = source.indexOf('async function handleSave(e: React.FormE…
+     58|   expect(start).toBeGreaterThan(-1)
+     59|   expect(end).toBeGreaterThan(start)
+       |               ^
+     60|   return source.slice(start, end)
+     61| }
+ ❯ app/profile/profile-ui.test.ts:523:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  app/profile/profile-ui.test.ts > Profile page UI > refreshes own profile from API response on self-save
+AssertionError: expected -1 to be greater than -1
+ ❯ handleSaveSlice app/profile/profile-ui.test.ts:66:17
+     64|   const start = source.indexOf('async function handleSave(e: React.For…
+     65|   const end = source.indexOf('const isProfileBootstrap', start)
+     66|   expect(start).toBeGreaterThan(-1)
+       |                 ^
+     67|   expect(end).toBeGreaterThan(start)
+     68|   return source.slice(start, end)
+ ❯ app/profile/profile-ui.test.ts:572:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  app/profile/profile-ui.test.ts > Profile page UI > persists bootstrap via single full save with welcome message
+AssertionError: expected -1 to be greater than -1
+ ❯ handleSaveSlice app/profile/profile-ui.test.ts:66:17
+     64|   const start = source.indexOf('async function handleSave(e: React.For…
+     65|   const end = source.indexOf('const isProfileBootstrap', start)
+     66|   expect(start).toBeGreaterThan(-1)
+       |                 ^
+     67|   expect(end).toBeGreaterThan(start)
+     68|   return source.slice(start, end)
+ ❯ app/profile/profile-ui.test.ts:580:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  app/profile/profile-ui.test.ts > Profile page UI > snapshots save payload from prior target before any await in handleSave
+AssertionError: expected '}' to match /const savePayload = buildSavePayloadF…/
+
+- Expected: 
+/const savePayload = buildSavePayloadForTarget\(priorTarget, formForSave, ownProfile\)/
+
++ Received: 
+"}"
+
+ ❯ app/profile/profile-ui.test.ts:628:25
+    626|       /buildSavePayloadForTarget\(\s*target: ProfileEditingTarget = ed…
+    627|     )
+    628|     expect(saveHandler).toMatch(
+       |                         ^
+    629|       /const savePayload = buildSavePayloadForTarget\(priorTarget, for…
+    630|     )
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+

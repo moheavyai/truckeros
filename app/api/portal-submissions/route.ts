@@ -6,10 +6,13 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 /**
  * POST /api/portal-submissions
- * 
+ *
  * Saves a portal submission record.
  * The record must include permit_request_id (which the user owns).
  * RLS + server-side check ensures security.
+ *
+ * human_approved is server-controlled: true only on record_approval action
+ * or when preserving an existing approved row. Client body human_approved is ignored.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -39,8 +42,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You do not own this permit request' }, { status: 403 })
     }
 
-    // Prepare the record (allow the client to send the full object from createPortalSubmissionRecord)
-    // Supports pdf_reference (storage path/URL), human_approved (from gate), route_comparison json, status updates, raw output for audit.
+    const recordApproval = body.record_approval === true
+
+    const { data: existing } = await supabase
+      .from('portal_submissions')
+      .select('human_approved')
+      .eq('permit_request_id', body.permit_request_id)
+      .eq('state_code', body.state_code)
+      .maybeSingle()
+
+    const humanApproved = recordApproval || !!existing?.human_approved
+
     const submission = {
       permit_request_id: body.permit_request_id,
       user_id: user.id,
@@ -53,31 +65,15 @@ export async function POST(request: NextRequest) {
       portal_fees: body.portal_fees,
       portal_restrictions: body.portal_restrictions || [],
       user_notes: body.user_notes,
-      human_approved: body.human_approved || false,
+      human_approved: humanApproved,
       pdf_reference: body.pdf_reference,
-      raw_portal_output: (body.raw_portal_output || '').substring(0, 4000), // truncated to 4000 for security (raw may contain sensitive permit/audit data; full exposure reduced)
+      raw_portal_output: (body.raw_portal_output || '').substring(0, 4000),
     }
-
-    // Reliable insert using ON CONFLICT DO NOTHING (via the client's conflict option on the exact
-    // unique columns from the table: permit_request_id,state_code). This never produces an ON CONFLICT
-    // target / duplicate-key error regardless of prior constraint timing. We then SELECT by the same
-    // columns to return the row (new or pre-existing) so callers always get data.
-    const { error: insError } = await supabase
-      .from('portal_submissions')
-      .insert(submission, {
-        // @ts-ignore - the insert options type in current @supabase may not declare onConflict/ignoreDuplicates,
-        // but PostgREST accepts them at runtime to emit "ON CONFLICT (...) DO NOTHING" against the table's
-        // (permit_request_id, state_code) unique constraint. This is the reliable form that never errors.
-        onConflict: 'permit_request_id,state_code',
-        ignoreDuplicates: true
-      } as any)
-    if (insError) throw insError
 
     const { data, error } = await supabase
       .from('portal_submissions')
+      .upsert(submission, { onConflict: 'permit_request_id,state_code' })
       .select()
-      .eq('permit_request_id', submission.permit_request_id)
-      .eq('state_code', submission.state_code)
       .single()
 
     if (error) throw error

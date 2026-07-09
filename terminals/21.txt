@@ -1,0 +1,22 @@
+---
+pid: 6276
+cwd: "C:\Users\andre\truckeros"
+command: "Set-Location C:\\Users\\andre\\truckeros; npm install pg --no-save"
+started_at: 2026-07-05T22:17:03.876Z
+running_for_ms: 450004   
+---
+
+added 14 packages, and audited 434 packages in 27s
+
+154 packages are looking for funding
+  run `npm fund` for details
+
+5 vulnerabilities (2 low, 3 moderate)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.

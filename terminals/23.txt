@@ -1,0 +1,58 @@
+---
+pid: 26264
+cwd: "C:\Users\andre\truckeros"
+command: "Set-Location C:\\Users\\andre\\truckeros; node scripts/try-pooler-regions.mjs"
+started_at: 2026-07-05T22:21:42.909Z
+running_for_ms: 170000   
+---
+NEAR {
+  host: 'db.usvunsqdopddvufsxvxx.supabase.co',
+  user: 'postgres.usvunsqdopddvufsxvxx',
+  port: 6543
+} no such user
+NEAR {
+  host: 'db.usvunsqdopddvufsxvxx.supabase.co',
+  user: 'postgres',
+  port: 6543
+} SASL authentication failed
+NEAR {
+  host: 'aws-0-us-east-1.pooler.supabase.com',
+  user: 'postgres',
+  port: 5432
+} (ENOIDENTIFIER) no tenant identifier provided (external_id or sni_hostname required)
+NEAR {
+  host: 'aws-0-us-east-1.pooler.supabase.com',
+  user: 'postgres',
+  port: 6543
+} (ENOIDENTIFIER) no tenant identifier provided (external_id or sni_hostname required)
+NEAR {
+  host: 'aws-0-us-east-2.pooler.supabase.com',
+  user: 'postgres',
+  port: 5432
+} (ENOIDENTIFIER) no tenant identifier provided (external_id or sni_hostname required)
+NEAR {
+  host: 'aws-0-us-east-2.pooler.supabase.com',
+  user: 'postgres',
+  port: 6543
+} (ENOIDENTIFIER) no tenant identifier provided (external_id or sni_hostname required)
+NEAR {
+  host: 'aws-0-us-west-1.pooler.supabase.com',
+  user: 'postgres',
+  port: 5432
+} (ENOIDENTIFIER) no tenant identifier provided (external_id or sni_hostname required)
+NEAR {
+  host: 'aws-0-us-west-1.pooler.supabase.com',
+  user: 'postgres',
+  port: 6543
+} (ENOIDENTIFIER) no tenant identifier provided (external_id or sni_hostname required)
+NEAR {
+  host: 'aws-0-us-west-2.pooler.supabase.com',
+  user: 'postgres',
+  port: 5432
+} (ENOIDENTIFIER) no tenant identifier provided (external_id or sni_hostname required)
+NEAR {
+  host: 'aws-0-us-west-2.pooler.supabase.com',
+  user: 'postgres',
+  port: 6543
+} (ENOIDENTIFIER) no tenant identifier provided (external_id or sni_hostname required)
+No working pooler connection found

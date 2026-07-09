@@ -12,20 +12,28 @@ Pydantic v2 models matching frontend LoadDetails (agents/permit-agent.ts) + equi
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Address(BaseModel):
     """Matches agents/permit-agent.ts Address + form shape."""
     model_config = ConfigDict(extra="ignore", populate_by_name=True, str_strip_whitespace=True)
 
+    query: str | None = ""
     street: str | None = ""
     city: str
     state: str
     zip: str | None = ""
+
+
+class DropStop(Address):
+    """Delivery stop with resolved coordinates."""
+    lat: float | None = None
+    lon: float | None = None
 
 
 class TractorProfile(BaseModel):
@@ -98,6 +106,7 @@ class LoadDetails(BaseModel):
     # Core required (validation mirrors agent)
     origin: Address
     destination: Address
+    drops: list[DropStop] | None = Field(None, alias="drops")
     weight: float = Field(..., gt=0)
     length: float = Field(..., gt=0)
     width: float = Field(..., gt=0)
@@ -197,6 +206,18 @@ class LoadDetails(BaseModel):
             return float(v)
         except Exception:
             return 0.0
+
+    @model_validator(mode="after")
+    def validate_drop_coordinates(self) -> "LoadDetails":
+        if self.drops:
+            for i, drop in enumerate(self.drops):
+                lat = drop.lat
+                lon = drop.lon
+                if lat is None or lon is None:
+                    raise ValueError(f"drops[{i}] requires lat and lon coordinates")
+                if not math.isfinite(float(lat)) or not math.isfinite(float(lon)):
+                    raise ValueError(f"drops[{i}] requires finite lat and lon coordinates")
+        return self
 
     # --- Unified getters (used by solver / constraints) ---
 

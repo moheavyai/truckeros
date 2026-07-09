@@ -1,0 +1,26 @@
+---
+pid: 26108
+cwd: "C:\Users\andre\truckeros"
+command: "Set-Location C:\\Users\\andre\\truckeros; npx vitest run lib/dev-account-switch.test.ts app/api/dev/switch-user/route.test.ts app/profile/profile-ui.test.ts"
+started_at: 2026-07-08T22:46:07.612Z
+running_for_ms: 115014   
+---
+
+ RUN  v3.2.6 C:/Users/andre/truckeros
+
+ ✓ app/profile/profile-ui.test.ts (39 tests) 147ms
+ ✓ lib/dev-account-switch.test.ts (13 tests) 24ms
+ ✓ app/api/dev/switch-user/route.test.ts (11 tests) 69ms
+
+ Test Files  3 passed (3)
+      Tests  63 passed (63)
+   Start at  18:46:11
+   Duration  46.60s (transform 4.33s, setup 0ms, collect 6.78s, tests 240ms, environment 1ms, prepare 128.62s)
+
+stderr | app/api/dev/switch-user/route.test.ts > /api/dev/switch-user > rejects non-localhost redirect without NEXT_PUBLIC_APP_URL
+[dev/switch-user] POST error: NEXT_PUBLIC_APP_URL must be configured for dev account switching
+
+stderr | app/api/dev/switch-user/route.test.ts > /api/dev/switch-user > returns generic 500 when generateLink fails
+[dev/switch-user] generateLink failed: internal supabase failure
+[dev/switch-user] POST error: Failed to generate sign-in link
+

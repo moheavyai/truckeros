@@ -1,0 +1,20 @@
+---
+pid: 13492
+cwd: "C:\Users\andre\truckeros"
+command: "Set-Location C:\\Users\\andre\\truckeros; npx supabase --version"
+started_at: 2026-07-05T22:16:20.125Z
+running_for_ms: 494993   
+---
+npm warn exec The following package was not found and will be installed: supabase@2.109.0
+file:///C:/Users/andre/AppData/Local/npm-cache/_npx/aa8e5c70f9d8d161/node_modules/supabase/dist/supabase.js:36
+  throw new Error(`No matching Supabase CLI binary package found for ${process.platform}-${os.arch()}`);
+        ^
+
+Error: No matching Supabase CLI binary package found for win32-x64
+    at file:///C:/Users/andre/AppData/Local/npm-cache/_npx/aa8e5c70f9d8d161/node_modules/supabase/dist/supabase.js:36:9
+    at ModuleJob.run (node:internal/modules/esm/module_job:437:25)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async node:internal/modules/esm/loader:639:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.15.0

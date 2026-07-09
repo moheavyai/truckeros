@@ -1,0 +1,1486 @@
+
+ RUN  v3.2.6 C:/Users/andre/truckeros
+
+stdout | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > spawns detached restart script on Windows for authenticated users
+[restart-ortools] restart initiated by user user-123
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when restart script is missing
+[restart-ortools] restart script not found: C:\Users\andre\truckeros\restart-ortools.ps1
+
+ ✓ lib/parse-dimension.test.ts (4 tests) 282ms
+stdout | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 429 when restart is requested within 60 seconds
+[restart-ortools] restart initiated by user user-123
+
+ ✓ app/api/restart-ortools/route.test.ts (8 tests) 39ms
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] responded in 2ms status=200
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] connected service=or-tools version=1.0.0 buildId=abc123def456
+
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when spawn throws synchronously
+[restart-ortools] failed to spawn restart script: spawn EACCES
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when child emits an error event
+[restart-ortools] failed to spawn restart script: ENOENT: powershell.exe not found
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] responded in 0ms status=503
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] responded in 0ms status=200
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on connection refused
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > falls back to OSRM with query and normalized drops when OR-Tools is unreachable
+[optimize-route] calling OR-Tools url=http://127.0.0.1:8000/optimize-route timeout_ms=180000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on timeout
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > post-processes successful OR-Tools response with escort enrichment
+[optimize-route] calling OR-Tools url=http://127.0.0.1:8000/optimize-route timeout_ms=180000
+
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > post-processes successful OR-Tools response with escort enrichment
+[optimize-route] OR-Tools responded in 1ms status=200
+
+ ✓ app/api/ortools-health/route.test.ts (5 tests) 39ms
+ ✓ app/api/optimize-route/route.test.ts (5 tests) 44ms
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] non-ok HTTP 503 from http://127.0.0.1:8000/health
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] unexpected body status=degraded service=undefined
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on connection refused
+[ortools-health] probe failed after 1ms: fetch failed
+
+stderr | app/api/optimize-route/route.test.ts > POST /api/optimize-route > falls back to OSRM with query and normalized drops when OR-Tools is unreachable
+[optimize-route] OR-Tools fetch failed after 2ms: ECONNREFUSED 127.0.0.1:8000
+[optimize-route] OR-Tools unreachable, falling back to OSRM: unreachable ECONNREFUSED 127.0.0.1:8000
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on timeout
+[ortools-health] probe failed after 0ms: The operation was aborted
+
+ ✓ app/api/geocode/route.test.ts (7 tests) 55ms
+ ✓ app/api/admin/migrate/route.test.ts (16 tests) 54ms
+stderr | app/api/admin/migrate/route.test.ts > GET /api/admin/migrate > flags missing equipment_profiles license plate columns
+[admin/migrate] schema check failed for equipment_profiles: column equipment_profiles.license_plate does not exist
+
+stderr | app/api/admin/migrate/route.test.ts > GET /api/admin/migrate > flags missing rig_configurations table as needsMigration
+[admin/migrate] schema check failed for rig_configurations: relation "rig_configurations" does not exist
+
+stderr | app/api/admin/migrate/route.test.ts > POST /api/admin/migrate > returns needsManualRun when runMigrationSql throws
+[admin/migrate] POST live migration: connection refused { correlationId: 'c2178539-af7a-40aa-9eff-39be71aee1ac' }
+
+stderr | app/api/admin/migrate/route.test.ts > POST /api/admin/migrate > returns partial success when SQL applies but columns remain missing
+[admin/migrate] schema check failed for rig_configurations: column rig_configurations.is_default does not exist
+
+ ✓ app/equipment/default-rig-button.test.ts (3 tests) 35ms
+ ✓ lib/portal-assistant.test.ts (14 tests) 41ms
+ ✓ lib/site-wide-cleanup.test.ts (1 test) 25ms
+ ✓ lib/db-migrate.test.ts (9 tests) 28ms
+ ✓ lib/geocode-query.test.ts (18 tests) 25ms
+ ✓ app/api/analyze-permit/route.test.ts (2 tests) 30ms
+ ✓ lib/geocode-client.test.ts (11 tests) 1558ms
+   ✓ fetchGeocodeWithRetry > retries 429 then succeeds  515ms
+   ✓ fetchGeocodeWithRetry > retries 500 then fails  504ms
+   ✓ fetchGeocodeWithRetry > retries network throw then fails retryable  514ms
+ ✓ lib/location-stop.test.ts (23 tests) 29ms
+ ✓ lib/build-corridor.test.ts (10 tests) 21ms
+ ✓ lib/admin-auth.test.ts (9 tests) 22ms
+ ✓ lib/member-profile.test.ts (21 tests) 19ms
+ ✓ agents/permit-agent.test.ts (4 tests) 21ms
+ ❯ lib/migrations.test.ts (8 tests | 1 failed) 51ms
+   ✓ migration manifest > uses a single shared ordered list for API and script 5ms
+   ✓ migration manifest > references migration files that exist on disk 3ms
+   ✓ migration manifest > includes key DDL fragments in consolidated SQL 2ms
+   ✓ migration manifest > keeps API and script SQL helpers in sync 5ms
+   ✓ migration manifest > includes member_profiles DDL with RLS, role CHECK, and updated_at trigger 1ms
+   ✓ migration manifest > includes team member management DDL with org scoping and primary-owner RLS 1ms
+   ✓ migration manifest > includes privileged column guard triggers for member_profiles self-service writes 1ms
+   × migration manifest > includes multi-carrier foundation DDL with org tables and Dispatcher removal 30ms
+     → expected '-- supabase/migrations/021_multi_carr…' not to contain '\'Dispatcher\''
+ ❯ app/profile/profile-ui.test.ts (14 tests | 1 failed) 39ms
+   × Profile page UI > uses AppHeader with profile activePage 23ms
+     → expected '\'use client\'\n\nimport { useCallbac…' to contain '<AppHeader user={user} activePage="pr…'
+   ✓ Profile page UI > guards auth and always clears loading state 2ms
+   ✓ Profile page UI > allows save on first visit when no profile row exists yet 1ms
+   ✓ Profile page UI > renders profile sections and save button 1ms
+   ✓ Profile page UI > orders driver identity fields before CDL state and date of birth 1ms
+   ✓ Profile page UI > caps date of birth at today and announces save feedback 1ms
+   ✓ Profile page UI > renders saved users / team members section with edit and delete actions 1ms
+   ✓ Profile page UI > routes all profile saves through the team-member-profiles API 1ms
+   ✓ Profile page UI > shows editing banner from list display name and fetches profile on cache miss 1ms
+   ✓ Profile page UI > highlights active editing row and uses contextual save labels 1ms
+   ✓ Profile page UI > confirms delete, refreshes team list, and shows update success for others 1ms
+   ✓ Profile page UI > shows read-only carrier summary after first save with edit toggle for primary owner 1ms
+   ✓ Profile page UI > shows account link requests for primary owners with approve and reject actions 1ms
+   ✓ Profile page UI > resets carrier form expansion when switching edit targets or saving 1ms
+ ✓ lib/escort-analysis.test.ts (13 tests) 15ms
+ ✓ lib/ortools-config.test.ts (15 tests) 13ms
+ ✓ lib/geocode-server.test.ts (9 tests) 27ms
+ ✓ lib/routing-envelope-display.test.ts (7 tests) 14ms
+ ✓ lib/member-profile-permissions.test.ts (14 tests) 17ms
+ ✓ lib/enrich-route-escorts.test.ts (3 tests) 11ms
+ ✓ lib/organization-context.test.ts (8 tests) 12ms
+ ✓ components/OverhangFeetInput.test.ts (4 tests) 13ms
+ ✓ components/LicensePlateFields.test.ts (3 tests) 11ms
+ ✓ lib/permit-requests.test.ts (3 tests) 10ms
+ ✓ lib/permit-length.test.ts (9 tests) 8ms
+ ✓ lib/license-plate.test.ts (7 tests) 13ms
+ ✓ types/equipment.test.ts (6 tests) 10ms
+ ✓ components/AppHeader.test.ts (4 tests) 11ms
+ ✓ app/history/history-ui.test.ts (3 tests) 9ms
+ ↓ scripts/geocode-report.integration.test.ts (1 test | 1 skipped)
+ ✓ app/carriers/carriers-ui.test.ts (3 tests) 8ms
+ ✓ lib/carrier-link-requests.test.ts (3 tests) 9ms
+ ✓ types/member-profile.test.ts (1 test) 8ms
+ ✓ components/DimensionInput.test.ts (1 test) 7ms
+ ↓ lib/geocode-live.integration.test.ts (3 tests | 3 skipped)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  2 failed | 37 passed | 2 skipped (41)
+      Tests  2 failed | 306 passed | 4 skipped (312)
+   Start at  10:33:05
+   Duration  7.43s (transform 3.70s, setup 0ms, collect 8.39s, tests 2.69s, environment 18ms, prepare 12.37s)
+
+ FAIL  lib/migrations.test.ts > migration manifest > includes multi-carrier foundation DDL with org tables and Dispatcher removal
+AssertionError: expected '-- supabase/migrations/021_multi_carr…' not to contain '\'Dispatcher\''
+
+- Expected
++ Received
+
+- 'Dispatcher'
++ -- supabase/migrations/021_multi_carrier_foundation.sql
++ --
++ -- Multi-carrier foundation: organizations, memberships, carrier link requests.
++ -- Aligns member_profiles.organization_id with organizations rows (same UUID).
++ -- Removes Dispatcher role; maps existing Dispatcher assignments to Driver.
++
++ -- ---------------------------------------------------------------------------
++ -- organizations
++ -- ---------------------------------------------------------------------------
++
++ CREATE TABLE IF NOT EXISTS organizations (
++   id uuid PRIMARY KEY,
++   name text,
++   usdot_number text,
++   mc_number text,
++   created_by_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
++   created_at timestamptz DEFAULT now()
++ );
++
++ CREATE INDEX IF NOT EXISTS idx_organizations_created_by_user_id
++   ON organizations(created_by_user_id);
++
++ CREATE INDEX IF NOT EXISTS idx_organizations_usdot_number
++   ON organizations(usdot_number);
++
++ -- Backfill from primary owners first, then any member with an organization_id
++ INSERT INTO organizations (id, name, usdot_number, mc_number, created_by_user_id, created_at)
++ SELECT
++   mp.organization_id,
++   mp.company_name,
++   mp.usdot_number,
++   mp.mc_number,
++   mp.user_id,
++   COALESCE(mp.created_at, now())
++ FROM member_profiles mp
++ WHERE mp.organization_id IS NOT NULL
++   AND mp.is_primary_owner = true
++ ON CONFLICT (id) DO NOTHING;
++
++ INSERT INTO organizations (id, name, usdot_number, mc_number, created_by_user_id, created_at)
++ SELECT DISTINCT ON (mp.organization_id)
++   mp.organization_id,
++   mp.company_name,
++   mp.usdot_number,
++   mp.mc_number,
++   mp.user_id,
++   COALESCE(mp.created_at, now())
++ FROM member_profiles mp
++ WHERE mp.organization_id IS NOT NULL
++   AND NOT EXISTS (SELECT 1 FROM organizations o WHERE o.id = mp.organization_id)
++ ORDER BY mp.organization_id, mp.is_primary_owner DESC NULLS LAST, mp.created_at ASC
++ ON CONFLICT (id) DO NOTHING;
++
++ -- ---------------------------------------------------------------------------
++ -- organization_memberships
++ -- ---------------------------------------------------------------------------
++
++ CREATE TABLE IF NOT EXISTS organization_memberships (
++   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
++   organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
++   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
++   role text NOT NULL DEFAULT 'Viewer'
++     CHECK (
++       role = ANY(ARRAY[
++         'Owner / Admin',
++         'Driver',
++         'Permit Clerk',
++         'Viewer'
++       ]::text[])
++     ),
++   permissions jsonb NOT NULL DEFAULT '[]'::jsonb,
++   is_primary_owner boolean NOT NULL DEFAULT false,
++   created_at timestamptz DEFAULT now(),
++   UNIQUE (organization_id, user_id)
++ );
++
++ CREATE INDEX IF NOT EXISTS idx_organization_memberships_user_id
++   ON organization_memberships(user_id);
++
++ CREATE INDEX IF NOT EXISTS idx_organization_memberships_organization_id
++   ON organization_memberships(organization_id);
++
++ CREATE UNIQUE INDEX IF NOT EXISTS idx_organization_memberships_one_primary_owner_per_org
++   ON organization_memberships(organization_id)
++   WHERE is_primary_owner = true;
++
++ -- Backfill memberships from member_profiles
++ INSERT INTO organization_memberships (organization_id, user_id, role, is_primary_owner, created_at)
++ SELECT
++   mp.organization_id,
++   mp.user_id,
++   CASE
++     WHEN 'Owner / Admin' = ANY(mp.user_roles) THEN 'Owner / Admin'
++     WHEN 'Permit Clerk' = ANY(mp.user_roles) THEN 'Permit Clerk'
++     WHEN 'Driver' = ANY(mp.user_roles) THEN 'Driver'
++     WHEN 'Viewer' = ANY(mp.user_roles) THEN 'Viewer'
++     WHEN mp.is_primary_owner THEN 'Owner / Admin'
++     ELSE 'Viewer'
++   END,
++   mp.is_primary_owner,
++   COALESCE(mp.created_at, now())
++ FROM member_profiles mp
++ WHERE mp.organization_id IS NOT NULL
++ ON CONFLICT (organization_id, user_id) DO NOTHING;
++
++ -- ---------------------------------------------------------------------------
++ -- carrier_link_requests
++ -- ---------------------------------------------------------------------------
++
++ CREATE TABLE IF NOT EXISTS carrier_link_requests (
++   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
++   from_user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
++   to_organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
++   target_usdot text,
++   target_email text,
++   status text NOT NULL DEFAULT 'pending'
++     CHECK (status IN ('pending', 'approved', 'rejected')),
++   message text,
++   created_at timestamptz DEFAULT now(),
++   responded_at timestamptz,
++   responded_by_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
++   CHECK (
++     to_organization_id IS NOT NULL
++     OR NULLIF(trim(target_usdot), '') IS NOT NULL
++     OR NULLIF(trim(target_email), '') IS NOT NULL
++   )
++ );
++
++ CREATE INDEX IF NOT EXISTS idx_carrier_link_requests_from_user_id
++   ON carrier_link_requests(from_user_id);
++
++ CREATE INDEX IF NOT EXISTS idx_carrier_link_requests_to_organization_id
++   ON carrier_link_requests(to_organization_id);
++
++ CREATE INDEX IF NOT EXISTS idx_carrier_link_requests_status
++   ON carrier_link_requests(status);
++
++ -- ---------------------------------------------------------------------------
++ -- Optional FK from member_profiles.organization_id -> organizations
++ -- ---------------------------------------------------------------------------
++
++ DO $$
++ BEGIN
++   IF NOT EXISTS (
++     SELECT 1 FROM pg_constraint
++     WHERE conname = 'member_profiles_organization_id_fkey'
++   ) THEN
++     ALTER TABLE member_profiles
++       ADD CONSTRAINT member_profiles_organization_id_fkey
++       FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL;
++   END IF;
++ END $$;
++
++ -- ---------------------------------------------------------------------------
++ -- equipment_profiles: organization scoping (nullable; backfill from member profile)
++ -- ---------------------------------------------------------------------------
++
++ ALTER TABLE equipment_profiles
++   ADD COLUMN IF NOT EXISTS organization_id uuid REFERENCES organizations(id) ON DELETE SET NULL;
++
++ CREATE INDEX IF NOT EXISTS idx_equipment_profiles_organization_id
++   ON equipment_profiles(organization_id);
++
++ UPDATE equipment_profiles ep
++ SET organization_id = mp.organization_id
++ FROM member_profiles mp
++ WHERE ep.user_id = mp.user_id
++   AND mp.organization_id IS NOT NULL
++   AND ep.organization_id IS NULL;
++
++ -- ---------------------------------------------------------------------------
++ -- Remove Dispatcher role from existing data
++ -- ---------------------------------------------------------------------------
++
++ UPDATE member_profiles
++ SET user_roles = array_replace(user_roles, 'Dispatcher', 'Driver')
++ WHERE 'Dispatcher' = ANY(user_roles);
++
++ UPDATE team_member_profiles
++ SET user_roles = array_replace(user_roles, 'Dispatcher', 'Driver')
++ WHERE 'Dispatcher' = ANY(user_roles);
++
++ -- Drop and recreate user_roles CHECK constraints without Dispatcher
++ DO $$
++ DECLARE
++   r RECORD;
++ BEGIN
++   FOR r IN
++     SELECT conname, conrelid::regclass::text AS tbl
++     FROM pg_constraint
++     WHERE contype = 'c'
++       AND conrelid IN ('member_profiles'::regclass, 'team_member_profiles'::regclass)
++       AND pg_get_constraintdef(oid) LIKE '%user_roles%'
++   LOOP
++     EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.tbl, r.conname);
++   END LOOP;
++ END $$;
++
++ ALTER TABLE member_profiles
++   ADD CONSTRAINT member_profiles_user_roles_check
++   CHECK (
++     user_roles <@ ARRAY[
++       'Owner / Admin',
++       'Driver',
++       'Permit Clerk',
++       'Viewer'
++     ]::text[]
++   );
++
++ ALTER TABLE team_member_profiles
++   ADD CONSTRAINT team_member_profiles_user_roles_check
++   CHECK (
++     user_roles <@ ARRAY[
++       'Owner / Admin',
++       'Driver',
++       'Permit Clerk',
++       'Viewer'
++     ]::text[]
++   );
++
++ -- ---------------------------------------------------------------------------
++ -- Auth helper functions
++ -- ---------------------------------------------------------------------------
++
++ CREATE OR REPLACE FUNCTION auth_user_membership_org_ids()
++ RETURNS SETOF uuid
++ LANGUAGE sql
++ STABLE
++ SECURITY DEFINER
++ SET search_path = public
++ AS $$
++   SELECT organization_id
++   FROM organization_memberships
++   WHERE user_id = auth.uid();
++ $$;
++
++ CREATE OR REPLACE FUNCTION auth_user_is_primary_owner_of_org(org_id uuid)
++ RETURNS boolean
++ LANGUAGE sql
++ STABLE
++ SECURITY DEFINER
++ SET search_path = public
++ AS $$
++   SELECT EXISTS (
++     SELECT 1
++     FROM organization_memberships
++     WHERE user_id = auth.uid()
++       AND organization_id = org_id
++       AND is_primary_owner = true
++   );
++ $$;
++
++ -- ---------------------------------------------------------------------------
++ -- RLS: organizations
++ -- ---------------------------------------------------------------------------
++
++ ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
++
++ DROP POLICY IF EXISTS "Members can view accessible organizations" ON organizations;
++ DROP POLICY IF EXISTS "Users can create organizations they own" ON organizations;
++ DROP POLICY IF EXISTS "Primary owner can update their organization" ON organizations;
++
++ CREATE POLICY "Members can view accessible organizations"
++ ON organizations
++ FOR SELECT
++ USING (
++   id IN (SELECT auth_user_membership_org_ids())
++   OR created_by_user_id = auth.uid()
++   OR id = auth_user_organization_id()
++ );
++
++ CREATE POLICY "Users can create organizations they own"
++ ON organizations
++ FOR INSERT
++ WITH CHECK (created_by_user_id = auth.uid());
++
++ CREATE POLICY "Primary owner can update their organization"
++ ON organizations
++ FOR UPDATE
++ USING (auth_user_is_primary_owner_of_org(id))
++ WITH CHECK (auth_user_is_primary_owner_of_org(id));
++
++ -- ---------------------------------------------------------------------------
++ -- RLS: organization_memberships
++ -- ---------------------------------------------------------------------------
++
++ ALTER TABLE organization_memberships ENABLE ROW LEVEL SECURITY;
++
++ DROP POLICY IF EXISTS "Users can view memberships in accessible organizations" ON organization_memberships;
++ DROP POLICY IF EXISTS "Primary owner can insert memberships" ON organization_memberships;
++ DROP POLICY IF EXISTS "Primary owner can update memberships" ON organization_memberships;
++ DROP POLICY IF EXISTS "Primary owner can delete non-owner memberships" ON organization_memberships;
++
++ CREATE POLICY "Users can view memberships in accessible organizations"
++ ON organization_memberships
++ FOR SELECT
++ USING (
++   user_id = auth.uid()
++   OR organization_id IN (SELECT auth_user_membership_org_ids())
++   OR organization_id = auth_user_organization_id()
++ );
++
++ CREATE POLICY "Primary owner can insert memberships"
++ ON organization_memberships
++ FOR INSERT
++ WITH CHECK (auth_user_is_primary_owner_of_org(organization_id));
++
++ CREATE POLICY "Primary owner can update memberships"
++ ON organization_memberships
++ FOR UPDATE
++ USING (auth_user_is_primary_owner_of_org(organization_id))
++ WITH CHECK (auth_user_is_primary_owner_of_org(organization_id));
++
++ CREATE POLICY "Primary owner can delete non-owner memberships"
++ ON organization_memberships
++ FOR DELETE
++ USING (
++   auth_user_is_primary_owner_of_org(organization_id)
++   AND is_primary_owner = false
++ );
++
++ -- ---------------------------------------------------------------------------
++ -- RLS: carrier_link_requests
++ -- ---------------------------------------------------------------------------
++
++ ALTER TABLE carrier_link_requests ENABLE ROW LEVEL SECURITY;
++
++ DROP POLICY IF EXISTS "Users can view their outgoing link requests" ON carrier_link_requests;
++ DROP POLICY IF EXISTS "Primary owners can view incoming link requests" ON carrier_link_requests;
++ DROP POLICY IF EXISTS "Users can create link requests" ON carrier_link_requests;
++ DROP POLICY IF EXISTS "Primary owners can respond to link requests" ON carrier_link_requests;
++
++ CREATE POLICY "Users can view their outgoing link requests"
++ ON carrier_link_requests
++ FOR SELECT
++ USING (from_user_id = auth.uid());
++
++ CREATE POLICY "Primary owners can view incoming link requests"
++ ON carrier_link_requests
++ FOR SELECT
++ USING (
++   to_organization_id IS NOT NULL
++   AND auth_user_is_primary_owner_of_org(to_organization_id)
++ );
++
++ CREATE POLICY "Users can create link requests"
++ ON carrier_link_requests
++ FOR INSERT
++ WITH CHECK (from_user_id = auth.uid());
++
++ CREATE POLICY "Primary owners can respond to link requests"
++ ON carrier_link_requests
++ FOR UPDATE
++ USING (
++   to_organization_id IS NOT NULL
++   AND auth_user_is_primary_owner_of_org(to_organization_id)
++   AND status = 'pending'
++ )
++ WITH CHECK (
++   to_organization_id IS NOT NULL
++   AND auth_user_is_primary_owner_of_org(to_organization_id)
++ );
++
++ COMMENT ON TABLE organizations IS
++ 'Carrier companies. id aligns with member_profiles.organization_id for existing orgs.';
++
++ COMMENT ON TABLE organization_memberships IS
++ 'Links users to carrier organizations with role and permissions.';
++
++ COMMENT ON TABLE carrier_link_requests IS
++ 'Permit clerks / service users request access to a carrier organization.';
++
++ COMMENT ON COLUMN equipment_profiles.organization_id IS
++ 'Optional org scope for equipment; backfilled from member profile. Full query scoping is phase 2.';
++
++ NOTIFY pgrst, 'reload schema';
+
+ ❯ lib/migrations.test.ts:126:21
+    124|     expect(sql).toContain("array_replace(user_roles, 'Dispatcher', 'Dr…
+    125|     expect(sql).toContain("'Permit Clerk'")
+    126|     expect(sql).not.toContain("'Dispatcher'")
+       |                     ^
+    127|     expect(sql).toContain('auth_user_membership_org_ids')
+    128|     expect(sql).toContain("NOTIFY pgrst, 'reload schema'")
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  app/profile/profile-ui.test.ts > Profile page UI > uses AppHeader with profile activePage
+AssertionError: expected '\'use client\'\n\nimport { useCallbac…' to contain '<AppHeader user={user} activePage="pr…'
+
+- Expected
++ Received
+
+- <AppHeader user={user} activePage="profile" />
++ 'use client'
++
++ import { useCallback, useEffect, useRef, useState } from 'react'
++ import { createClient } from '@/lib/supabase/client'
++ import { useRouter } from 'next/navigation'
++ import AppHeader from '@/components/AppHeader'
++ import { US_STATE_OPTIONS } from '@/lib/us-states'
++ import {
++   buildTeamMemberList,
++   canDeleteMember,
++   canEditMember,
++   isPrimaryOwner,
++   roleBadgeClass,
++   shouldShowTeamSection,
++ } from '@/lib/member-profile-permissions'
++ import {
++   emptyMemberProfileForm,
++   formatCarrierSummaryDisplay,
++   memberProfileFromRow,
++   shouldShowCarrierForm,
++   shouldUseCarrierSummaryMode,
++   teamMemberProfileFromRow,
++ } from '@/lib/member-profile'
++ import {
++   USER_ROLE_OPTIONS,
++   type MemberProfile,
++   type MemberProfileFormData,
++   type TeamMemberListItem,
++   type TeamMemberProfile,
++ } from '@/types/member-profile'
++ import type { CarrierLinkRequest } from '@/types/organization'
++
++ const inputClass =
++   'border border-gray-300 px-3 py-2 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-black/10'
++
++ type FieldConfig = {
++   key: keyof MemberProfileFormData
++   label: string
++   type?: string
++   placeholder?: string
++ }
++
++ type EditingTarget =
++   | { kind: 'self' }
++   | { kind: 'member_profile'; id: string; userId: string }
++   | { kind: 'team_member_profile'; id: string | null }
++
++ const CARRIER_FIELDS: FieldConfig[] = [
++   { key: 'company_name', label: 'Company Name', placeholder: 'ABC Trucking LLC' },
++   { key: 'usdot_number', label: 'USDOT#', placeholder: '1234567' },
++   { key: 'mc_number', label: 'MC#', placeholder: 'MC-123456' },
++   { key: 'ein', label: 'EIN', placeholder: '12-3456789' },
++   { key: 'carrier_address', label: 'Address', placeholder: '123 Main St, City, ST 12345' },
++   { key: 'carrier_phone', label: 'Phone', type: 'tel', placeholder: '(555) 123-4567' },
++   { key: 'carrier_email', label: 'Email', type: 'email', placeholder: 'dispatch@company.com' },
++   { key: 'insurance_contact', label: 'Insurance Contact', placeholder: 'Agent name / phone / email' },
++ ]
++
++ const DRIVER_IDENTITY_FIELDS: FieldConfig[] = [
++   { key: 'driver_full_name', label: 'Full Name', placeholder: 'Jane Doe' },
++   { key: 'cdl_number', label: 'CDL#', placeholder: 'D1234567' },
++ ]
++
++ const DRIVER_CONTACT_FIELDS: FieldConfig[] = [
++   { key: 'driver_phone', label: 'Phone', type: 'tel', placeholder: '(555) 987-6543' },
++   { key: 'driver_email', label: 'Email', type: 'email', placeholder: 'driver@email.com' },
++   { key: 'emergency_contact', label: 'Emergency Contact', placeholder: 'Name, relationship, phone' },
++ ]
++
++ function todayIsoDate(): string {
++   return new Date().toISOString().slice(0, 10)
++ }
++
++ export default function ProfilePage() {
++   const [user, setUser] = useState<any>(null)
++   const [loading, setLoading] = useState(true)
++   const [saving, setSaving] = useState(false)
++   const [deletingId, setDeletingId] = useState<string | null>(null)
++   const [form, setForm] = useState<MemberProfileFormData>(emptyMemberProfileForm())
++   const [ownProfile, setOwnProfile] = useState<MemberProfile | null>(null)
++   const [teamMembers, setTeamMembers] = useState<TeamMemberListItem[]>([])
++   const [orgMemberRows, setOrgMemberRows] = useState<MemberProfile[]>([])
++   const [teamRosterRows, setTeamRosterRows] = useState<TeamMemberProfile[]>([])
++   const [editingTarget, setEditingTarget] = useState<EditingTarget>({ kind: 'self' })
++   const [editingDisplayName, setEditingDisplayName] = useState<string | null>(null)
++   const [editingMemberKey, setEditingMemberKey] = useState<string | null>(null)
++   const [deleteCandidate, setDeleteCandidate] = useState<TeamMemberListItem | null>(null)
++   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
++   const [carrierFormExpanded, setCarrierFormExpanded] = useState(false)
++   const [incomingLinkRequests, setIncomingLinkRequests] = useState<CarrierLinkRequest[]>([])
++   const [respondingRequestId, setRespondingRequestId] = useState<string | null>(null)
++   const teamSectionRef = useRef<HTMLElement | null>(null)
++   const router = useRouter()
++   const maxDateOfBirth = todayIsoDate()
++
++   const loadIncomingLinkRequests = useCallback(async (accessToken: string) => {
++     const response = await fetch('/api/carrier-link-requests?direction=incoming', {
++       headers: { Authorization: `Bearer ${accessToken}` },
++     })
++     const result = await response.json()
++     if (response.ok && result.success) {
++       setIncomingLinkRequests(result.data ?? [])
++     } else {
++       setIncomingLinkRequests([])
++     }
++   }, [])
++
++   const refreshTeamMembers = useCallback(
++     (profile: MemberProfile | null, members: MemberProfile[], roster: TeamMemberProfile[], userId: string) => {
++       setTeamMembers(buildTeamMemberList(profile, members, roster, userId))
++     },
++     []
++   )
++
++   const loadTeamData = useCallback(
++     async (supabase: ReturnType<typeof createClient>, userId: string, profile: MemberProfile | null) => {
++       let members: MemberProfile[] = profile ? [profile] : []
++       let roster: TeamMemberProfile[] = []
++
++       if (profile?.organization_id && isPrimaryOwner(profile)) {
++         const [{ data: orgMembers }, { data: rosterRows }] = await Promise.all([
++           supabase.from('member_profiles').select('*').eq('organization_id', profile.organization_id),
++           supabase
++             .from('team_member_profiles')
++             .select('*')
++             .eq('organization_id', profile.organization_id)
++             .order('created_at', { ascending: true }),
++         ])
++
++         if (orgMembers) members = orgMembers as MemberProfile[]
++         if (rosterRows) roster = rosterRows as TeamMemberProfile[]
++       }
++
++       setOrgMemberRows(members)
++       setTeamRosterRows(roster)
++       refreshTeamMembers(profile, members, roster, userId)
++     },
++     [refreshTeamMembers]
++   )
++
++   useEffect(() => {
++     const supabase = createClient()
++
++     supabase.auth.getSession().then(async ({ data: { session } }) => {
++       if (!session) {
++         router.push('/login')
++       } else {
++         setUser(session.user)
++
++         const { data, error } = await supabase
++           .from('member_profiles')
++           .select('*')
++           .eq('user_id', session.user.id)
++           .maybeSingle()
++
++         if (error) {
++           console.warn('member_profiles load', error)
++         } else if (data) {
++           const profile = data as MemberProfile
++           setOwnProfile(profile)
++           setForm(memberProfileFromRow(profile))
++           await loadTeamData(supabase, session.user.id, profile)
++         }
++
++         if (session.access_token) {
++           await loadIncomingLinkRequests(session.access_token)
++         }
++       }
++
++       setLoading(false)
++     })
++
++     const { data: listener } = supabase.auth.onAuthStateChange((_, session) => {
++       if (!session) {
++         router.push('/login')
++       } else {
++         setUser(session.user)
++       }
++     })
++
++     return () => listener.subscription.unsubscribe()
++   }, [router, loadTeamData, loadIncomingLinkRequests])
++
++   async function respondToLinkRequest(requestId: string, action: 'approve' | 'reject') {
++     setRespondingRequestId(requestId)
++     setSaveMessage(null)
++
++     try {
++       const supabase = createClient()
++       const { data: sessionData } = await supabase.auth.getSession()
++       const accessToken = sessionData.session?.access_token
++       if (!accessToken) throw new Error('Session expired. Please sign in again.')
++
++       const response = await fetch('/api/carrier-link-requests', {
++         method: 'PATCH',
++         headers: {
++           'Content-Type': 'application/json',
++           Authorization: `Bearer ${accessToken}`,
++         },
++         body: JSON.stringify({ id: requestId, action }),
++       })
++
++       const result = await response.json()
++       if (!response.ok || !result.success) {
++         throw new Error(result.error || 'Failed to update link request')
++       }
++
++       await loadIncomingLinkRequests(accessToken)
++       setSaveMessage({
++         type: 'success',
++         text: action === 'approve' ? 'Access approved. The user can now select your carrier.' : 'Link request rejected.',
++       })
++     } catch (error) {
++       setSaveMessage({
++         type: 'error',
++         text: error instanceof Error ? error.message : 'Failed to update link request',
++       })
++     } finally {
++       setRespondingRequestId(null)
++     }
++   }
++
++   function updateField(key: keyof MemberProfileFormData, value: string) {
++     setForm((prev) => ({ ...prev, [key]: value }))
++     if (saveMessage) setSaveMessage(null)
++   }
++
++   function toggleRole(role: string) {
++     setForm((prev) => {
++       const current = (prev.user_roles as string[]) || []
++       const next = current.includes(role) ? current.filter((r) => r !== role) : [...current, role]
++       return { ...prev, user_roles: next }
++     })
++     if (saveMessage) setSaveMessage(null)
++   }
++
++   function memberListKey(member: TeamMemberListItem): string {
++     return `${member.source}-${member.id}`
++   }
++
++   function resetToSelfForm() {
++     setEditingTarget({ kind: 'self' })
++     setEditingDisplayName(null)
++     setEditingMemberKey(null)
++     setForm(memberProfileFromRow(ownProfile))
++     setCarrierFormExpanded(false)
++     setSaveMessage(null)
++   }
++
++   async function handleEditMember(member: TeamMemberListItem) {
++     if (!ownProfile || !canEditMember(ownProfile, member)) return
++
++     const supabase = createClient()
++     const displayName = member.display_name?.trim() || 'team member'
++     setEditingDisplayName(displayName)
++     setEditingMemberKey(memberListKey(member))
++     setCarrierFormExpanded(false)
++     setSaveMessage(null)
++
++     if (member.source === 'member_profile' && member.user_id) {
++       let row = orgMemberRows.find((entry) => entry.user_id === member.user_id)
++
++       if (!row) {
++         const { data, error } = await supabase
++           .from('member_profiles')
++           .select('*')
++           .eq('user_id', member.user_id)
++           .maybeSingle()
++
++         if (error) {
++           console.warn('member_profiles fetch for edit', error)
++           setSaveMessage({ type: 'error', text: 'Could not load member profile. Please try again.' })
++           setEditingDisplayName(null)
++           setEditingMemberKey(null)
++           return
++         }
++
++         if (!data) {
++           setSaveMessage({ type: 'error', text: 'Member profile not found.' })
++           setEditingDisplayName(null)
++           setEditingMemberKey(null)
++           return
++         }
++
++         row = data as MemberProfile
++         setOrgMemberRows((prev) => {
++           const exists = prev.some((entry) => entry.user_id === row!.user_id)
++           return exists ? prev.map((entry) => (entry.user_id === row!.user_id ? row! : entry)) : [...prev, row!]
++         })
++       }
++
++       setEditingTarget({ kind: 'member_profile', id: member.id, userId: member.user_id })
++       setForm(memberProfileFromRow(row))
++       window.scrollTo({ top: 0, behavior: 'smooth' })
++       return
++     }
++
++     let row = teamRosterRows.find((entry) => entry.id === member.id)
++
++     if (!row) {
++       const { data, error } = await supabase
++         .from('team_member_profiles')
++         .select('*')
++         .eq('id', member.id)
++         .maybeSingle()
++
++       if (error) {
++         console.warn('team_member_profiles fetch for edit', error)
++         setSaveMessage({ type: 'error', text: 'Could not load team member. Please try again.' })
++         setEditingDisplayName(null)
++         setEditingMemberKey(null)
++         return
++       }
++
++       if (!data) {
++         setSaveMessage({ type: 'error', text: 'Team member not found.' })
++         setEditingDisplayName(null)
++         setEditingMemberKey(null)
++         return
++       }
++
++       row = data as TeamMemberProfile
++       setTeamRosterRows((prev) => {
++         const exists = prev.some((entry) => entry.id === row!.id)
++         return exists ? prev.map((entry) => (entry.id === row!.id ? row! : entry)) : [...prev, row!]
++       })
++     }
++
++     setEditingTarget({ kind: 'team_member_profile', id: member.id })
++     setForm(teamMemberProfileFromRow(row))
++     window.scrollTo({ top: 0, behavior: 'smooth' })
++   }
++
++   function handleAddTeamMember() {
++     if (!ownProfile || !isPrimaryOwner(ownProfile)) return
++     setEditingTarget({ kind: 'team_member_profile', id: null })
++     setEditingDisplayName(null)
++     setEditingMemberKey(null)
++     setForm(emptyMemberProfileForm())
++     setCarrierFormExpanded(false)
++     setSaveMessage(null)
++     window.scrollTo({ top: 0, behavior: 'smooth' })
++   }
++
++   async function saveViaApi(
++     accessToken: string,
++     payload: Record<string, unknown>
++   ): Promise<{ ok: boolean; error?: string }> {
++     const response = await fetch('/api/team-member-profiles', {
++       method: 'POST',
++       headers: {
++         'Content-Type': 'application/json',
++         Authorization: `Bearer ${accessToken}`,
++       },
++       body: JSON.stringify(payload),
++     })
++
++     const result = await response.json()
++     if (!response.ok || !result.success) {
++       return { ok: false, error: result.error || 'Failed to save profile.' }
++     }
++     return { ok: true }
++   }
++
++   async function handleSave(e: React.FormEvent) {
++     e.preventDefault()
++     if (!user) return
++
++     setSaving(true)
++     setSaveMessage(null)
++
++     const supabase = createClient()
++     const { data: sessionData } = await supabase.auth.getSession()
++     const accessToken = sessionData.session?.access_token
++
++     try {
++       if (editingTarget.kind === 'team_member_profile') {
++         if (!accessToken) throw new Error('Session expired. Please sign in again.')
++         const result = await saveViaApi(accessToken, {
++           source: 'team_member_profile',
++           id: editingTarget.id ?? undefined,
++           ...form,
++         })
++         if (!result.ok) throw new Error(result.error)
++       } else if (editingTarget.kind === 'member_profile') {
++         if (!accessToken) throw new Error('Session expired. Please sign in again.')
++         const result = await saveViaApi(accessToken, {
++           source: 'member_profile',
++           target_user_id: editingTarget.userId,
++           ...form,
++         })
++         if (!result.ok) throw new Error(result.error)
++       } else {
++         if (!accessToken) throw new Error('Session expired. Please sign in again.')
++         const result = await saveViaApi(accessToken, {
++           source: 'member_profile',
++           ...form,
++         })
++         if (!result.ok) throw new Error(result.error)
++       }
++
++       const { data: refreshedProfile } = await supabase
++         .from('member_profiles')
++         .select('*')
++         .eq('user_id', user.id)
++         .maybeSingle()
++
++       const profile = (refreshedProfile as MemberProfile | null) ?? ownProfile
++       const wasEditingOther = editingTarget.kind !== 'self'
++       const updatedName = editingDisplayName?.trim() || 'team member'
++       setOwnProfile(profile)
++       setForm(memberProfileFromRow(profile))
++       setEditingTarget({ kind: 'self' })
++       setEditingDisplayName(null)
++       setEditingMemberKey(null)
++       setCarrierFormExpanded(false)
++       await loadTeamData(supabase, user.id, profile)
++       setSaveMessage({
++         type: 'success',
++         text: wasEditingOther ? `Updated ${updatedName} successfully.` : 'Profile saved successfully.',
++       })
++
++       requestAnimationFrame(() => {
++         teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
++       })
++     } catch (error) {
++       console.warn('profile save', error)
++       setSaveMessage({
++         type: 'error',
++         text: error instanceof Error ? error.message : 'Failed to save profile. Please try again.',
++       })
++     } finally {
++       setSaving(false)
++     }
++   }
++
++   async function confirmDeleteMember() {
++     if (!deleteCandidate || !user || !ownProfile) return
++
++     setDeletingId(deleteCandidate.id)
++     setSaveMessage(null)
++
++     try {
++       const supabase = createClient()
++       const { data: sessionData } = await supabase.auth.getSession()
++       const accessToken = sessionData.session?.access_token
++       if (!accessToken) throw new Error('Session expired. Please sign in again.')
++
++       const params = new URLSearchParams({ source: deleteCandidate.source })
++       if (deleteCandidate.user_id) params.set('user_id', deleteCandidate.user_id)
++
++       const response = await fetch(`/api/team-member-profiles/${deleteCandidate.id}?${params}`, {
++         method: 'DELETE',
++         headers: { Authorization: `Bearer ${accessToken}` },
++       })
++
++       const result = await response.json()
++       if (!response.ok || !result.success) {
++         throw new Error(result.error || 'Failed to delete team member.')
++       }
++
++       await loadTeamData(supabase, user.id, ownProfile)
++       if (
++         editingTarget.kind === 'member_profile' &&
++         editingTarget.userId === deleteCandidate.user_id
++       ) {
++         resetToSelfForm()
++       }
++       if (
++         editingTarget.kind === 'team_member_profile' &&
++         editingTarget.id === deleteCandidate.id
++       ) {
++         resetToSelfForm()
++       }
++
++       setSaveMessage({ type: 'success', text: 'Team member removed.' })
++
++       requestAnimationFrame(() => {
++         teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
++       })
++     } catch (error) {
++       console.warn('team member delete', error)
++       setSaveMessage({
++         type: 'error',
++         text: error instanceof Error ? error.message : 'Failed to delete team member.',
++       })
++     } finally {
++       setDeletingId(null)
++       setDeleteCandidate(null)
++     }
++   }
++
++   const editingLabel =
++     editingTarget.kind === 'self'
++       ? null
++       : editingTarget.kind === 'team_member_profile' && !editingTarget.id
++         ? 'Adding team member'
++         : `Editing ${editingDisplayName?.trim() || 'team member'}`
++
++   const saveButtonLabel =
++     saving
++       ? 'Saving...'
++       : editingTarget.kind === 'self'
++         ? 'Save Profile'
++         : editingTarget.kind === 'team_member_profile' && !editingTarget.id
++           ? 'Add Member'
++           : 'Save Changes'
++
++   const showTeamSection = shouldShowTeamSection(ownProfile, teamMembers)
++   const primaryOwner = isPrimaryOwner(ownProfile)
++   const carrierDataSource = editingTarget.kind === 'self' ? ownProfile ?? form : form
++   const carrierSummaryMode = shouldUseCarrierSummaryMode(editingTarget, carrierDataSource)
++   const showCarrierForm = shouldShowCarrierForm(editingTarget, carrierDataSource, carrierFormExpanded)
++   const carrierSummaryFields = formatCarrierSummaryDisplay(carrierDataSource)
++   const showEditCarrierButton =
++     primaryOwner && carrierSummaryMode && editingTarget.kind === 'self' && !carrierFormExpanded
++
++   if (loading) {
++     return (
++       <div className="min-h-screen flex items-center justify-center bg-gray-50">
++         <div className="text-center">
++           <div className="w-14 h-14 bg-black rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
++             <span className="text-white text-3xl font-bold tracking-tighter">T</span>
++           </div>
++           <p className="text-gray-700 font-semibold text-lg">Checking authentication...</p>
++           <p className="text-gray-500 text-sm mt-1">Please wait while we verify your session</p>
++         </div>
++       </div>
++     )
++   }
++
++   return (
++     <div className="min-h-screen bg-gray-50">
++       <AppHeader user={user} activePage="profile" ownOrganizationId={ownProfile?.organization_id} />
++
++       <main className="max-w-4xl mx-auto px-6 py-10">
++         <div className="mb-8">
++           <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Member Profile</h1>
++           <p className="text-gray-600 mt-1.5 text-[15px]">
++             Store carrier and driver details for permit applications and team coordination.
++           </p>
++         </div>
++
++         {editingLabel && (
++           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
++             <span className="font-medium">{editingLabel}</span>
++             <button
++               type="button"
++               onClick={resetToSelfForm}
++               className="rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-blue-900 hover:bg-blue-100 transition"
++             >
++               Cancel editing
++             </button>
++           </div>
++         )}
++
++         <form onSubmit={handleSave} className="space-y-6">
++           <section className="bg-white border rounded-2xl p-6">
++             <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
++               <h2 className="font-semibold text-lg tracking-tight text-gray-900">Carrier Information</h2>
++               {showEditCarrierButton && (
++                 <button
++                   type="button"
++                   onClick={() => setCarrierFormExpanded(true)}
++                   className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 transition"
++                 >
++                   Edit Carrier Info
++                 </button>
++               )}
++               {primaryOwner && carrierSummaryMode && editingTarget.kind === 'self' && carrierFormExpanded && (
++                 <button
++                   type="button"
++                   onClick={() => setCarrierFormExpanded(false)}
++                   className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 transition"
++                 >
++                   Done editing carrier
++                 </button>
++               )}
++             </div>
++             <p className="text-sm text-gray-500 mb-5">Company details used on permits and compliance forms.</p>
++             {showCarrierForm ? (
++               <div className="grid sm:grid-cols-2 gap-4">
++                 {CARRIER_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
++                   <div key={key} className={key === 'carrier_address' ? 'sm:col-span-2' : ''}>
++                     <label htmlFor={key} className="block text-xs font-medium text-gray-600 mb-1">
++                       {label}
++                     </label>
++                     <input
++                       id={key}
++                       type={type}
++                       value={(form[key] as string) ?? ''}
++                       onChange={(e) => updateField(key, e.target.value)}
++                       placeholder={placeholder}
++                       className={inputClass}
++                     />
++                   </div>
++                 ))}
++               </div>
++             ) : (
++               <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-4">
++                 {carrierSummaryFields.map(({ label, value }) => (
++                   <div key={label} className={label === 'Address' ? 'sm:col-span-2' : ''}>
++                     <dt className="text-xs font-medium text-gray-500">{label}</dt>
++                     <dd className="mt-1 text-sm text-gray-900">{value}</dd>
++                   </div>
++                 ))}
++               </dl>
++             )}
++           </section>
++
++           <section className="bg-white border rounded-2xl p-6">
++             <h2 className="font-semibold text-lg tracking-tight text-gray-900 mb-1">Driver / User Information</h2>
++             <p className="text-sm text-gray-500 mb-5">Primary operator details and emergency contacts.</p>
++             <div className="grid sm:grid-cols-2 gap-4">
++               {DRIVER_IDENTITY_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
++                 <div key={key}>
++                   <label htmlFor={key} className="block text-xs font-medium text-gray-600 mb-1">
++                     {label}
++                   </label>
++                   <input
++                     id={key}
++                     type={type}
++                     value={(form[key] as string) ?? ''}
++                     onChange={(e) => updateField(key, e.target.value)}
++                     placeholder={placeholder}
++                     className={inputClass}
++                   />
++                 </div>
++               ))}
++               <div>
++                 <label htmlFor="cdl_state" className="block text-xs font-medium text-gray-600 mb-1">
++                   CDL State
++                 </label>
++                 <select
++                   id="cdl_state"
++                   value={form.cdl_state ?? ''}
++                   onChange={(e) => updateField('cdl_state', e.target.value)}
++                   className={`${inputClass} min-h-[38px]`}
++                 >
++                   <option value="">— Select state —</option>
++                   {US_STATE_OPTIONS.map(({ code, name }) => (
++                     <option key={code} value={code}>
++                       {code} — {name}
++                     </option>
++                   ))}
++                 </select>
++               </div>
++               <div>
++                 <label htmlFor="date_of_birth" className="block text-xs font-medium text-gray-600 mb-1">
++                   Date of Birth
++                 </label>
++                 <input
++                   id="date_of_birth"
++                   type="date"
++                   max={maxDateOfBirth}
++                   value={form.date_of_birth ?? ''}
++                   onChange={(e) => updateField('date_of_birth', e.target.value)}
++                   className={inputClass}
++                 />
++               </div>
++               {DRIVER_CONTACT_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
++                 <div key={key} className={key === 'emergency_contact' ? 'sm:col-span-2' : ''}>
++                   <label htmlFor={key} className="block text-xs font-medium text-gray-600 mb-1">
++                     {label}
++                   </label>
++                   <input
++                     id={key}
++                     type={type}
++                     value={(form[key] as string) ?? ''}
++                     onChange={(e) => updateField(key, e.target.value)}
++                     placeholder={placeholder}
++                     className={inputClass}
++                   />
++                 </div>
++               ))}
++             </div>
++           </section>
++
++           <section className="bg-white border rounded-2xl p-6">
++             <h2 className="font-semibold text-lg tracking-tight text-gray-900 mb-1">User Roles</h2>
++             <p className="text-sm text-gray-500 mb-5">Select all roles that apply to this account.</p>
++             <div className="grid sm:grid-cols-2 gap-3">
++               {USER_ROLE_OPTIONS.map((role) => (
++                 <label
++                   key={role}
++                   className="flex items-center gap-2.5 text-sm text-gray-800 cursor-pointer rounded-lg border border-gray-200 px-3 py-2.5 hover:bg-gray-50"
++                 >
++                   <input
++                     type="checkbox"
++                     checked={((form.user_roles as string[]) || []).includes(role)}
++                     onChange={() => toggleRole(role)}
++                     className="rounded border-gray-300"
++                   />
++                   {role}
++                 </label>
++               ))}
++             </div>
++           </section>
++
++           {saveMessage && (
++             <div
++               role="status"
++               aria-live="polite"
++               className={`rounded-xl px-4 py-3 text-sm ${
++                 saveMessage.type === 'success'
++                   ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
++                   : 'bg-red-50 text-red-800 border border-red-200'
++               }`}
++             >
++               {saveMessage.text}
++             </div>
++           )}
++
++           <div className="flex justify-end gap-3">
++             {primaryOwner && (
++               <button
++                 type="button"
++                 onClick={handleAddTeamMember}
++                 className="border border-gray-300 hover:bg-gray-100 text-gray-800 px-6 py-3 rounded-xl text-sm font-semibold transition-all"
++               >
++                 Add Team Member
++               </button>
++             )}
++             <button
++               type="submit"
++               disabled={saving}
++               className="bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-8 py-3 rounded-xl text-sm font-semibold transition-all active:scale-[0.985]"
++             >
++               {saveButtonLabel}
++             </button>
++           </div>
++         </form>
++
++         {primaryOwner && incomingLinkRequests.length > 0 && (
++           <section className="mt-10 bg-white border rounded-2xl shadow-sm overflow-hidden">
++             <div className="px-6 py-5 border-b bg-gray-50">
++               <h2 className="text-xl font-semibold tracking-tight text-gray-900">Account Link Requests</h2>
++               <p className="text-sm text-gray-600 mt-1">
++                 Permit clerks and service users requesting access to your carrier account.
++               </p>
++             </div>
++             <ul className="divide-y">
++               {incomingLinkRequests.map((request) => (
++                 <li key={request.id} className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
++                   <div>
++                     <div className="font-medium text-gray-900">
++                       {request.requester_name || 'Account link request'}
++                     </div>
++                     <div className="text-sm text-gray-600 mt-0.5">
++                       {request.requester_email && <span>{request.requester_email} · </span>}
++                       {request.target_usdot && <span>USDOT {request.target_usdot} · </span>}
++                       {request.target_email && <span>{request.target_email} · </span>}
++                       {request.message && <span className="italic">{request.message}</span>}
++                     </div>
++                   </div>
++                   <div className="flex gap-2">
++                     <button
++                       type="button"
++                       onClick={() => respondToLinkRequest(request.id, 'approve')}
++                       disabled={respondingRequestId === request.id}
++                       className="text-sm px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
++                     >
++                       {respondingRequestId === request.id ? 'Working…' : 'Approve'}
++                     </button>
++                     <button
++                       type="button"
++                       onClick={() => respondToLinkRequest(request.id, 'reject')}
++                       disabled={respondingRequestId === request.id}
++                       className="text-sm px-3 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50"
++                     >
++                       Reject
++                     </button>
++                   </div>
++                 </li>
++               ))}
++             </ul>
++           </section>
++         )}
++
++         {showTeamSection && (
++           <section
++             ref={teamSectionRef}
++             id="saved-team-members"
++             className="mt-10 bg-white border rounded-2xl shadow-sm overflow-hidden"
++           >
++             <div className="px-6 py-5 border-b bg-gray-50">
++               <h2 className="text-xl font-semibold tracking-tight text-gray-900">Saved Users / Team Members</h2>
++               <p className="text-sm text-gray-600 mt-1">
++                 {primaryOwner
++                   ? 'Manage profiles for everyone on your team.'
++                   : 'Your saved profile details.'}
++               </p>
++             </div>
++
++             {teamMembers.length === 0 ? (
++               <div className="px-6 py-10 text-center text-sm text-gray-600">
++                 Save your profile to see it listed here.
++               </div>
++             ) : (
++               <div className="overflow-x-auto">
++                 <table className="w-full text-sm">
++                   <thead className="bg-gray-50 border-b">
++                     <tr>
++                       <th className="text-left px-6 py-4 font-semibold text-gray-700">Name</th>
++                       <th className="text-left px-6 py-4 font-semibold text-gray-700">Roles</th>
++                       <th className="text-left px-6 py-4 font-semibold text-gray-700">Company</th>
++                       <th className="text-left px-6 py-4 font-semibold text-gray-700">Driver Info</th>
++                       <th className="text-right px-6 py-4 font-semibold text-gray-700">Actions</th>
++                     </tr>
++                   </thead>
++                   <tbody className="divide-y">
++                     {teamMembers.map((member) => {
++                       const allowEdit = ownProfile ? canEditMember(ownProfile, member) : member.is_self
++                       const allowDelete = ownProfile ? canDeleteMember(ownProfile, member) : false
++
++                       const rowKey = memberListKey(member)
++                       const isEditingRow = editingMemberKey === rowKey
++
++                       return (
++                         <tr
++                           key={rowKey}
++                           className={`transition-colors ${
++                             isEditingRow ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-gray-50'
++                           }`}
++                         >
++                           <td className="px-6 py-4">
++                             <div className="font-medium text-gray-900">{member.display_name}</div>
++                             {member.is_self && (
++                               <div className="text-xs text-gray-500 mt-0.5">You</div>
++                             )}
++                             {member.is_primary_owner && !member.is_self && (
++                               <div className="text-xs text-gray-500 mt-0.5">Primary owner</div>
++                             )}
++                           </td>
++                           <td className="px-6 py-4">
++                             <div className="flex flex-wrap gap-1.5">
++                               {member.user_roles.length > 0 ? (
++                                 member.user_roles.map((role) => (
++                                   <span
++                                     key={role}
++                                     className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${roleBadgeClass(role)}`}
++                                   >
++                                     {role}
++                                   </span>
++                                 ))
++                               ) : (
++                                 <span className="text-gray-500">—</span>
++                               )}
++                             </div>
++                           </td>
++                           <td className="px-6 py-4 text-gray-700">{member.company_name?.trim() || '—'}</td>
++                           <td className="px-6 py-4 text-gray-600">{member.driver_summary}</td>
++                           <td className="px-6 py-4 text-right whitespace-nowrap">
++                             {allowEdit && (
++                               <button
++                                 type="button"
++                                 onClick={() => handleEditMember(member)}
++                                 className="text-sm px-3 py-1.5 border border-gray-300 hover:bg-gray-100 rounded-lg text-gray-700 transition mr-2"
++                               >
++                                 Edit
++                               </button>
++                             )}
++                             {allowDelete && (
++                               <button
++                                 type="button"
++                                 onClick={() => setDeleteCandidate(member)}
++                                 disabled={deletingId === member.id}
++                                 className="text-sm px-3 py-1.5 border border-red-200 hover:bg-red-50 rounded-lg text-red-700 transition disabled:opacity-50"
++                               >
++                                 {deletingId === member.id ? 'Deleting...' : 'Delete'}
++                               </button>
++                             )}
++                           </td>
++                         </tr>
++                       )
++                     })}
++                   </tbody>
++                 </table>
++               </div>
++             )}
++           </section>
++         )}
++
++         {deleteCandidate && (
++           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
++             <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
++               <h3 className="text-lg font-semibold text-gray-900">Delete team member?</h3>
++               <p className="mt-2 text-sm text-gray-600">
++                 Remove <span className="font-medium text-gray-900">{deleteCandidate.display_name}</span> from your
++                 team? This cannot be undone.
++               </p>
++               <div className="mt-6 flex justify-end gap-3">
++                 <button
++                   type="button"
++                   onClick={() => setDeleteCandidate(null)}
++                   className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
++                 >
++                   Cancel
++                 </button>
++                 <button
++                   type="button"
++                   onClick={confirmDeleteMember}
++                   disabled={deletingId === deleteCandidate.id}
++                   className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
++                 >
++                   {deletingId === deleteCandidate.id ? 'Deleting...' : 'Delete'}
++                 </button>
++               </div>
++             </div>
++           </div>
++         )}
++       </main>
++     </div>
++   )
++ }
+
+ ❯ app/profile/profile-ui.test.ts:23:20
+     21|     const source = readProfileSource()
+     22| 
+     23|     expect(source).toContain('<AppHeader user={user} activePage="profi…
+       |                    ^
+     24|   })
+     25| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+

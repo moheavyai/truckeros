@@ -368,10 +368,88 @@ const HIGHWAY_STATE_HINTS: Record<string, string> = {
   'I-55': 'MS', 'I-57': 'MO', 'I-44': 'MO', 'I-24': 'TN', 'I-22': 'MS',
   'I-85': 'GA', 'I-20': 'AL', 'I-10': 'LA', 'I-35': 'OK', 'I-29': 'MO',
   'I-64': 'MO', 'I-72': 'IL', 'I-75': 'GA', 'I-4': 'FL',
+  'I-90': 'SD', 'I-25': 'WY', 'US 81': 'NE', 'US 83': 'NE',
 }
 
 /** Multi-state interstates: do not use hint when ref/name already has state codes. */
-const MULTI_STATE_HWYS = new Set(['I-35', 'I-40', 'I-44', 'I-55', 'I-57', 'I-70', 'I-75'])
+const MULTI_STATE_HWYS = new Set(['I-35', 'I-40', 'I-44', 'I-55', 'I-57', 'I-70', 'I-75', 'I-80', 'I-90', 'I-29', 'I-25', 'US 81'])
+
+const COMPASS_SUFFIX_CODES = new Set(['NE', 'NW', 'SE', 'SW'])
+
+
+function okMtCorridorProfile(plainHwys: Set<string>): 'western' | 'eastern' | null {
+  const western = ['I-70', 'I-25'].some(h => plainHwys.has(h))
+  const eastern = ['I-35', 'I-80', 'I-90'].some(h => plainHwys.has(h))
+  if (western && !eastern) return 'western'
+  if (eastern && !western) return 'eastern'
+  if (western && eastern) return plainHwys.has('I-25') ? 'western' : 'eastern'
+  return null
+}
+
+function isHighwayCompassSuffix(part: string, code: string): boolean {
+  if (!COMPASS_SUFFIX_CODES.has(code)) return false
+  if (new RegExp(`\\b${code}[\\s-]*\\d`, 'i').test(part)) return false
+  if (new RegExp(`^${code}$`, 'i').test(part.trim())) return false
+  if (new RegExp(`\\b(?:I[\\s-]?\\d+|US[\\s-]?\\d+)[\\s-]+${code}\\s*$`, 'i').test(part.trim())) return true
+  return false
+}
+
+/** Approximate lat/lon bounds for geometry fallback when refs lack state codes. */
+const STATE_LAT_LON_BOUNDS: Record<string, [number, number, number, number]> = {
+  OK: [33.6, 37.0, -103.0, -94.4], KS: [37.0, 40.0, -102.1, -94.6],
+  NE: [40.0, 43.0, -104.1, -95.3], SD: [42.5, 45.95, -104.1, -96.4],
+  CO: [37.0, 41.0, -109.1, -102.0],
+  WY: [41.0, 45.0, -111.1, -104.06], MT: [44.4, 49.0, -116.1, -104.0],
+  MO: [36.0, 40.6, -95.8, -89.1], IA: [40.4, 43.5, -96.15, -90.1],
+}
+
+function stateFromCoordinates(lat: number, lon: number): string | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
+  const matches: string[] = []
+  for (const [st, [minLat, maxLat, minLon, maxLon]] of Object.entries(STATE_LAT_LON_BOUNDS)) {
+    if (lat >= minLat && lat <= maxLat && lon >= minLon && lon <= maxLon) matches.push(st)
+  }
+  if (matches.length === 0) return null
+  if (matches.length === 1) return matches[0]
+  let best = matches[0]
+  let bestD = Infinity
+  for (const code of matches) {
+    const b = STATE_LAT_LON_BOUNDS[code]
+    const cLat = (b[0] + b[1]) / 2
+    const cLon = (b[2] + b[3]) / 2
+    const d = (lat - cLat) ** 2 + (lon - cLon) ** 2
+    if (d < bestD) { bestD = d; best = code }
+  }
+  return best
+}
+
+function stepCoordinateSamples(step: any): Array<[number, number]> {
+  const points: Array<[number, number]> = []
+  const man = step?.maneuver?.location
+  if (Array.isArray(man) && man.length >= 2) {
+    const lon = Number(man[0]), lat = Number(man[1])
+    if (Number.isFinite(lat) && Number.isFinite(lon)) points.push([lat, lon])
+  }
+  const coords = step?.geometry?.coordinates
+  if (Array.isArray(coords) && coords.length > 0) {
+    for (const idx of [0, Math.floor(coords.length / 2), coords.length - 1]) {
+      const c = coords[idx]
+      if (Array.isArray(c) && c.length >= 2) {
+        const lon = Number(c[0]), lat = Number(c[1])
+        if (Number.isFinite(lat) && Number.isFinite(lon)) points.push([lat, lon])
+      }
+    }
+  }
+  return points
+}
+
+function stateFromStepGeometry(step: any): string | null {
+  for (const [lat, lon] of stepCoordinateSamples(step)) {
+    const st = stateFromCoordinates(lat, lon)
+    if (st) return st
+  }
+  return null
+}
 
 function normalizeHighwayFromRef(raw: string): string | null {
   let h = raw
@@ -413,9 +491,7 @@ function getPrimaryStateForStep(step: any): string | null {
     while ((m = standaloneRe.exec(part)) !== null) {
       const code = m[1].toUpperCase()
       if (!US_STATE_CODES.has(code)) continue
-      if (['NE', 'NW', 'SE', 'SW'].includes(code) && !new RegExp(`\\b${code}[\\s-]*\\d`).test(part)) {
-        continue
-      }
+      if (isHighwayCompassSuffix(part, code)) continue
       candidates.push(code)
     }
   }
@@ -425,6 +501,10 @@ function getPrimaryStateForStep(step: any): string | null {
       candidates.push(HIGHWAY_STATE_HINTS[h])
     }
   }
+  if (candidates.length === 0) {
+    const geo = stateFromStepGeometry(step)
+    if (geo) candidates.push(geo)
+  }
   return candidates.length > 0 ? candidates[candidates.length - 1] : null
 }
 
@@ -432,7 +512,7 @@ function getPrimaryStateForStep(step: any): string | null {
  * Walk every OSRM step and build ordered state corridor from geometry attribution.
  * Ports or-tools build_corridor_from_steps for accurate traversal (captures TN on I-24, MO on I-44, etc.).
  */
-function buildCorridorFromSteps(
+export function buildCorridorFromSteps(
   steps: any[],
   originState?: string,
   destState?: string
@@ -473,6 +553,48 @@ function buildCorridorFromSteps(
     }
     if (d && US_STATE_CODES.has(d) && corridor[corridor.length - 1] !== d) {
       corridor.push(d)
+    }
+  }
+
+  if (steps && steps.length > 0 && (corridor.length < 3 || !hasPlausibleTransitions(corridor))) {
+    const hinted = extractStateHintsFromSteps(steps)
+    for (const s of hinted) {
+      if (!corridor.includes(s)) corridor.push(s)
+    }
+    if (!hasPlausibleTransitions(corridor)) {
+      const geoStates: string[] = []
+      for (const step of steps) {
+        const g = stateFromStepGeometry(step)
+        if (g && (geoStates.length === 0 || geoStates[geoStates.length - 1] !== g)) geoStates.push(g)
+      }
+      if (
+        geoStates.length > corridor.length ||
+        (!hasPlausibleTransitions(corridor) && hasPlausibleTransitions(geoStates))
+      ) {
+        corridor.length = 0
+        corridor.push(...geoStates)
+        if (originState) {
+          let ob = originState.toUpperCase()
+          if (ob.length > 2) { const ab = getStateAbbreviation(originState); if (ab) ob = ab }
+          if (ob && US_STATE_CODES.has(ob) && corridor[0] !== ob) corridor.unshift(ob)
+        }
+        if (destState) {
+          let db = destState.toUpperCase()
+          if (db.length > 2) { const ab = getStateAbbreviation(destState); if (ab) db = ab }
+          if (db && US_STATE_CODES.has(db) && corridor[corridor.length - 1] !== db) corridor.push(db)
+        }
+      }
+    }
+  }
+
+  if (originState && destState) {
+    let o = originState.toUpperCase()
+    let d = destState.toUpperCase()
+    if (o.length > 2) { const ab = getStateAbbreviation(originState); if (ab) o = ab }
+    if (d.length > 2) { const ab = getStateAbbreviation(destState); if (ab) d = ab }
+    if (o === 'OK' && d === 'MT' && (corridor.length <= 2 || !hasPlausibleTransitions(corridor))) {
+      const hwys = curateMajorHighways(extractHighways(steps || []))
+      return completeCorridorWithHighways([o, d], hwys)
     }
   }
 
@@ -679,7 +801,7 @@ function curateMajorHighways(highways: string[]): string[] {
  * Temporary helper to fill common missing states based on major highways.
  * This bridges gaps until we have better mapping data.
  */
-function completeCorridorWithHighways(states: string[], highways: string[]): string[] {
+export function completeCorridorWithHighways(states: string[], highways: string[]): string[] {
   const result = [...states]
   const hwySet = new Set(highways)
 
@@ -723,6 +845,47 @@ function completeCorridorWithHighways(states: string[], highways: string[]): str
     if (!result.includes('TN') && result.includes('MO')) {
       const moIdx = result.indexOf('MO')
       result.splice(moIdx + 1, 0, 'TN')
+    }
+  }
+
+  // OK -> MT: western (I-70/I-25) or eastern (I-35/I-80/I-90) when refs lack state numbers.
+  if (result.includes('OK') && result.includes('MT')) {
+    let profile = okMtCorridorProfile(plainHwys)
+    if (profile === null && result.length <= 2 && ['I-70', 'I-25'].some(h => plainHwys.has(h))) {
+      profile = 'western'
+    }
+    if (profile === 'western') {
+      if (!result.includes('KS')) {
+        const okIdx = result.indexOf('OK')
+        if (okIdx !== -1) result.splice(okIdx + 1, 0, 'KS')
+      }
+      if (!result.includes('CO') && result.includes('KS')) {
+        const ksIdx = result.indexOf('KS')
+        if (ksIdx !== -1) result.splice(ksIdx + 1, 0, 'CO')
+      }
+      if (!result.includes('WY') && result.includes('CO')) {
+        const coIdx = result.indexOf('CO')
+        if (coIdx !== -1) result.splice(coIdx + 1, 0, 'WY')
+      }
+    } else if (profile === 'eastern') {
+      for (const drop of ['CO', 'WY']) {
+        while (result.includes(drop)) {
+          result.splice(result.indexOf(drop), 1)
+        }
+      }
+      if (!result.includes('KS')) {
+        const okIdx = result.indexOf('OK')
+        if (okIdx !== -1) result.splice(okIdx + 1, 0, 'KS')
+      }
+      if (!result.includes('NE')) {
+        const anchor = result.includes('KS') ? 'KS' : 'OK'
+        const idx = result.indexOf(anchor)
+        if (idx !== -1) result.splice(idx + 1, 0, 'NE')
+      }
+      if (!result.includes('SD') && result.includes('NE')) {
+        const neIdx = result.indexOf('NE')
+        if (neIdx !== -1) result.splice(neIdx + 1, 0, 'SD')
+      }
     }
   }
 
@@ -774,7 +937,6 @@ function extractStateHintsFromSteps(steps: any[]): string[] {
     if (!ref) continue
     const parts = ref.split(/[;,\|]/).map((p: string) => p.trim()).filter(Boolean)
     for (const part of parts) {
-      // Fresh regex per part to avoid lastIndex state issues across iterations (robust + simple)
       const re = new RegExp(routeRe.source, 'g')
       let m: RegExpExecArray | null
       while ((m = re.exec(part)) !== null) {
@@ -782,6 +944,13 @@ function extractStateHintsFromSteps(steps: any[]): string[] {
         if (validCodes.has(code) && !states.includes(code)) {
           states.push(code)
         }
+      }
+      const standaloneRe = /\b([A-Z]{2})\b/g
+      while ((m = standaloneRe.exec(part)) !== null) {
+        const code = m[1].toUpperCase()
+        if (!validCodes.has(code)) continue
+        if (isHighwayCompassSuffix(part, code)) continue
+        if (!states.includes(code)) states.push(code)
       }
     }
   }
@@ -850,7 +1019,7 @@ function areAdjacent(a: string, b: string): boolean {
   return aN.includes(b) || (known[b] || []).includes(a)
 }
 
-function hasPlausibleTransitions(states: string[]): boolean {
+export function hasPlausibleTransitions(states: string[]): boolean {
   for (let i = 0; i < states.length - 1; i++) {
     if (!areAdjacent(states[i], states[i + 1])) return false
   }

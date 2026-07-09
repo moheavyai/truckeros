@@ -12,10 +12,19 @@ import {
   parsePortalOutput,
   compareRecommendedVsPortalRoute,
   createPortalSubmissionRecord,
+  getPortalStatesForAnalysis,
+  resolveInitialPortalState,
   type RouteComparison,
   type PortalSubmissionRecord,
   type PrefillPackage
 } from '@/lib/portal-assistant'
+import { formatLoadDisplay } from '@/lib/parse-dimension'
+import { formatPortalEquipmentSnapshot } from '@/lib/portal-equipment-display'
+import {
+  formatCarrierReviewFields,
+  formatDriverReviewFields,
+  formatLoadReviewDetails,
+} from '@/lib/portal-review-display'
 
 /**
  * Rich PermitRequest shape matching saved DB rows (permit_requests + equipment/cargo snapshots from 009 migration).
@@ -66,7 +75,7 @@ interface PortalSubmission {
  * - Per-state status pills (exact reuse of history logic: red=needed/no sub, yellow=applied/prefilled/submit, green=pdf/received/approved)
  * - PDF: upload to 'portal-pdfs' Supabase Storage (user/req/state path), store pdf_reference, list/download
  * - Human approval gate (prominent, explicit confirm before record submission with human_approved=true)
- * - Full ?requestId integration from History "Portal Assist" button (real fetch via supabase RLS)
+ * - Full ?requestId integration from History details modal "Launch Portal Assist" (real fetch via supabase RLS)
  * - Robust: try/catch + ErrorDisplay everywhere, loading states, graceful unsupported, logging [portal-assist]
  * - Config-driven + extensibility notes in UI + lib
  * - Backward compatible (demo still works, existing submissions schema/RLS untouched)
@@ -116,13 +125,52 @@ export default function PortalAssistPage() {
   const [approvalChecked, setApprovalChecked] = useState(false)
   const [approvalNotes, setApprovalNotes] = useState('')
   const [approving, setApproving] = useState(false)
+  const [approvalError, setApprovalError] = useState<string | null>(null)
 
   const [parseError, setParseError] = useState<string | null>(null)
   const [savingSubmission, setSavingSubmission] = useState(false)
+  const [launchHint, setLaunchHint] = useState<string | null>(null)
+  const [isReviewStep, setIsReviewStep] = useState(false)
 
   const router = useRouter()
 
-  // Load auth + optional ?requestId (from History "Portal Assist" button) or support demo
+  const portalStatesForRequest = request
+    ? getPortalStatesForAnalysis({
+        routeCorridor: request.route_corridor,
+        permitRequiredStates: request.permit_required_states,
+      })
+    : []
+
+  const applyPortalState = (req: PermitRequest, state: string, opts?: { showLaunchHint?: boolean }) => {
+    if (!STATE_PORTAL_CONFIGS[state]) {
+      setPageError(`Config for ${state} missing. Add it in lib/portal-assistant.ts (config-driven).`)
+      return
+    }
+    setSelectedState(state)
+    setPrefill(generatePortalPrefill(req, state))
+    setIsApproved(false)
+    setRouteComparison(null)
+    setSubmissionRecord(null)
+    setApprovalChecked(false)
+    setApprovalNotes('')
+    setApprovalError(null)
+    setCredentialError(null)
+    setParseError(null)
+    setPdfError(null)
+
+    if (opts?.showLaunchHint) {
+      const corridor = (req.route_corridor || []).join(' → ')
+      setLaunchHint(
+        corridor
+          ? `Pre-loaded ${state} — first state in your corridor (${corridor}). Review prefill, then open the portal.`
+          : `Pre-loaded ${state} from your saved analysis. Review prefill, then open the portal.`
+      )
+    }
+
+    void checkCredentialsForState(state)
+  }
+
+  // Load auth + optional ?requestId (from History details modal "Launch Portal Assist") or support demo
   useEffect(() => {
     const supabase = createClient()
 
@@ -135,16 +183,22 @@ export default function PortalAssistPage() {
         }
         setUser(session.user)
 
-        // Parse requestId from URL without useSearchParams (avoids extra Suspense)
+        // Parse requestId + review step from URL without useSearchParams (avoids extra Suspense)
         let requestId: string | null = null
+        let reviewStep = false
         if (typeof window !== 'undefined') {
           const params = new URLSearchParams(window.location.search)
           requestId = params.get('requestId')
+          reviewStep = params.get('step') === 'review' || params.get('approved') === '1'
+        }
+
+        if (reviewStep) {
+          setIsReviewStep(true)
         }
 
         if (requestId) {
-          console.log('[portal-assist] Loading real permit request from History link:', requestId)
-          await loadRealRequest(requestId, session.access_token)
+          console.log('[portal-assist] Loading real permit request from History modal Launch Portal Assist:', requestId)
+          await loadRealRequest(requestId, session.access_token, { reviewStep })
         } else {
           console.log('[portal-assist] No requestId — ready for demo or manual load.')
         }
@@ -166,7 +220,11 @@ export default function PortalAssistPage() {
   }, [router])
 
   // Load a real saved request (full data incl. equipment/cargo) via client Supabase (RLS enforces ownership)
-  const loadRealRequest = async (requestId: string, accessToken?: string) => {
+  const loadRealRequest = async (
+    requestId: string,
+    accessToken?: string,
+    opts?: { reviewStep?: boolean }
+  ) => {
     setRequestLoading(true)
     setRequestError(null)
     setPageError(null)
@@ -185,17 +243,14 @@ export default function PortalAssistPage() {
 
       const loaded = data as PermitRequest
       setRequest(loaded)
-
-      // Generate prefill immediately for current (or default) state using full data
-      const generated = generatePortalPrefill(loaded, selectedState)
-      setPrefill(generated)
-      setIsApproved(false)
-      setRouteComparison(null)
-      setSubmissionRecord(null)
-      setApprovalChecked(false)
-      setApprovalNotes('')
       setPortalOutput('')
       setParsedOutput(null)
+
+      const initialState = resolveInitialPortalState(loaded)
+      applyPortalState(loaded, initialState, { showLaunchHint: !opts?.reviewStep })
+      if (opts?.reviewStep) {
+        setIsReviewStep(true)
+      }
 
       // Load existing submissions for status pills + history
       await loadSubmissionsForRequest(loaded.id)
@@ -252,22 +307,28 @@ export default function PortalAssistPage() {
         description: 'Oversized machinery',
         overhang_front_ft: 3,
         overhang_rear_ft: 5,
+        carrierDriver: {
+          companyName: 'Demo Heavy Haul LLC',
+          usdotNumber: '1234567',
+          mcNumber: 'MC-482910',
+          carrierAddress: '1200 Industrial Blvd, Houston, TX',
+          carrierPhone: '713-555-0100',
+          carrierEmail: 'dispatch@demoheavyhaul.com',
+          driverFullName: 'Alex Rivera',
+          cdlNumber: 'TX12345678',
+          cdlState: 'TX',
+          driverPhone: '713-555-0200',
+        },
       },
       distance_miles: 1080,
       duration_hours: 18.5,
     }
     setRequest(demoRequest)
-
-    const generatedPrefill = generatePortalPrefill(demoRequest, selectedState)
-    setPrefill(generatedPrefill)
-    setIsApproved(false)
-    setRouteComparison(null)
-    setSubmissionRecord(null)
-    setApprovalChecked(false)
-    setApprovalNotes('')
     setPortalOutput('')
     setParsedOutput(null)
     setSubmissions([]) // fresh demo
+    setLaunchHint(null)
+    applyPortalState(demoRequest, resolveInitialPortalState(demoRequest))
     setAttachedPdfs([])
     setCurrentPdfReference(null)
     setHasCredentials(false)
@@ -279,6 +340,11 @@ export default function PortalAssistPage() {
 
   // Dynamic state change — works for any in config
   const handleStateChange = (state: string) => {
+    setLaunchHint(null)
+    if (request) {
+      applyPortalState(request, state)
+      return
+    }
     if (!STATE_PORTAL_CONFIGS[state]) {
       setPageError(`Config for ${state} missing. Add it in lib/portal-assistant.ts (config-driven).`)
       return
@@ -287,19 +353,6 @@ export default function PortalAssistPage() {
     setCredentialError(null)
     setParseError(null)
     setPdfError(null)
-
-    if (request) {
-      const newPrefill = generatePortalPrefill(request, state)
-      setPrefill(newPrefill)
-      setIsApproved(false)
-      setRouteComparison(null)
-      setSubmissionRecord(null)
-      setApprovalChecked(false)
-      setApprovalNotes('')
-      // keep output/parsed for cross-state review if wanted
-    }
-
-    // Check creds metadata for this state (GET never returns pw)
     void checkCredentialsForState(state)
   }
 
@@ -372,12 +425,12 @@ export default function PortalAssistPage() {
   const handleApproveGate = async () => {
     if (!prefill || !request) return
     if (!approvalChecked) {
-      setCredentialError('Please check the review confirmation box to proceed.')
+      setApprovalError('Please check the review confirmation box to proceed.')
       return
     }
 
     setApproving(true)
-    setCredentialError(null)
+    setApprovalError(null)
 
     try {
       const recordBase = createPortalSubmissionRecord(
@@ -407,6 +460,7 @@ export default function PortalAssistPage() {
         },
         body: JSON.stringify({
           ...record,
+          record_approval: true,
           raw_portal_output: null,
         }),
       })
@@ -425,7 +479,7 @@ export default function PortalAssistPage() {
       console.log('[portal-assist] HUMAN APPROVED + recorded submission for', selectedState, 'human_approved=true')
     } catch (e: any) {
       console.error('[portal-assist] approve gate error', e)
-      setCredentialError(e.message || 'Approval record failed.')
+      setApprovalError(e.message || 'Approval record failed.')
     } finally {
       setApproving(false)
     }
@@ -435,7 +489,7 @@ export default function PortalAssistPage() {
   const handleParseOutput = async () => {
     setParseError(null)
     if (!portalOutput.trim() || !request || !prefill) {
-      setParseError("Load a request and click 'Generate / Regenerate Prefill' first.")
+      setParseError("Load a request and click 'Regenerate Prefill' in Final Review first.")
       return
     }
 
@@ -607,20 +661,6 @@ export default function PortalAssistPage() {
     return st
   }
 
-  // Format rich equipment/cargo summary for Request Details (uses full saved data)
-  const formatEquipmentSummary = (req: PermitRequest | null) => {
-    if (!req) return null
-    const e = req.equipment || {}
-    const c = req.cargo || {}
-    const parts: string[] = []
-    if (e.unit_number || e.vin) parts.push(`Unit/VIN: ${e.unit_number || e.vin}`)
-    if (e.axles) parts.push(`${e.axles} axles`)
-    if (e.trailer_length_ft) parts.push(`${e.trailer_length_ft}' trailer`)
-    if (c.overhang_front_ft || c.overhang_rear_ft) parts.push(`Overhang: +${c.overhang_front_ft || 0}/-${c.overhang_rear_ft || 0} ft`)
-    if (req.distance_miles) parts.push(`${req.distance_miles} mi`)
-    return parts.length ? parts.join(' • ') : null
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -635,11 +675,38 @@ export default function PortalAssistPage() {
 
   const config = STATE_PORTAL_CONFIGS[selectedState] || null
   const isRealRequest = !!request && !request.id.startsWith('demo-')
-  const eqSummary = formatEquipmentSummary(request)
+  const loadDisplay = request
+    ? formatLoadDisplay({
+        weightLbs: request.weight,
+        lengthFt: request.length,
+        widthFt: request.width,
+        heightFt: request.height,
+      })
+    : null
+  const equipmentSnapshot = request
+    ? formatPortalEquipmentSnapshot(request.equipment, request.cargo)
+    : null
+  const carrierDriver = request?.cargo?.carrierDriver as Record<string, any> | undefined
+  const carrierFields = formatCarrierReviewFields(carrierDriver)
+  const driverFields = formatDriverReviewFields(carrierDriver)
+  const loadReview = request
+    ? formatLoadReviewDetails(request, request.equipment, request.cargo)
+    : null
+
+  const handleRegeneratePrefill = () => {
+    if (!request) return
+    if (isApproved) {
+      const confirmed = window.confirm(
+        'Regenerating will clear your approval for this state. Continue?'
+      )
+      if (!confirmed) return
+    }
+    applyPortalState(request, selectedState)
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <AppHeader user={user} activePage="portal-assist" />
+      <AppHeader user={user} />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="mb-8">
@@ -656,6 +723,20 @@ export default function PortalAssistPage() {
         {pageError && (
           <div className="mb-6">
             <ErrorDisplay message={pageError} variant="inline" />
+          </div>
+        )}
+
+        {isReviewStep && (
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-2xl text-sm text-blue-900">
+            <div className="font-semibold mb-0.5">Analysis approved</div>
+            <div>Review the prefill below, then record and open portals state by state.</div>
+          </div>
+        )}
+
+        {launchHint && !isReviewStep && (
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-sm text-emerald-900">
+            <div className="font-medium mb-0.5">Ready for portal submission</div>
+            <div>{launchHint}</div>
           </div>
         )}
 
@@ -732,66 +813,19 @@ export default function PortalAssistPage() {
           )}
         </div>
 
-        {/* Per-request corridor / required states status pills (red/yellow/green exactly as spec + history) */}
-        {request && (
-          <div className="mb-6 bg-white border rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-xs font-semibold text-gray-500 tracking-wider">PER-STATE STATUS FOR THIS REQUEST</div>
-              <div className="text-xs text-gray-500">Red = permit needed • Yellow = applied/prefilled • Green = PDF received</div>
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {(request.route_corridor || request.permit_required_states || allStateCodes).map((st: string, i: number) => {
-                const stStatus = getStateStatus(st)
-                return (
-                  <span
-                    key={i}
-                    onClick={() => handleStateChange(st)}
-                    className={`px-2 py-px text-[10px] rounded font-mono cursor-pointer border ${getStatusClasses(stStatus)} ${selectedState === st ? 'ring-2 ring-offset-1 ring-black' : ''}`}
-                    title={getStatusLabel(stStatus, st)}
-                  >
-                    {st}
-                  </span>
-                )
-              })}
-            </div>
-            <div className="mt-2 text-xs">
-              Selected: <span className={`inline px-1.5 py-px rounded font-mono text-white ${getStatusClasses(getStateStatus(selectedState))}`}>{selectedState}</span>
-              {' '}
-              <span className="text-gray-600">{getStatusLabel(getStateStatus(selectedState), selectedState)}</span>
-            </div>
-          </div>
-        )}
-
         <div className="grid lg:grid-cols-12 gap-6">
-          {/* LEFT COLUMN: Request + Prefill + Approval Gate */}
+          {/* LEFT COLUMN: Request Summary + Final Review */}
           <div className="lg:col-span-7 space-y-6">
-            {/* 1. Request Details (rich, from real requestId or demo; shows equipment/cargo) */}
+            {/* 1. Request Summary — compact high-level overview only */}
             <div className="bg-white border rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold">1. Request Details</h2>
+                <h2 className="font-semibold">1. Request Summary</h2>
                 {!isRealRequest && !request && (
                   <button
                     onClick={loadDemoRequest}
                     className="text-sm px-4 py-1.5 bg-black text-white rounded-lg hover:bg-gray-900"
                   >
                     Load Rich Demo Request
-                  </button>
-                )}
-                {request && (
-                  <button
-                    onClick={() => {
-                      if (request) {
-                        const g = generatePortalPrefill(request, selectedState)
-                        setPrefill(g)
-                        setIsApproved(false)
-                        setRouteComparison(null)
-                        setSubmissionRecord(null)
-                        setApprovalChecked(false)
-                      }
-                    }}
-                    className="text-sm px-3 py-1 border rounded-lg hover:bg-gray-50"
-                  >
-                    Regenerate Prefill
                   </button>
                 )}
               </div>
@@ -801,7 +835,7 @@ export default function PortalAssistPage() {
 
               {!request ? (
                 <div className="text-sm text-gray-600">
-                  No request loaded. Click "Load Rich Demo Request" above, or open this page from <a href="/history" className="underline">History</a> using the Portal Assist button on any saved analysis (passes ?requestId).
+                  No request loaded. Click "Load Rich Demo Request" above, or open this page from <a href="/history" className="underline">History</a> via View → Launch Portal Assist in the analysis details modal (passes ?requestId).
                 </div>
               ) : (
                 <div className="text-sm space-y-3">
@@ -811,21 +845,14 @@ export default function PortalAssistPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-x-6">
                     <div>
-                      <span className="text-gray-500 text-xs block">LOAD</span>
-                      <span className="font-mono">{request.weight.toLocaleString()} lbs — {request.length}' × {request.width}' × {request.height}'</span>
+                      <span className="text-gray-500 text-xs block">LOAD ENVELOPE</span>
+                      <span className="font-mono tabular-nums">{loadDisplay?.weight} — {loadDisplay?.dimensionsLine}</span>
                     </div>
                     <div>
                       <span className="text-gray-500 text-xs block">CORRIDOR</span>
                       <span className="font-mono">{(request.route_corridor || []).join(' → ') || '—'}</span>
                     </div>
                   </div>
-
-                  {eqSummary && (
-                    <div>
-                      <span className="text-gray-500 text-xs block">EQUIPMENT / CARGO SNAPSHOT (from saved analysis)</span>
-                      <span className="font-medium">{eqSummary}</span>
-                    </div>
-                  )}
 
                   {request.permit_required_states && request.permit_required_states.length > 0 && (
                     <div>
@@ -834,21 +861,163 @@ export default function PortalAssistPage() {
                     </div>
                   )}
 
+                  <div className="pt-2 border-t">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-gray-500 text-xs">PER-STATE STATUS (corridor)</span>
+                      <span className="text-[10px] text-gray-500">Red = needed • Yellow = applied • Green = PDF</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {(portalStatesForRequest.length > 0 ? portalStatesForRequest : (request.route_corridor || request.permit_required_states || [])).map((st: string, i: number) => {
+                        const stStatus = getStateStatus(st)
+                        return (
+                          <span
+                            key={i}
+                            onClick={() => handleStateChange(st)}
+                            className={`px-2 py-px text-[10px] rounded font-mono cursor-pointer border ${getStatusClasses(stStatus)} ${selectedState === st ? 'ring-2 ring-offset-1 ring-black' : ''}`}
+                            title={getStatusLabel(stStatus, st)}
+                          >
+                            {st}
+                          </span>
+                        )
+                      })}
+                    </div>
+                    <div className="mt-2 text-xs">
+                      Selected: <span className={`inline px-1.5 py-px rounded font-mono text-white ${getStatusClasses(getStateStatus(selectedState))}`}>{selectedState}</span>
+                      {' '}
+                      <span className="text-gray-600">{getStatusLabel(getStateStatus(selectedState), selectedState)}</span>
+                    </div>
+                  </div>
+
                   {isRealRequest && (
-                    <div className="text-[10px] text-emerald-700">Loaded from History (real DB row with full snapshots)</div>
+                    <div className="text-[10px] text-emerald-700">Loaded from saved analysis (full snapshots available in final review below)</div>
                   )}
                   {!isRealRequest && request && (
-                    <div className="text-[10px] text-amber-700">Demo data (rich equipment/cargo included for full prefill exercise)</div>
+                    <div className="text-[10px] text-amber-700">Demo data — use final review below to verify prefill before portal entry</div>
                   )}
                 </div>
               )}
             </div>
 
-            {/* 2. Generated Prefill (pretty, label-driven from config, not raw JSON) */}
+            {/* 2. Final Review — generated prefill + carrier/driver/load/equipment before portal submission */}
             {prefill && config && (
               <div className="bg-white border rounded-2xl p-6">
-                <h2 className="font-semibold mb-4">2. Generated Prefill for {config.name}</h2>
+                <h2 className="font-semibold">2. Final Review — Generated Prefill for {config.name}</h2>
+                <p className="text-sm text-gray-600 mt-1 mb-4">
+                  Last human review before portal submission. Confirm carrier, driver, load, and equipment match what you will enter in the state portal.
+                </p>
 
+                <div className="mb-4">
+                  <span className="text-gray-500 text-xs block mb-2">CARRIER INFO</span>
+                  {carrierFields.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                      {carrierFields.map((f) => (
+                        <div key={f.label}>
+                          <span className="text-[10px] uppercase tracking-wider text-gray-400">{f.label}</span>
+                          <div className="font-medium">{f.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500 italic">No carrier info saved with this request.</div>
+                  )}
+                </div>
+
+                <div className="mb-4">
+                  <span className="text-gray-500 text-xs block mb-2">DRIVER</span>
+                  {driverFields.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                      {driverFields.map((f) => (
+                        <div key={f.label}>
+                          <span className="text-[10px] uppercase tracking-wider text-gray-400">{f.label}</span>
+                          <div className="font-medium">{f.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500 italic">No driver info saved with this request.</div>
+                  )}
+                </div>
+
+                {loadReview && (
+                  <div className="mb-4">
+                    <span className="text-gray-500 text-xs block mb-2">FULL LOAD DETAILS</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-[10px] uppercase tracking-wider text-gray-400">Weight</span>
+                        <div className="font-mono tabular-nums font-medium">{loadReview.weight}</div>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase tracking-wider text-gray-400">L × W × H</span>
+                        <div className="font-mono tabular-nums font-medium">{loadReview.dimensionsLine}</div>
+                      </div>
+                      {loadReview.overhang && (
+                        <div>
+                          <span className="text-[10px] uppercase tracking-wider text-gray-400">Overhang</span>
+                          <div className="font-medium">{loadReview.overhang}</div>
+                        </div>
+                      )}
+                      {loadReview.cargoDescription && (
+                        <div>
+                          <span className="text-[10px] uppercase tracking-wider text-gray-400">Cargo description</span>
+                          <div className="font-medium">{loadReview.cargoDescription}</div>
+                        </div>
+                      )}
+                      {loadReview.numberOfPieces && (
+                        <div>
+                          <span className="text-[10px] uppercase tracking-wider text-gray-400">Pieces</span>
+                          <div className="font-medium">{loadReview.numberOfPieces}</div>
+                        </div>
+                      )}
+                      {loadReview.loadedArrangement && (
+                        <div>
+                          <span className="text-[10px] uppercase tracking-wider text-gray-400">Loaded</span>
+                          <div className="font-medium">{loadReview.loadedArrangement}</div>
+                        </div>
+                      )}
+                      {loadReview.moveType && (
+                        <div>
+                          <span className="text-[10px] uppercase tracking-wider text-gray-400">Move</span>
+                          <div className="font-medium">{loadReview.moveType}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {equipmentSnapshot?.hasContent && (
+                  <div className="mb-4 space-y-2">
+                    <span className="text-gray-500 text-xs block">TRACTOR &amp; TRAILER</span>
+                    {equipmentSnapshot.rigLine && (
+                      <div>
+                        <span className="text-[10px] uppercase tracking-wider text-gray-400">Rig</span>
+                        <div className="font-medium text-sm">{equipmentSnapshot.rigLine}</div>
+                      </div>
+                    )}
+                    {equipmentSnapshot.tractorLine && (
+                      <div>
+                        <span className="text-[10px] uppercase tracking-wider text-gray-400">Tractor</span>
+                        <div className="font-medium text-sm">{equipmentSnapshot.tractorLine}</div>
+                      </div>
+                    )}
+                    {equipmentSnapshot.trailerLines.length > 0 && (
+                      <div>
+                        <span className="text-[10px] uppercase tracking-wider text-gray-400">
+                          Trailer{equipmentSnapshot.trailerLines.length > 1 ? 's' : ''}
+                        </span>
+                        <ul className="font-medium text-sm space-y-0.5">
+                          {equipmentSnapshot.trailerLines.map((line, i) => (
+                            <li key={i}>{line}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {equipmentSnapshot.legacyLine && (
+                      <div className="font-medium text-sm">{equipmentSnapshot.legacyLine}</div>
+                    )}
+                  </div>
+                )}
+
+                <span className="text-gray-500 text-xs block mb-2">PORTAL FIELD MAPPING</span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   {Object.entries(config.fieldMapping).map(([ourKey, portalLabel]) => (
                     <div key={ourKey} className="rounded-xl border bg-gray-50 p-3">
@@ -933,9 +1102,9 @@ export default function PortalAssistPage() {
                   <p className="text-[10px] text-gray-500 mt-1">Encrypted server-side with AES-256-GCM. Never sent or stored in plain text. GET returns metadata only.</p>
                 </div>
 
-                {/* 4. HUMAN APPROVAL GATE — required before recording submission */}
+                {/* Human approval gate + action row */}
                 <div className="mt-6 pt-6 border-t">
-                  <h3 className="font-semibold mb-2 text-sm">4. Human-in-the-Loop Approval Gate (required before record)</h3>
+                  <h3 className="font-semibold mb-2 text-sm">Record approval for {selectedState}</h3>
 
                   {!isApproved ? (
                     <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl">
@@ -958,18 +1127,41 @@ export default function PortalAssistPage() {
                         className="mt-3 w-full border rounded-lg p-2 text-sm h-16"
                       />
 
-                      <button
-                        onClick={handleApproveGate}
-                        disabled={!approvalChecked || approving || !prefill}
-                        className="mt-3 w-full sm:w-auto px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white rounded-xl text-sm font-medium"
-                      >
-                        {approving ? 'Recording approval…' : `Approve & Record for ${selectedState} Submission`}
-                      </button>
+                      <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                        <button
+                          onClick={handleRegeneratePrefill}
+                          disabled={!request}
+                          className="px-5 py-2 border rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
+                        >
+                          Regenerate Prefill
+                        </button>
+                        <button
+                          onClick={handleApproveGate}
+                          disabled={!approvalChecked || approving || !prefill}
+                          className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white rounded-xl text-sm font-medium"
+                        >
+                          {approving ? 'Recording approval…' : `Approve & Record for ${selectedState} Submission`}
+                        </button>
+                      </div>
+                      {approvalError && (
+                        <div className="mt-2">
+                          <ErrorDisplay message={approvalError} variant="inline" onRetry={() => setApprovalError(null)} />
+                        </div>
+                      )}
                       <div className="text-[10px] text-amber-700 mt-2">This sets human_approved=true and creates/updates the portal_submissions record (status prefilled/submitted). No automated submit occurs.</div>
                     </div>
                   ) : (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-800">
-                      ✓ Human approved for {selectedState}. Record created with human_approved=true.
+                    <div className="space-y-3">
+                      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-800">
+                        ✓ Human approved for {selectedState}. Record created with human_approved=true.
+                      </div>
+                      <button
+                        onClick={handleRegeneratePrefill}
+                        disabled={!request}
+                        className="px-5 py-2 border rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
+                      >
+                        Regenerate Prefill
+                      </button>
                     </div>
                   )}
                 </div>
@@ -991,18 +1183,14 @@ export default function PortalAssistPage() {
                 >
                   Open Real {selectedState} Portal →
                 </a>
-                <button
-                  onClick={() => {
-                    if (request) {
-                      handleStateChange(selectedState)
-                    } else {
-                      loadDemoRequest()
-                    }
-                  }}
-                  className="inline-block text-sm px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg mb-3"
-                >
-                  {request ? 'Regenerate Prefill' : 'Load Rich Demo Request'} for {selectedState}
-                </button>
+                {!request && (
+                  <button
+                    onClick={loadDemoRequest}
+                    className="inline-block text-sm px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg mb-3 ml-2"
+                  >
+                    Load Rich Demo Request for {selectedState}
+                  </button>
+                )}
                 <p className="text-sm text-gray-600 whitespace-pre-wrap">{config.instructions}</p>
                 {config.typicalRestrictions && config.typicalRestrictions.length > 0 && (
                   <div className="mt-3 text-xs text-amber-700">
@@ -1015,9 +1203,9 @@ export default function PortalAssistPage() {
               </div>
             )}
 
-            {/* Output Paste & Analysis (rich side-by-side feel + badges) */}
+            {/* 4. Output Paste & Analysis */}
             <div className="bg-white border rounded-2xl p-6">
-              <h2 className="font-semibold mb-3">Portal Output Paste &amp; Analysis</h2>
+              <h2 className="font-semibold mb-3">4. Portal Output Paste &amp; Analysis</h2>
               <textarea
                 value={portalOutput}
                 onChange={(e) => setPortalOutput(e.target.value)}
@@ -1071,9 +1259,9 @@ export default function PortalAssistPage() {
               )}
             </div>
 
-            {/* PDF & Artifacts — full upload, list, download, reference stored */}
+            {/* 5. PDF & Artifacts */}
             <div className="bg-white border rounded-2xl p-6">
-              <h2 className="font-semibold mb-3">PDF &amp; Artifacts</h2>
+              <h2 className="font-semibold mb-3">5. PDF &amp; Artifacts</h2>
 
               <label className="inline-flex items-center gap-2 px-4 py-2 border rounded-xl cursor-pointer text-sm hover:bg-gray-50">
                 <input

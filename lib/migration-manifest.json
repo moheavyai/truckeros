@@ -1,0 +1,31 @@
+{
+  "migrations": [
+    "002_add_cost_and_route_to_permit_requests.sql",
+    "014_add_drops_and_query_fields.sql",
+    "017_consolidate_rig_builder_schema.sql",
+    "018_member_profiles.sql",
+    "019_team_member_profiles.sql",
+    "020_member_profiles_privileged_columns.sql",
+    "021_multi_carrier_foundation.sql",
+    "022_profile_change_requests.sql",
+    "023_member_profiles_self_service_field_guard.sql",
+    "024_service_mode_membership_rls.sql",
+    "025_service_mode_role_scoped_rls.sql",
+    "026_split_owner_admin_roles.sql",
+    "027_team_invites_and_deletion_requests.sql",
+    "028_org_manager_rls_and_invite_accept.sql",
+    "029_tighten_invite_accept_rls.sql",
+    "030_owner_operator_user_roles.sql",
+    "031_team_member_profiles_permissions.sql",
+    "032_owner_bootstrap_membership_rls.sql",
+    "033_team_invites_table.sql",
+    "034_invite_accept_preserve_home_org.sql",
+    "035_carrier_connection_invites.sql",
+    "036_organization_memberships_role_check.sql",
+    "037_phase1b_membership_select_and_sm_clerk.sql",
+    "038_phase1_self_clerk_pe_and_accept_clerk.sql",
+    "039_phase1_self_clerk_insert_block.sql",
+    "040_phase1_team_invite_self_clerk_update.sql",
+    "041_phase1_team_invite_self_clerk_session_match.sql"
+  ]
+}

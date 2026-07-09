@@ -17,13 +17,33 @@
 // - RLS policies in the database (see migration 005) are the final gate.
 // - This code adds defense-in-depth by forcing the correct user_id server-side.
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import {
+  sanitizeLoadedArrangement,
+  sanitizeMoveType,
+  sanitizeNumberOfPieces,
+} from '@/lib/load-details-options'
+import { SERVICE_MODE_ELIGIBLE_ROLES as SERVICE_MODE_ELIGIBLE_ROLES_LIST } from '@/lib/service-mode-scope'
+
+export type SavedDropStop = {
+  id?: string
+  query?: string
+  street?: string
+  city?: string
+  state?: string
+  zip?: string
+  lat?: number
+  lon?: number
+}
 
 export interface SavePermitRequestInput {
   origin_city: string
   origin_state: string
   destination_city: string
   destination_state: string
+  origin_query?: string
+  destination_query?: string
+  drops?: SavedDropStop[]
   weight: number
   length: number
   width: number
@@ -54,6 +74,158 @@ export interface SavedPermitRequest {
   created_at: string
   user_id: string
   [key: string]: any
+}
+
+/** Columns on permit_requests that SavePermitRequestInput may populate (migrations 002, 009, 014). */
+export type PermitRequestInsertRecord = {
+  user_id: string
+  origin_city: string
+  origin_state: string
+  destination_city: string
+  destination_state: string
+  origin_query?: string | null
+  destination_query?: string | null
+  drops?: SavedDropStop[] | null
+  weight: number
+  length: number
+  width: number
+  height: number
+  equipment?: Record<string, unknown> | null
+  cargo?: Record<string, unknown> | null
+  route_corridor?: string[]
+  permit_required_states?: string[]
+  requires_permit?: boolean
+  reasons?: string[]
+  notes?: string[]
+  estimated_cost?: number
+  cost_breakdown?: unknown | null
+  distance_miles?: number | null
+  duration_hours?: number | null
+}
+
+/** Align with Phase 1 client SM eligibility (shared SERVICE_MODE_ELIGIBLE_ROLES). */
+const SERVICE_MODE_ELIGIBLE_ROLES = new Set<string>(SERVICE_MODE_ELIGIBLE_ROLES_LIST)
+
+/** Sanitize cargo subfields (piece count + enums) before persistence. */
+export function sanitizeCargoSnapshot(
+  cargo: Record<string, any> | null | undefined
+): Record<string, unknown> | null {
+  if (!cargo) return null
+
+  const sanitized: Record<string, unknown> = { ...cargo }
+
+  if ('numberOfPieces' in cargo) {
+    sanitized.numberOfPieces = sanitizeNumberOfPieces(cargo.numberOfPieces)
+  }
+  if ('loadedArrangement' in cargo) {
+    sanitized.loadedArrangement = sanitizeLoadedArrangement(cargo.loadedArrangement)
+  }
+  if ('moveType' in cargo) {
+    sanitized.moveType = sanitizeMoveType(cargo.moveType)
+  }
+
+  return sanitized
+}
+
+/**
+ * Validates cargo.organizationId against the authenticated user's carrier org or
+ * eligible service-mode membership. Returns null to strip unauthorized values.
+ */
+export async function validateCargoOrganizationId(
+  supabase: SupabaseClient,
+  userId: string,
+  organizationId: unknown
+): Promise<string | null> {
+  if (typeof organizationId !== 'string') return null
+  const orgId = organizationId.trim()
+  if (!orgId) return null
+
+  const [{ data: ownProfile }, { data: membership }, { data: created }] = await Promise.all([
+    supabase
+      .from('member_profiles')
+      .select('organization_id')
+      .eq('user_id', userId)
+      .maybeSingle(),
+    supabase
+      .from('organization_memberships')
+      .select('organization_id, role')
+      .eq('user_id', userId)
+      .eq('organization_id', orgId)
+      .maybeSingle(),
+    supabase
+      .from('organizations')
+      .select('id')
+      .eq('id', orgId)
+      .eq('created_by_user_id', userId)
+      .maybeSingle(),
+  ])
+
+  if (ownProfile?.organization_id === orgId) return orgId
+  if (created?.id === orgId) return orgId
+
+  const role = typeof membership?.role === 'string' ? membership.role : null
+  if (membership?.organization_id === orgId && role && SERVICE_MODE_ELIGIBLE_ROLES.has(role)) {
+    return orgId
+  }
+
+  return null
+}
+
+export async function sanitizeCargoSnapshotForUser(
+  supabase: SupabaseClient,
+  userId: string,
+  cargo: Record<string, any> | null | undefined
+): Promise<Record<string, unknown> | null> {
+  const sanitized = sanitizeCargoSnapshot(cargo)
+  if (!sanitized) return null
+
+  if ('organizationId' in sanitized) {
+    const validated = await validateCargoOrganizationId(
+      supabase,
+      userId,
+      sanitized.organizationId
+    )
+    if (validated) {
+      sanitized.organizationId = validated
+    } else {
+      delete sanitized.organizationId
+    }
+  }
+
+  return sanitized
+}
+
+/** Build an insert payload with only known DB columns (avoids stray client fields). */
+export function buildPermitRequestInsertRecord(
+  payload: SavePermitRequestInput,
+  userId: string,
+  cargoOverride?: Record<string, unknown> | null
+): PermitRequestInsertRecord {
+  return {
+    user_id: userId,
+    origin_city: payload.origin_city,
+    origin_state: payload.origin_state,
+    destination_city: payload.destination_city,
+    destination_state: payload.destination_state,
+    origin_query: payload.origin_query ?? null,
+    destination_query: payload.destination_query ?? null,
+    drops: payload.drops ?? null,
+    weight: payload.weight,
+    length: payload.length,
+    width: payload.width,
+    height: payload.height,
+    equipment: payload.equipment ?? null,
+    cargo: cargoOverride !== undefined ? cargoOverride : sanitizeCargoSnapshot(payload.cargo),
+    route_corridor: payload.route_corridor ?? [],
+    permit_required_states: payload.permit_required_states ?? [],
+    requires_permit: payload.requires_permit ?? false,
+    reasons: payload.reasons ?? [],
+    notes: payload.notes ?? [],
+    estimated_cost: payload.estimated_cost ?? 0,
+    cost_breakdown: payload.cost_breakdown ?? null,
+    distance_miles: payload.distance_miles ?? null,
+    duration_hours: payload.duration_hours ?? null,
+  }
 }
 
 /**
@@ -94,16 +266,8 @@ export async function savePermitRequestForUser(
   // Build the record we will actually insert.
   // CRITICAL: We force user_id from the authenticated JWT. This prevents
   // a malicious client from trying to save a record under a different user.
-  const recordToInsert = {
-    ...payload,
-    user_id: user.id, // ← authoritative value from Supabase Auth
-  }
-
-  // Remove any client-sent user_id to avoid confusion (we already overrode it)
-  delete (recordToInsert as any).user_id // safety — we set it above
-
-  // Re-apply the correct user_id
-  ;(recordToInsert as any).user_id = user.id
+  const cargo = await sanitizeCargoSnapshotForUser(supabase, user.id, payload.cargo)
+  const recordToInsert = buildPermitRequestInsertRecord(payload, user.id, cargo)
 
   const { data, error } = await supabase
     .from('permit_requests')

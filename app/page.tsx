@@ -52,7 +52,6 @@ export default function TruckerOSLanding() {
         <div className="max-w-5xl mx-auto px-6">
           <div className="grid md:grid-cols-3 gap-8 text-center">
             <div>
-              <div className="text-2xl mb-3">🚛</div>
               <h3 className="font-semibold mb-2">Real Route Intelligence</h3>
               <p className="text-gray-600 text-sm">
                 We analyze your actual route using live data — not blanket rules.

@@ -1,0 +1,1467 @@
+
+> truckeros@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.6 C:/Users/andre/truckeros
+
+ ✓ lib/parse-dimension.test.ts (4 tests) 46ms
+ ✓ app/profile/profile-ui.test.ts (35 tests) 64ms
+ ✓ lib/portal-assistant.test.ts (18 tests) 94ms
+ ✓ lib/member-profile.test.ts (92 tests) 51ms
+stderr | app/api/admin/migrate/route.test.ts > GET /api/admin/migrate > flags missing equipment_profiles license plate columns
+[admin/migrate] schema check failed for equipment_profiles: column equipment_profiles.license_plate does not exist
+ ✓ app/api/admin/migrate/route.test.ts (16 tests) 66ms
+
+stderr | app/api/admin/migrate/route.test.ts > GET /api/admin/migrate > flags missing rig_configurations table as needsMigration
+[admin/migrate] schema check failed for rig_configurations: relation "rig_configurations" does not exist
+
+ ✓ app/api/profile-change-requests/route.test.ts (7 tests) 56ms
+stderr | app/api/admin/migrate/route.test.ts > POST /api/admin/migrate > returns needsManualRun when runMigrationSql throws
+[admin/migrate] POST live migration: connection refused { correlationId: '0c519827-87b5-4d2f-bb8f-0d14766137dd' }
+
+stderr | app/api/admin/migrate/route.test.ts > POST /api/admin/migrate > returns partial success when SQL applies but columns remain missing
+[admin/migrate] schema check failed for rig_configurations: column rig_configurations.is_default does not exist
+
+stderr | app/api/profile-change-requests/route.test.ts > /api/profile-change-requests > GET maps forbidden errors to 403
+[profile-change-requests] GET error: Error: Forbidden – only primary owners can list org change requests
+    at C:\Users\andre\truckeros\app\api\profile-change-requests\route.test.ts:40:7
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at file:///C:/Users/andre/truckeros/node_modules/@vitest/runner/dist/chunk-hooks.js:752:20
+
+stderr | app/api/profile-change-requests/route.test.ts > /api/profile-change-requests > POST maps forbidden errors to 403
+[profile-change-requests] POST error: Error: Forbidden – only driver accounts use profile change requests
+    at C:\Users\andre\truckeros\app\api\profile-change-requests\route.test.ts:101:7
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at file:///C:/Users/andre/truckeros/node_modules/@vitest/runner/dist/chunk-hooks.js:752:20
+
+ ✓ lib/team-member-profiles-api.test.ts (24 tests) 38ms
+ ✓ app/api/geocode/route.test.ts (7 tests) 50ms
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] responded in 2ms status=200
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] connected service=or-tools version=1.0.0 buildId=abc123def456
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] non-ok HTTP 503 from http://127.0.0.1:8000/health
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] unexpected body status=degraded service=undefined
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on connection refused
+[ortools-health] probe failed after 1ms: fetch failed
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on timeout
+[ortools-health] probe failed after 0ms: The operation was aborted
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] responded in 1ms status=503
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] responded in 1ms status=200
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on connection refused
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on timeout
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+ ✓ app/api/ortools-health/route.test.ts (5 tests) 35ms
+stderr | app/api/optimize-route/route.test.ts > POST /api/optimize-route > falls back to OSRM with query and normalized drops when OR-Tools is unreachable
+[optimize-route] OR-Tools fetch failed after 2ms: ECONNREFUSED 127.0.0.1:8000
+[optimize-route] OR-Tools unreachable, falling back to OSRM: unreachable ECONNREFUSED 127.0.0.1:8000
+ ✓ lib/geocode-client.test.ts (11 tests) 1545ms
+   ✓ fetchGeocodeWithRetry > retries 429 then succeeds  506ms
+   ✓ fetchGeocodeWithRetry > retries 500 then fails  508ms
+   ✓ fetchGeocodeWithRetry > retries network throw then fails retryable  503ms
+ ✓ lib/profile-change-requests.test.ts (19 tests) 36ms
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > falls back to OSRM with query and normalized drops when OR-Tools is unreachable
+[optimize-route] calling OR-Tools url=http://127.0.0.1:8000/optimize-route timeout_ms=180000
+
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > post-processes successful OR-Tools response with escort enrichment
+[optimize-route] calling OR-Tools url=http://127.0.0.1:8000/optimize-route timeout_ms=180000
+
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > post-processes successful OR-Tools response with escort enrichment
+[optimize-route] OR-Tools responded in 1ms status=200
+
+ ✓ app/api/optimize-route/route.test.ts (5 tests) 39ms
+stdout | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > spawns detached restart script on Windows for authenticated users
+[restart-ortools] restart initiated by user user-123
+
+stdout | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 429 when restart is requested within 60 seconds
+[restart-ortools] restart initiated by user user-123
+
+ ✓ app/api/restart-ortools/route.test.ts (8 tests) 38ms
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when restart script is missing
+[restart-ortools] restart script not found: C:\Users\andre\truckeros\restart-ortools.ps1
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when spawn throws synchronously
+[restart-ortools] failed to spawn restart script: spawn EACCES
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when child emits an error event
+[restart-ortools] failed to spawn restart script: ENOENT: powershell.exe not found
+
+ ✓ app/equipment/default-rig-button.test.ts (3 tests) 31ms
+ ✓ lib/site-wide-cleanup.test.ts (1 test) 30ms
+ ✓ lib/portal-equipment-display.test.ts (2 tests) 40ms
+ ✓ lib/location-stop.test.ts (23 tests) 29ms
+ ✓ app/api/analyze-permit/route.test.ts (2 tests) 30ms
+ ✓ lib/migrations.test.ts (10 tests) 23ms
+ ✓ lib/db-migrate.test.ts (9 tests) 25ms
+ ✓ lib/geocode-query.test.ts (18 tests) 24ms
+ ✓ lib/admin-auth.test.ts (9 tests) 43ms
+ ✓ app/permit-test/permit-profile-ui.test.ts (7 tests) 18ms
+ ✓ lib/member-profile-permissions.test.ts (15 tests) 18ms
+ ✓ lib/build-corridor.test.ts (10 tests) 20ms
+ ✓ lib/permit-profile-autofill.test.ts (18 tests) 17ms
+ ✓ agents/permit-agent.test.ts (4 tests) 20ms
+ ✓ lib/geocode-server.test.ts (9 tests) 16ms
+ ✓ lib/escort-analysis.test.ts (13 tests) 18ms
+ ✓ lib/routing-envelope-display.test.ts (7 tests) 13ms
+ ✓ lib/profile-persistence.test.ts (11 tests) 15ms
+ ✓ lib/ortools-config.test.ts (15 tests) 14ms
+ ✓ lib/portal-review-display.test.ts (5 tests) 27ms
+ ✓ components/OverhangFeetInput.test.ts (4 tests) 23ms
+ ✓ lib/profile-field-permissions.test.ts (11 tests) 14ms
+ ✓ lib/enrich-route-escorts.test.ts (3 tests) 12ms
+ ✓ lib/permit-requests.test.ts (3 tests) 11ms
+ ✓ app/history/history-ui.test.ts (3 tests) 9ms
+ ✓ lib/forced-carrier-owner.test.ts (4 tests) 12ms
+ ✓ lib/organization-context.test.ts (8 tests) 12ms
+ ✓ lib/permit-length.test.ts (9 tests) 9ms
+ ✓ lib/license-plate.test.ts (7 tests) 10ms
+ ❯ app/portal-assist/portal-assist-ui.test.ts (9 tests | 1 failed) 30ms
+   ✓ Portal Assist page UX > pre-loads first corridor state via resolveInitialPortalState on real request load 4ms
+   ✓ Portal Assist page UX > formats load dimensions with formatLoadDisplay (not raw decimal feet) 1ms
+   ✓ Portal Assist page UX > uses two-box layout: compact Request Summary and Final Review with equipment in review box 1ms
+   ✓ Portal Assist page UX > shows carrier, driver, and load review helpers in Final Review box 1ms
+   × Portal Assist page UX > places Regenerate Prefill next to Approve button in Final Review action row 15ms
+     → expected '\'use client\'\n\nimport { useState, …' not to match /1\. Request Summary[\s\S]*Regenerate …/
+   ✓ Portal Assist page UX > shows review-step banner when arriving from permit approval flow 1ms
+   ✓ Portal Assist page UX > limits per-state status pills to corridor/permit states inside Request Summary 1ms
+   ✓ Portal Assist page UX > renumbers credentials and output sections logically 1ms
+   ✓ Permit test page — Approve and Launch Portals flow > uses Approve and Launch Portals label and navigates with step=review 2ms
+ ✓ components/AppHeader.test.ts (4 tests) 9ms
+ ✓ components/LicensePlateFields.test.ts (3 tests) 10ms
+ ✓ lib/carrier-link-requests.test.ts (3 tests) 10ms
+ ✓ components/DimensionInput.test.ts (1 test) 7ms
+ ✓ types/equipment.test.ts (6 tests) 9ms
+ ✓ types/member-profile.test.ts (1 test) 8ms
+ ✓ app/carriers/carriers-ui.test.ts (3 tests) 7ms
+ ↓ lib/geocode-live.integration.test.ts (3 tests | 3 skipped)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  app/portal-assist/portal-assist-ui.test.ts > Portal Assist page UX > places Regenerate Prefill next to Approve button in Final Review action row
+AssertionError: expected '\'use client\'\n\nimport { useState, …' not to match /1\. Request Summary[\s\S]*Regenerate …/
+
+- Expected: 
+/1\. Request Summary[\s\S]*Regenerate Prefill/
+
++ Received: 
+"'use client'
+
+import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+import AppHeader from '@/components/AppHeader'
+import BrandedLoader from '@/components/BrandedLoader'
+import ErrorDisplay from '@/components/ErrorDisplay'
+import { 
+  STATE_PORTAL_CONFIGS, 
+  generatePortalPrefill, 
+  parsePortalOutput,
+  compareRecommendedVsPortalRoute,
+  createPortalSubmissionRecord,
+  getPortalStatesForAnalysis,
+  resolveInitialPortalState,
+  type RouteComparison,
+  type PortalSubmissionRecord,
+  type PrefillPackage
+} from '@/lib/portal-assistant'
+import { formatLoadDisplay } from '@/lib/parse-dimension'
+import { formatPortalEquipmentSnapshot } from '@/lib/portal-equipment-display'
+import {
+  formatCarrierReviewFields,
+  formatDriverReviewFields,
+  formatLoadReviewDetails,
+} from '@/lib/portal-review-display'
+
+/**
+ * Rich PermitRequest shape matching saved DB rows (permit_requests + equipment/cargo snapshots from 009 migration).
+ * Used for accurate prefill (axles, vin, overhangs etc) and rich UI details.
+ */
+interface PermitRequest {
+  id: string
+  origin_city: string
+  origin_state: string
+  destination_city: string
+  destination_state: string
+  weight: number
+  length: number
+  width: number
+  height: number
+  route_corridor: string[] | null
+  permit_required_states: string[] | null
+  equipment?: Record<string, any> | null
+  cargo?: Record<string, any> | null
+  highways?: string[] | null
+  distance_miles?: number | null
+  duration_hours?: number | null
+  created_at?: string
+}
+
+interface PortalSubmission {
+  id?: string
+  permit_request_id: string
+  state_code: string
+  status: string
+  permit_number: string | null
+  portal_fees: number | null
+  human_approved: boolean
+  pdf_reference?: string | null
+  route_comparison?: any
+  created_at?: string
+}
+
+/**
+ * Portal Assist Page — Full Production Implementation
+ * 
+ * Meets all requirements:
+ * - Dedicated professional UI (consistent with history/permit-test: AppHeader, cards, BrandedLoader, ErrorDisplay, red/amber/emerald status)
+ * - Dynamic state selector from STATE_PORTAL_CONFIGS (49 states (all except HI); adding state = 1 object)
+ * - Secure creds (POST save encrypted; GET returns metadata only — never pw to client)
+ * - Prefill from real saved request data (full fields + equipment/cargo)
+ * - Output parse + compare (framework) with rich UI
+ * - Per-state status pills (exact reuse of history logic: red=needed/no sub, yellow=applied/prefilled/submit, green=pdf/received/approved)
+ * - PDF: upload to 'portal-pdfs' Supabase Storage (user/req/state path), store pdf_reference, list/download
+ * - Human approval gate (prominent, explicit confirm before record submission with human_approved=true)
+ * - Full ?requestId integration from History details modal \"Launch Portal Assist\" (real fetch via supabase RLS)
+ * - Robust: try/catch + ErrorDisplay everywhere, loading states, graceful unsupported, logging [portal-assist]
+ * - Config-driven + extensibility notes in UI + lib
+ * - Backward compatible (demo still works, existing submissions schema/RLS untouched)
+ * 
+ * Flow sections: Request Details → Generated Prefill → Credentials (secure) → Human Approval Gate → Portal Actions → Output Paste & Analysis → PDF & Artifacts + status pills
+ */
+export default function PortalAssistPage() {
+  const [user, setUser] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [pageError, setPageError] = useState<string | null>(null)
+
+  // Dynamic from config — true extensibility (no hard-coded lists elsewhere)
+  const allStateCodes = Object.keys(STATE_PORTAL_CONFIGS)
+  const [selectedState, setSelectedState] = useState<string>('TX')
+  const [stateQuery, setStateQuery] = useState('')
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  const [request, setRequest] = useState<PermitRequest | null>(null)
+  const [requestLoading, setRequestLoading] = useState(false)
+  const [requestError, setRequestError] = useState<string | null>(null)
+
+  const [prefill, setPrefill] = useState<PrefillPackage | null>(null)
+  const [portalOutput, setPortalOutput] = useState('')
+  const [parsedOutput, setParsedOutput] = useState<any>(null)
+
+  // Rich framework state
+  const [routeComparison, setRouteComparison] = useState<RouteComparison | null>(null)
+  const [submissionRecord, setSubmissionRecord] = useState<PortalSubmissionRecord | null>(null)
+  const [isApproved, setIsApproved] = useState(false)
+
+  // Creds (secure: never hold plain pw client-side)
+  const [savingCreds, setSavingCreds] = useState(false)
+  const [credentialError, setCredentialError] = useState<string | null>(null)
+  const [hasCredentials, setHasCredentials] = useState(false)
+  const [credUsername, setCredUsername] = useState<string>('')
+
+  // Submissions for this request (drives per-state status pills)
+  const [submissions, setSubmissions] = useState<PortalSubmission[]>([])
+
+  // PDF artifacts (client list + current pending reference for next record)
+  const [pdfUploading, setPdfUploading] = useState(false)
+  const [pdfError, setPdfError] = useState<string | null>(null)
+  const [attachedPdfs, setAttachedPdfs] = useState<Array<{ name: string; url: string; path: string }>>([])
+  const [currentPdfReference, setCurrentPdfReference] = useState<string | null>(null)
+
+  // Approval gate UI
+  const [approvalChecked, setApprovalChecked] = useState(false)
+  const [approvalNotes, setApprovalNotes] = useState('')
+  const [approving, setApproving] = useState(false)
+
+  const [parseError, setParseError] = useState<string | null>(null)
+  const [savingSubmission, setSavingSubmission] = useState(false)
+  const [launchHint, setLaunchHint] = useState<string | null>(null)
+  const [isReviewStep, setIsReviewStep] = useState(false)
+
+  const router = useRouter()
+
+  const portalStatesForRequest = request
+    ? getPortalStatesForAnalysis({
+        routeCorridor: request.route_corridor,
+        permitRequiredStates: request.permit_required_states,
+      })
+    : []
+
+  const applyPortalState = (req: PermitRequest, state: string, opts?: { showLaunchHint?: boolean }) => {
+    if (!STATE_PORTAL_CONFIGS[state]) {
+      setPageError(`Config for ${state} missing. Add it in lib/portal-assistant.ts (config-driven).`)
+      return
+    }
+    setSelectedState(state)
+    setPrefill(generatePortalPrefill(req, state))
+    setIsApproved(false)
+    setRouteComparison(null)
+    setSubmissionRecord(null)
+    setApprovalChecked(false)
+    setApprovalNotes('')
+    setCredentialError(null)
+    setParseError(null)
+    setPdfError(null)
+
+    if (opts?.showLaunchHint) {
+      const corridor = (req.route_corridor || []).join(' → ')
+      setLaunchHint(
+        corridor
+          ? `Pre-loaded ${state} — first state in your corridor (${corridor}). Review prefill, then open the portal.`
+          : `Pre-loaded ${state} from your saved analysis. Review prefill, then open the portal.`
+      )
+    }
+
+    void checkCredentialsForState(state)
+  }
+
+  // Load auth + optional ?requestId (from History details modal \"Launch Portal Assist\") or support demo
+  useEffect(() => {
+    const supabase = createClient()
+
+    const load = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          router.push('/login')
+          return
+        }
+        setUser(session.user)
+
+        // Parse requestId + review step from URL without useSearchParams (avoids extra Suspense)
+        let requestId: string | null = null
+        let reviewStep = false
+        if (typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search)
+          requestId = params.get('requestId')
+          reviewStep = params.get('step') === 'review' || params.get('approved') === '1'
+        }
+
+        if (reviewStep) {
+          setIsReviewStep(true)
+        }
+
+        if (requestId) {
+          console.log('[portal-assist] Loading real permit request from History modal Launch Portal Assist:', requestId)
+          await loadRealRequest(requestId, session.access_token, { reviewStep })
+        } else {
+          console.log('[portal-assist] No requestId — ready for demo or manual load.')
+        }
+      } catch (e: any) {
+        console.error('[portal-assist] Auth/init error', e)
+        setPageError('Failed to initialize. Please log in again.')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    load()
+
+    // Basic auth listener (consistent with other pages)
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session) router.push('/login')
+    })
+    return () => listener.subscription.unsubscribe()
+  }, [router])
+
+  // Load a real saved request (full data incl. equipment/cargo) via client Supabase (RLS enforces ownership)
+  const loadRealRequest = async (
+    requestId: string,
+    accessToken?: string,
+    opts?: { reviewStep?: boolean }
+  ) => {
+    setRequestLoading(true)
+    setRequestError(null)
+    setPageError(null)
+
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('permit_requests')
+        .select('*')
+        .eq('id', requestId)
+        .single()
+
+      if (error || !data) {
+        throw new Error(error?.message || 'Request not found or access denied')
+      }
+
+      const loaded = data as PermitRequest
+      setRequest(loaded)
+      setPortalOutput('')
+      setParsedOutput(null)
+
+      const initialState = resolveInitialPortalState(loaded)
+      applyPortalState(loaded, initialState, { showLaunchHint: !opts?.reviewStep })
+      if (opts?.reviewStep) {
+        setIsReviewStep(true)
+      }
+
+      // Load existing submissions for status pills + history
+      await loadSubmissionsForRequest(loaded.id)
+
+      console.log('[portal-assist] Loaded real request', loaded.id, 'corridor:', loaded.route_corridor, 'permitStates:', loaded.permit_required_states)
+    } catch (e: any) {
+      console.error('[portal-assist] loadRealRequest failed', e)
+      setRequestError(e.message || 'Could not load permit request.')
+      setRequest(null)
+    } finally {
+      setRequestLoading(false)
+    }
+  }
+
+  const loadSubmissionsForRequest = async (reqId: string) => {
+    try {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('portal_submissions')
+        .select('*')
+        .eq('permit_request_id', reqId)
+        .order('created_at', { ascending: false })
+
+      const subs = (data || []) as PortalSubmission[]
+      setSubmissions(subs)
+      console.log('[portal-assist] Loaded', subs.length, 'prior portal submissions for status tracking')
+    } catch (e) {
+      console.warn('[portal-assist] Could not load prior submissions (non-fatal for status)', e)
+    }
+  }
+
+  // Demo request with rich equipment/cargo to exercise full prefill + vehicle fields
+  const loadDemoRequest = () => {
+    const demoRequest: PermitRequest = {
+      id: 'demo-' + Date.now(),
+      origin_city: 'Houston',
+      origin_state: 'TX',
+      destination_city: 'Chicago',
+      destination_state: 'IL',
+      weight: 95000,
+      length: 62,
+      width: 10.5,
+      height: 14.2,
+      route_corridor: ['TX', 'OK', 'MO', 'IL'],
+      permit_required_states: ['TX', 'IL'],
+      equipment: {
+        unit_number: 'PETE-4721',
+        vin: '1XPBDP9X5HD123456',
+        axles: 6,
+        kingpin_setting_in: 36,
+        trailer_length_ft: 53,
+      },
+      cargo: {
+        description: 'Oversized machinery',
+        overhang_front_ft: 3,
+        overhang_rear_ft: 5,
+      },
+      distance_miles: 1080,
+      duration_hours: 18.5,
+    }
+    setRequest(demoRequest)
+    setPortalOutput('')
+    setParsedOutput(null)
+    setSubmissions([]) // fresh demo
+    setLaunchHint(null)
+    applyPortalState(demoRequest, resolveInitialPortalState(demoRequest))
+    setAttachedPdfs([])
+    setCurrentPdfReference(null)
+    setHasCredentials(false)
+    setCredUsername('')
+    setRequestError(null)
+
+    console.log('[portal-assist] Demo request loaded (rich equipment/cargo for prefill test)')
+  }
+
+  // Dynamic state change — works for any in config
+  const handleStateChange = (state: string) => {
+    setLaunchHint(null)
+    if (request) {
+      applyPortalState(request, state)
+      return
+    }
+    if (!STATE_PORTAL_CONFIGS[state]) {
+      setPageError(`Config for ${state} missing. Add it in lib/portal-assistant.ts (config-driven).`)
+      return
+    }
+    setSelectedState(state)
+    setCredentialError(null)
+    setParseError(null)
+    setPdfError(null)
+    void checkCredentialsForState(state)
+  }
+
+  // Secure creds check — uses fixed GET that returns only hasCredentials + username
+  const checkCredentialsForState = async (stateCode: string) => {
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const res = await fetch(`/api/portal-credentials?state=${stateCode}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+
+      if (res.ok) {
+        const d = await res.json()
+        setHasCredentials(!!d.hasCredentials)
+        setCredUsername(d.username || '')
+      } else {
+        setHasCredentials(false)
+        setCredUsername('')
+      }
+    } catch {
+      setHasCredentials(false)
+      setCredUsername('')
+    }
+  }
+
+  // Secure form-based save (replaces old prompt()). Never keeps pw in state after POST.
+  const handleSaveCredentials = async (username: string, password: string) => {
+    if (!username || !password) {
+      setCredentialError('Username and password are required.')
+      return
+    }
+
+    setSavingCreds(true)
+    setCredentialError(null)
+
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('No session')
+
+      const res = await fetch('/api/portal-credentials', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ stateCode: selectedState, username, password }),
+      })
+
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to save credentials securely.')
+      }
+
+      setHasCredentials(true)
+      setCredUsername(username)
+      console.log('[portal-assist] Credentials saved (encrypted server-side) for', selectedState)
+      // Clear any form pw fields in parent by not storing them
+    } catch (e: any) {
+      setCredentialError(e.message || 'Network error while saving credentials.')
+    } finally {
+      setSavingCreds(false)
+    }
+  }
+
+  // Prominent HUMAN APPROVAL GATE — records submission with human_approved + status
+  const handleApproveGate = async () => {
+    if (!prefill || !request) return
+    if (!approvalChecked) {
+      setCredentialError('Please check the review confirmation box to proceed.')
+      return
+    }
+
+    setApproving(true)
+    setCredentialError(null)
+
+    try {
+      const recordBase = createPortalSubmissionRecord(
+        request.id,
+        selectedState,
+        prefill,
+        undefined,
+        { humanApproved: true }
+      )
+
+      const record: PortalSubmissionRecord = {
+        ...recordBase,
+        status: 'prefilled',
+        user_notes: approvalNotes.trim() || null,
+        pdf_reference: currentPdfReference,
+      }
+
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Auth required')
+
+      const res = await fetch('/api/portal-submissions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          ...record,
+          raw_portal_output: null,
+        }),
+      })
+
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || 'Failed to record approved prefill submission')
+      }
+
+      setIsApproved(true)
+      setSubmissionRecord(record)
+
+      // Refresh submissions so pills update immediately (yellow for prefilled)
+      if (request) await loadSubmissionsForRequest(request.id)
+
+      console.log('[portal-assist] HUMAN APPROVED + recorded submission for', selectedState, 'human_approved=true')
+    } catch (e: any) {
+      console.error('[portal-assist] approve gate error', e)
+      setCredentialError(e.message || 'Approval record failed.')
+    } finally {
+      setApproving(false)
+    }
+  }
+
+  // Parse + Compare using framework. Persists (with human_approved if gate passed). Updates status pills.
+  const handleParseOutput = async () => {
+    setParseError(null)
+    if (!portalOutput.trim() || !request || !prefill) {
+      setParseError(\"Load a request and click 'Generate / Regenerate Prefill' first.\")
+      return
+    }
+
+    setSavingSubmission(true)
+
+    try {
+      const parsed = parsePortalOutput(selectedState, portalOutput)
+      setParsedOutput(parsed)
+
+      const comparison = compareRecommendedVsPortalRoute(
+        request.route_corridor,
+        parsed.route_corridor || []   // note: parser currently doesn't populate route_corridor from text; compare falls back gracefully
+      )
+      setRouteComparison(comparison)
+
+      // Build record — preserve approval if gate passed
+      const base = createPortalSubmissionRecord(
+        request.id,
+        selectedState,
+        prefill,
+        { ...parsed, route_corridor: parsed.route_corridor || [] }
+      )
+
+      const record: any = {
+        ...base,
+        human_approved: isApproved,
+        pdf_reference: currentPdfReference,
+        raw_portal_output: portalOutput,
+        // Improve status for pill colors: if parsed approved or we have pdf → green path
+        status: (parsed.status === 'approved' || currentPdfReference) ? 'pdf-received' : (isApproved ? 'submitted' : 'submitted'),
+      }
+
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (session) {
+        const res = await fetch('/api/portal-submissions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(record),
+        })
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          console.warn('[portal-assist] persist submission non-fatal:', j.error)
+        }
+      }
+
+      setSubmissionRecord(record as PortalSubmissionRecord)
+
+      // Refresh for live pill update (green if we set pdf-received etc)
+      if (request) await loadSubmissionsForRequest(request.id)
+
+      console.log('[portal-assist] Parsed & compared. similarity=', comparison.similarity, 'rec=', comparison.recommendation)
+    } catch (e: any) {
+      console.error('[portal-assist] parse error', e)
+      setParseError(e.message || 'Parse & compare failed.')
+    } finally {
+      setSavingSubmission(false)
+    }
+  }
+
+  // PDF support: upload to Supabase Storage 'portal-pdfs', store path as pdf_reference
+  const handlePdfUpload = async (file: File) => {
+    if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
+      setPdfError('Please select a .pdf file.')
+      return
+    }
+    if (!user) {
+      setPdfError('Login required for upload.')
+      return
+    }
+
+    setPdfUploading(true)
+    setPdfError(null)
+
+    try {
+      const supabase = createClient()
+      const reqId = request?.id || 'demo'
+      const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, '_')
+      const path = `${user.id}/${reqId}/${selectedState}/${Date.now()}-${safeName}`
+
+      const { error: upErr } = await supabase.storage
+        .from('portal-pdfs')
+        .upload(path, file, { upsert: false, contentType: 'application/pdf' })
+
+      if (upErr) {
+        // Graceful: common case = bucket not created or policy missing
+        console.error('[portal-assist] Storage upload error (may need bucket creation)', upErr)
+        throw new Error(`Upload failed: ${upErr.message}. Create 'portal-pdfs' bucket in Supabase Dashboard (Storage) with RLS policy allowing auth users to upload to their own prefix.`)
+      }
+
+      // Get usable URL (prefer signed (1h) over public for security per review; fallback to getPublicUrl)
+      let url = ''
+      try {
+        const signed = await supabase.storage.from('portal-pdfs').createSignedUrl(path, 60 * 60)
+        url = signed.data?.signedUrl || ''
+      } catch {}
+      if (!url) {
+        const pub = supabase.storage.from('portal-pdfs').getPublicUrl(path)
+        url = pub.data.publicUrl
+      }
+
+      // Store local for UI list + current reference for next record
+      const newPdf = { name: file.name, url, path }
+      setAttachedPdfs(prev => [newPdf, ...prev])
+      setCurrentPdfReference(path)
+
+      // If we already have a submission record or approved, optionally update it with pdf ref
+      if (submissionRecord || isApproved) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session && request) {
+            await fetch('/api/portal-submissions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+              body: JSON.stringify({
+                permit_request_id: request.id,
+                state_code: selectedState,
+                status: 'pdf-received',
+                human_approved: isApproved,
+                pdf_reference: path,
+                our_recommended_corridor: prefill?.routeCorridor || [],
+                portal_returned_corridor: null,
+                route_comparison: routeComparison,
+                permit_number: parsedOutput?.permitNumber || null,
+                portal_restrictions: parsedOutput?.restrictions || [],
+              }),
+            })
+            await loadSubmissionsForRequest(request.id)
+          }
+        } catch (e) { console.warn('[portal-assist] pdf update to submission non-fatal', e) }
+      }
+
+      console.log('[portal-assist] PDF uploaded to storage:', path)
+    } catch (e: any) {
+      setPdfError(e.message || 'PDF upload failed.')
+    } finally {
+      setPdfUploading(false)
+    }
+  }
+
+  // Helper: get status for a given state code (exact color logic shared with history page; status logic aligned (smallest change; full shared util out of scope for minimal fix))
+  const getStateStatus = (st: string): 'red' | 'yellow' | 'green' | 'gray' => {
+    const sub = submissions.find(s => s.permit_request_id === request?.id && s.state_code === st)
+    if (sub) {
+      const sl = (sub.status || '').toLowerCase()
+      if (sl.includes('pdf') || sl.includes('received') || sl.includes('complete') || sl.includes('approved')) return 'green'
+      if (sl.includes('applied') || sl.includes('apply') || sl.includes('pending') || sl.includes('submit') || sl.includes('prefilled')) return 'yellow'
+      return 'gray'
+    }
+    if ((request?.permit_required_states || []).includes(st)) return 'red'
+    return 'gray'
+  }
+
+  const getStatusClasses = (status: 'red' | 'yellow' | 'green' | 'gray') => {
+    if (status === 'green') return 'bg-emerald-500 text-white'
+    if (status === 'yellow') return 'bg-yellow-500 text-white'
+    if (status === 'red') return 'bg-red-500 text-white'
+    return 'bg-gray-200 text-gray-600'
+  }
+
+  const getStatusLabel = (status: 'red' | 'yellow' | 'green' | 'gray', st: string) => {
+    if (status === 'green') return 'PDF received'
+    if (status === 'yellow') return 'Applied / pending'
+    if (status === 'red') return 'Permit needed'
+    return st
+  }
+
+  if (loading) {
+    return (
+      <div className=\"min-h-screen bg-gray-50\">
+        <AppHeader />
+        <BrandedLoader 
+          message=\"Loading Portal Assistant...\" 
+          subMessage=\"Preparing secure prefill, credentials vault, and status tracking\"
+        />
+      </div>
+    )
+  }
+
+  const config = STATE_PORTAL_CONFIGS[selectedState] || null
+  const isRealRequest = !!request && !request.id.start ↓ scripts/geocode-report.integration.test.ts (1 test | 1 skipped)
+
+ Test Files  1 failed | 49 passed | 2 skipped (52)
+      Tests  1 failed | 523 passed | 4 skipped (528)
+   Start at  20:30:16
+   Duration  9.66s (transform 4.69s, setup 0ms, collect 10.32s, tests 2.83s, environment 23ms, prepare 16.39s)
+
+sWith('demo-')
+  const loadDisplay = request
+    ? formatLoadDisplay({
+        weightLbs: request.weight,
+        lengthFt: request.length,
+        widthFt: request.width,
+        heightFt: request.height,
+      })
+    : null
+  const equipmentSnapshot = request
+    ? formatPortalEquipmentSnapshot(request.equipment, request.cargo)
+    : null
+  const carrierDriver = request?.cargo?.carrierDriver as Record<string, any> | undefined
+  const carrierFields = formatCarrierReviewFields(carrierDriver)
+  const driverFields = formatDriverReviewFields(carrierDriver)
+  const loadReview = request
+    ? formatLoadReviewDetails(request, request.equipment, request.cargo)
+    : null
+
+  const handleRegeneratePrefill = () => {
+    if (request) applyPortalState(request, selectedState)
+  }
+
+  return (
+    <div className=\"min-h-screen bg-gray-50\">
+      <AppHeader user={user} />
+
+      <main className=\"max-w-7xl mx-auto px-6 py-8\">
+        <div className=\"mb-8\">
+          <h1 className=\"text-3xl font-semibold tracking-tight text-gray-900\">Portal Assist</h1>
+          <p className=\"text-gray-600 mt-1.5\">
+            Secure prefill, human-approved assisted submission, output parsing, PDF storage, and per-state status tracking for DOT OSOW portals.
+          </p>
+          <p className=\"text-[11px] text-gray-500 mt-1\">
+            Config-driven: To add any of the remaining states (or the remaining 49; HI excluded by design), add one entry to <code>STATE_PORTAL_CONFIGS</code> in <code>lib/portal-assistant.ts</code>. Selector, prefill, status, and persistence update automatically. No other code changes required.
+          </p>
+        </div>
+
+        {/* Global errors */}
+        {pageError && (
+          <div className=\"mb-6\">
+            <ErrorDisplay message={pageError} variant=\"inline\" />
+          </div>
+        )}
+
+        {isReviewStep && (
+          <div className=\"mb-6 p-4 bg-blue-50 border border-blue-200 rounded-2xl text-sm text-blue-900\">
+            <div className=\"font-semibold mb-0.5\">Analysis approved</div>
+            <div>Review the prefill below, then record and open portals state by state.</div>
+          </div>
+        )}
+
+        {launchHint && !isReviewStep && (
+          <div className=\"mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-sm text-emerald-900\">
+            <div className=\"font-medium mb-0.5\">Ready for portal submission</div>
+            <div>{launchHint}</div>
+          </div>
+        )}
+
+        {/* State Selector — fully dynamic from exported config (extensible) */}
+        <div className=\"mb-6\">
+          <div className=\"text-xs font-medium text-gray-500 mb-2 tracking-wider\">SELECT STATE PORTAL</div>
+          <div
+            role=\"button\"
+            tabIndex={0}
+            aria-expanded={isExpanded}
+            aria-controls=\"state-portal-list\"
+            onClick={() => setIsExpanded(!isExpanded)}
+            onFocus={() => setIsExpanded(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                setIsExpanded(!isExpanded)
+              }
+            }}
+            className=\"w-full max-w-xs border border-gray-200 rounded-xl px-3 py-2 text-sm font-medium bg-white hover:bg-gray-50 cursor-pointer flex items-center justify-between focus:outline-none focus:ring-1 focus:ring-gray-400\"
+            title=\"Click or press Enter/Space to expand/collapse the state selector list (compact by default to save space)\"
+          >
+            <span>{selectedState && config ? `${selectedState} — ${config.name}` : 'Select state (49 available)'}</span>
+            <span aria-hidden=\"true\" className=\"text-gray-400 text-xs\">{isExpanded ? '▲' : '▼'}</span>
+          </div>
+          {isExpanded && (
+            <>
+              <input
+                type=\"text\"
+                value={stateQuery}
+                onChange={(e) => setStateQuery(e.target.value)}
+                className=\"mt-1 w-full max-w-xs border rounded-xl px-4 py-2 text-sm font-medium bg-white focus:outline-none focus:ring-1 focus:ring-gray-400 border-gray-200\"
+                placeholder=\"Type to filter (e.g. CA, New York, NY) — 49 states\"
+                aria-label=\"Searchable state portal selector. Type to filter the visible list of all 49 states (except HI) with nice names. Click any entry to select via handleStateChange.\"
+              />
+              {/* Filtered list (shown only when expanded for compact-by-default; live filter on type; CODE — Name from STATE_PORTAL_CONFIGS; click selects via handleStateChange + auto-collapses) */}
+              <div id=\"state-portal-list\" className=\"mt-1 w-full max-w-xs border border-gray-200 rounded-xl bg-white shadow-sm max-h-52 overflow-y-auto text-xs\">
+                {allStateCodes
+                  .filter((state) => {
+                    if (!stateQuery) return true
+                    const c = STATE_PORTAL_CONFIGS[state]
+                    const q = stateQuery.toUpperCase()
+                    return state.includes(q) || (c?.name || '').toUpperCase().includes(q)
+                  })
+                  .map((state) => {
+                    const c = STATE_PORTAL_CONFIGS[state]
+                    const display = `${state} — ${c.name}`
+                    const isCurrent = state === selectedState
+                    return (
+                      <div
+                        key={state}
+                        onClick={() => {
+                          handleStateChange(state)
+                          setStateQuery('')
+                          setIsExpanded(false)
+                        }}
+                        className={`px-3 py-1 cursor-pointer hover:bg-gray-100 font-mono border-b border-gray-100 last:border-b-0 ${isCurrent ? 'bg-gray-100 font-semibold' : ''}`}
+                        title={`Select ${display}`}
+                      >
+                        {display}
+                      </div>
+                    )
+                  })}
+                {stateQuery && allStateCodes.filter((s) => {
+                  const c = STATE_PORTAL_CONFIGS[s]
+                  const q = stateQuery.toUpperCase()
+                  return s.includes(q) || (c?.name || '').toUpperCase().includes(q)
+                }).length === 0 && (
+                  <div className=\"px-3 py-1 text-gray-500\">No matches. Clear to see all 49.</div>
+                )}
+              </div>
+              <div className=\"text-[10px] text-emerald-700 mt-1\">49 states supported (all except HI). Extensible with one object. Compact header by default — click/focus to expand list (filter/scroll/click). Selection auto-collapses + updates right panel immediately.</div>
+            </>
+          )}
+        </div>
+
+        <div className=\"grid lg:grid-cols-12 gap-6\">
+          {/* LEFT COLUMN: Request Summary + Final Review */}
+          <div className=\"lg:col-span-7 space-y-6\">
+            {/* 1. Request Summary — compact high-level overview only */}
+            <div className=\"bg-white border rounded-2xl p-6\">
+              <div className=\"flex items-center justify-between mb-4\">
+                <h2 className=\"font-semibold\">1. Request Summary</h2>
+                {!isRealRequest && !request && (
+                  <button
+                    onClick={loadDemoRequest}
+                    className=\"text-sm px-4 py-1.5 bg-black text-white rounded-lg hover:bg-gray-900\"
+                  >
+                    Load Rich Demo Request
+                  </button>
+                )}
+              </div>
+
+              {requestLoading && <div className=\"text-sm text-gray-500\">Loading request…</div>}
+              {requestError && <ErrorDisplay message={requestError} variant=\"inline\" onRetry={() => { /* re-trigger via url if wanted */ }} />}
+
+              {!request ? (
+                <div className=\"text-sm text-gray-600\">
+                  No request loaded. Click \"Load Rich Demo Request\" above, or open this page from <a href=\"/history\" className=\"underline\">History</a> via View → Launch Portal Assist in the analysis details modal (passes ?requestId).
+                </div>
+              ) : (
+                <div className=\"text-sm space-y-3\">
+                  <div>
+                    <span className=\"text-gray-500 text-xs block\">ROUTE</span>
+                    <span className=\"font-medium\">{request.origin_city}, {request.origin_state} → {request.destination_city}, {request.destination_state}</span>
+                  </div>
+                  <div className=\"grid grid-cols-2 gap-x-6\">
+                    <div>
+                      <span className=\"text-gray-500 text-xs block\">LOAD ENVELOPE</span>
+                      <span className=\"font-mono tabular-nums\">{loadDisplay?.weight} — {loadDisplay?.dimensionsLine}</span>
+                    </div>
+                    <div>
+                      <span className=\"text-gray-500 text-xs block\">CORRIDOR</span>
+                      <span className=\"font-mono\">{(request.route_corridor || []).join(' → ') || '—'}</span>
+                    </div>
+                  </div>
+
+                  {request.permit_required_states && request.permit_required_states.length > 0 && (
+                    <div>
+                      <span className=\"text-gray-500 text-xs block\">PERMITS REQUIRED IN</span>
+                      <span className=\"font-medium text-red-700\">{request.permit_required_states.join(', ')}</span>
+                    </div>
+                  )}
+
+                  <div className=\"pt-2 border-t\">
+                    <div className=\"flex items-center justify-between mb-2\">
+                      <span className=\"text-gray-500 text-xs\">PER-STATE STATUS (corridor)</span>
+                      <span className=\"text-[10px] text-gray-500\">Red = needed • Yellow = applied • Green = PDF</span>
+                    </div>
+                    <div className=\"flex flex-wrap gap-1\">
+                      {(portalStatesForRequest.length > 0 ? portalStatesForRequest : (request.route_corridor || request.permit_required_states || [])).map((st: string, i: number) => {
+                        const stStatus = getStateStatus(st)
+                        return (
+                          <span
+                            key={i}
+                            onClick={() => handleStateChange(st)}
+                            className={`px-2 py-px text-[10px] rounded font-mono cursor-pointer border ${getStatusClasses(stStatus)} ${selectedState === st ? 'ring-2 ring-offset-1 ring-black' : ''}`}
+                            title={getStatusLabel(stStatus, st)}
+                          >
+                            {st}
+                          </span>
+                        )
+                      })}
+                    </div>
+                    <div className=\"mt-2 text-xs\">
+                      Selected: <span className={`inline px-1.5 py-px rounded font-mono text-white ${getStatusClasses(getStateStatus(selectedState))}`}>{selectedState}</span>
+                      {' '}
+                      <span className=\"text-gray-600\">{getStatusLabel(getStateStatus(selectedState), selectedState)}</span>
+                    </div>
+                  </div>
+
+                  {isRealRequest && (
+                    <div className=\"text-[10px] text-emerald-700\">Loaded from saved analysis (full snapshots available in final review below)</div>
+                  )}
+                  {!isRealRequest && request && (
+                    <div className=\"text-[10px] text-amber-700\">Demo data — use final review below to verify prefill before portal entry</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 2. Final Review — generated prefill + carrier/driver/load/equipment before portal submission */}
+            {prefill && config && (
+              <div className=\"bg-white border rounded-2xl p-6\">
+                <h2 className=\"font-semibold\">2. Final Review — Generated Prefill for {config.name}</h2>
+                <p className=\"text-sm text-gray-600 mt-1 mb-4\">
+                  Last human review before portal submission. Confirm carrier, driver, load, and equipment match what you will enter in the state portal.
+                </p>
+
+                {carrierFields.length > 0 && (
+                  <div className=\"mb-4\">
+                    <span className=\"text-gray-500 text-xs block mb-2\">CARRIER INFO</span>
+                    <div className=\"grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm\">
+                      {carrierFields.map((f) => (
+                        <div key={f.label}>
+                          <span className=\"text-[10px] uppercase tracking-wider text-gray-400\">{f.label}</span>
+                          <div className=\"font-medium\">{f.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {driverFields.length > 0 && (
+                  <div className=\"mb-4\">
+                    <span className=\"text-gray-500 text-xs block mb-2\">DRIVER</span>
+                    <div className=\"grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm\">
+                      {driverFields.map((f) => (
+                        <div key={f.label}>
+                          <span className=\"text-[10px] uppercase tracking-wider text-gray-400\">{f.label}</span>
+                          <div className=\"font-medium\">{f.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {loadReview && (
+                  <div className=\"mb-4\">
+                    <span className=\"text-gray-500 text-xs block mb-2\">FULL LOAD DETAILS</span>
+                    <div className=\"grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm\">
+                      <div>
+                        <span className=\"text-[10px] uppercase tracking-wider text-gray-400\">Weight</span>
+                        <div className=\"font-mono tabular-nums font-medium\">{loadReview.weight}</div>
+                      </div>
+                      <div>
+                        <span className=\"text-[10px] uppercase tracking-wider text-gray-400\">L × W × H</span>
+                        <div className=\"font-mono tabular-nums font-medium\">{loadReview.dimensionsLine}</div>
+                      </div>
+                      {loadReview.overhang && (
+                        <div>
+                          <span className=\"text-[10px] uppercase tracking-wider text-gray-400\">Overhang</span>
+                          <div className=\"font-medium\">{loadReview.overhang}</div>
+                        </div>
+                      )}
+                      {loadReview.cargoDescription && (
+                        <div>
+                          <span className=\"text-[10px] uppercase tracking-wider text-gray-400\">Cargo description</span>
+                          <div className=\"font-medium\">{loadReview.cargoDescription}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {equipmentSnapshot?.hasContent && (
+                  <div className=\"mb-4 space-y-2\">
+                    <span className=\"text-gray-500 text-xs block\">TRACTOR &amp; TRAILER</span>
+                    {equipmentSnapshot.rigLine && (
+                      <div>
+                        <span className=\"text-[10px] uppercase tracking-wider text-gray-400\">Rig</span>
+                        <div className=\"font-medium text-sm\">{equipmentSnapshot.rigLine}</div>
+                      </div>
+                    )}
+                    {equipmentSnapshot.tractorLine && (
+                      <div>
+                        <span className=\"text-[10px] uppercase tracking-wider text-gray-400\">Tractor</span>
+                        <div className=\"font-medium text-sm\">{equipmentSnapshot.tractorLine}</div>
+                      </div>
+                    )}
+                    {equipmentSnapshot.trailerLines.length > 0 && (
+                      <div>
+                        <span className=\"text-[10px] uppercase tracking-wider text-gray-400\">
+                          Trailer{equipmentSnapshot.trailerLines.length > 1 ? 's' : ''}
+                        </span>
+                        <ul className=\"font-medium text-sm space-y-0.5\">
+                          {equipmentSnapshot.trailerLines.map((line, i) => (
+                            <li key={i}>{line}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {equipmentSnapshot.legacyLine && (
+                      <div className=\"font-medium text-sm\">{equipmentSnapshot.legacyLine}</div>
+                    )}
+                  </div>
+                )}
+
+                <span className=\"text-gray-500 text-xs block mb-2\">PORTAL FIELD MAPPING</span>
+                <div className=\"grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm\">
+                  {Object.entries(config.fieldMapping).map(([ourKey, portalLabel]) => (
+                    <div key={ourKey} className=\"rounded-xl border bg-gray-50 p-3\">
+                      <div className=\"text-[10px] uppercase tracking-wider text-gray-500 mb-0.5\">{portalLabel}</div>
+                      <div className=\"font-mono break-words\">{(prefill.generatedFields as any)[ourKey] ?? '—'}</div>
+                    </div>
+                  ))}
+                  {/* Extra rich fields pulled from equipment/cargo */}
+                  {(prefill.generatedFields as any).axles && (
+                    <div className=\"rounded-xl border bg-gray-50 p-3\">
+                      <div className=\"text-[10px] uppercase tracking-wider text-gray-500 mb-0.5\">Axles (from equip)</div>
+                      <div className=\"font-mono\">{(prefill.generatedFields as any).axles}</div>
+                    </div>
+                  )}
+                  {(prefill.generatedFields as any).vehicle_id && (
+                    <div className=\"rounded-xl border bg-gray-50 p-3\">
+                      <div className=\"text-[10px] uppercase tracking-wider text-gray-500 mb-0.5\">Vehicle / VIN (from equip)</div>
+                      <div className=\"font-mono\">{(prefill.generatedFields as any).vehicle_id}</div>
+                    </div>
+                  )}
+                </div>
+
+                {prefill.approvalNotes && prefill.approvalNotes.length > 0 && (
+                  <div className=\"mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm\">
+                    <div className=\"font-medium text-amber-800 mb-1\">Notes from prefill generator</div>
+                    <ul className=\"list-disc pl-5 text-amber-700 text-sm\">
+                      {prefill.approvalNotes.map((n: string, i: number) => <li key={i}>{n}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                {/* 3. Credentials — nice form, secure, hasCredentials check, never plain pw */}
+                <div className=\"mt-6 pt-6 border-t\">
+                  <h3 className=\"font-semibold mb-2 text-sm\">3. Portal Credentials (encrypted at rest)</h3>
+                  {hasCredentials ? (
+                    <div className=\"text-sm mb-3 text-emerald-700\">✓ Credentials saved for {selectedState} (username: {credUsername || 'saved'})</div>
+                  ) : (
+                    <div className=\"text-sm mb-3 text-gray-600\">No credentials on file for {selectedState}.</div>
+                  )}
+
+                  {/* Simple secure form (no prompt()) */}
+                  <div className=\"flex flex-col sm:flex-row gap-2\">
+                    <input
+                      type=\"text\"
+                      placeholder=\"Portal username\"
+                      className=\"flex-1 border rounded-lg px-3 py-2 text-sm\"
+                      id=\"cred-username\"
+                      autoComplete=\"off\"
+                    />
+                    <input
+                      type=\"password\"
+                      placeholder=\"Portal password\"
+                      className=\"flex-1 border rounded-lg px-3 py-2 text-sm\"
+                      id=\"cred-password\"
+                      autoComplete=\"new-password\"
+                    />
+                    <button
+                      onClick={() => {
+                        const u = (document.getElementById('cred-username') as HTMLInputElement)?.value?.trim()
+                        const p = (document.getElementById('cred-password') as HTMLInputElement)?.value
+                        if (u && p) {
+                          handleSaveCredentials(u, p)
+                          // clear fields after attempt
+                          ;(document.getElementById('cred-username') as HTMLInputElement).value = ''
+                          ;(document.getElementById('cred-password') as HTMLInputElement).value = ''
+                        } else {
+                          setCredentialError('Enter both username and password.')
+                        }
+                      }}
+                      disabled={savingCreds}
+                      className=\"px-4 py-2 bg-black text-white rounded-lg text-sm disabled:opacity-60\"
+                    >
+                      {savingCreds ? 'Saving…' : 'Save Securely'}
+                    </button>
+                  </div>
+
+                  {credentialError && (
+                    <div className=\"mt-2\">
+                      <ErrorDisplay message={credentialError} variant=\"inline\" onRetry={() => setCredentialError(null)} />
+                    </div>
+                  )}
+                  <p className=\"text-[10px] text-gray-500 mt-1\">Encrypted server-side with AES-256-GCM. Never sent or stored in plain text. GET returns metadata only.</p>
+                </div>
+
+                {/* Human approval gate + action row */}
+                <div className=\"mt-6 pt-6 border-t\">
+                  <h3 className=\"font-semibold mb-2 text-sm\">Record approval for {selectedState}</h3>
+
+                  {!isApproved ? (
+                    <div className=\"p-4 bg-amber-50 border border-amber-200 rounded-2xl\">
+                      <label className=\"flex items-start gap-3 text-sm cursor-pointer\">
+                        <input
+                          type=\"checkbox\"
+                          checked={approvalChecked}
+                          onChange={(e) => setApprovalChecked(e.target.checked)}
+                          className=\"mt-1\"
+                        />
+                        <span>
+                          I have personally reviewed the prefill data (dimensions, corridor, vehicle/equipment details, state-specific notes), the target portal instructions, and any route differences. I approve this for portal submission on behalf of the carrier.
+                        </span>
+                      </label>
+
+                      <textarea
+                        value={approvalNotes}
+                        onChange={(e) => setApprovalNotes(e.target.value)}
+                        placeholder=\"Optional notes for audit (e.g. reviewed bridge list 2026-06-07)\"
+                        className=\"mt-3 w-full border rounded-lg p-2 text-sm h-16\"
+                      />
+
+                      <div className=\"mt-3 flex flex-col sm:flex-row gap-2\">
+                        <button
+                          onClick={handleRegeneratePrefill}
+                          disabled={!request}
+                          className=\"px-5 py-2 border rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-60\"
+                        >
+                          Regenerate Prefill
+                        </button>
+                        <button
+                          onClick={handleApproveGate}
+                          disabled={!approvalChecked || approving || !prefill}
+                          className=\"px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white rounded-xl text-sm font-medium\"
+                        >
+                          {approving ? 'Recording approval…' : `Approve & Record for ${selectedState} Submission`}
+                        </button>
+                      </div>
+                      <div className=\"text-[10px] text-amber-700 mt-2\">This sets human_approved=true and creates/updates the portal_submissions record (status prefilled/submitted). No automated submit occurs.</div>
+                    </div>
+                  ) : (
+                    <div className=\"space-y-3\">
+                      <div className=\"p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-800\">
+                        ✓ Human approved for {selectedState}. Record created with human_approved=true.
+                      </div>
+                      <button
+                        onClick={handleRegeneratePrefill}
+                        disabled={!request}
+                        className=\"px-5 py-2 border rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-60\"
+                      >
+                        Regenerate Prefill
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT COLUMN: Portal + Output + PDF + Analysis */}
+          <div className=\"lg:col-span-5 space-y-6\">
+            {/* Portal Actions */}
+            {config && (
+              <div className=\"bg-white border rounded-2xl p-6\">
+                <h2 className=\"font-semibold mb-3\">{config.name} Portal</h2>
+                <a
+                  href={config.portalUrl}
+                  target=\"_blank\"
+                  rel=\"noreferrer\"
+                  className=\"inline-block text-sm px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-900 mb-3\"
+                >
+                  Open Real {selectedState} Portal →
+                </a>
+                {!request && (
+                  <button
+                    onClick={loadDemoRequest}
+                    className=\"inline-block text-sm px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg mb-3 ml-2\"
+                  >
+                    Load Rich Demo Request for {selectedState}
+                  </button>
+                )}
+                <p className=\"text-sm text-gray-600 whitespace-pre-wrap\">{config.instructions}</p>
+                {config.typicalRestrictions && config.typicalRestrictions.length > 0 && (
+                  <div className=\"mt-3 text-xs text-amber-700\">
+                    Typical restrictions: {config.typicalRestrictions.join(' • ')}
+                  </div>
+                )}
+                {isApproved && (
+                  <div className=\"mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded text-xs\">Approved — ready for your manual entry or paste of portal response below.</div>
+                )}
+              </div>
+            )}
+
+            {/* 4. Output Paste & Analysis */}
+            <div className=\"bg-white border rounded-2xl p-6\">
+              <h2 className=\"font-semibold mb-3\">4. Portal Output Paste &amp; Analysis</h2>
+              <textarea
+                value={portalOutput}
+                onChange={(e) => setPortalOutput(e.target.value)}
+                placeholder=\"Paste confirmation email/text, permit number, status, restrictions, or route notes returned by the state portal (e.g. 'PERMIT #TX-OSOW-987654 APPROVED. Route: TX-OK-MO-IL ...')\"
+                className=\"w-full border p-3 rounded-xl text-sm min-h-[110px] font-mono\"
+              />
+              <button
+                onClick={handleParseOutput}
+                disabled={!prefill || savingSubmission}
+                className=\"mt-2 px-5 py-2 bg-gray-900 text-white text-sm rounded-xl disabled:bg-gray-400\"
+              >
+                {savingSubmission ? 'Parsing &amp; Recording…' : 'Parse & Compare'}
+              </button>
+
+              {parseError && <div className=\"mt-2\"><ErrorDisplay message={parseError} variant=\"inline\" /></div>}
+
+              {routeComparison && (
+                <div className=\"mt-4 p-4 bg-gray-50 border rounded-2xl text-sm\">
+                  <div className=\"flex items-center gap-3 mb-2\">
+                    <div className=\"font-semibold\">Route Comparison</div>
+                    <span className=\"font-mono text-xl font-bold tabular-nums\">{routeComparison.similarity}%</span>
+                    <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wider ${
+                      routeComparison.recommendation === 'accept' ? 'bg-emerald-100 text-emerald-800' :
+                      routeComparison.recommendation === 'review' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>{routeComparison.recommendation}</span>
+                  </div>
+                  <div className=\"text-gray-600\">{routeComparison.notes}</div>
+
+                  {routeComparison.differences.length > 0 && (
+                    <div className=\"mt-2\">
+                      <div className=\"font-medium text-xs mb-1 text-gray-500\">DIFFS FLAGGED</div>
+                      <ul className=\"list-disc pl-5 text-xs text-gray-700 space-y-0.5\">
+                        {routeComparison.differences.map((d, i) => <li key={i}>{d}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {submissionRecord && (
+                    <div className=\"mt-3 pt-3 border-t text-[10px] text-gray-500\">
+                      Submission persisted (status: {submissionRecord.status}, human_approved: {String(submissionRecord.human_approved)})
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {parsedOutput && (
+                <div className=\"mt-3 text-xs text-gray-600 border-t pt-3\">
+                  Parsed: permit #{parsedOutput.permitNumber || '—'} • status {parsedOutput.status} • restrictions: {(parsedOutput.restrictions || []).length}
+                </div>
+              )}
+            </div>
+
+            {/* 5. PDF & Artifacts */}
+            <div className=\"bg-white border rounded-2xl p-6\">
+              <h2 className=\"font-semibold mb-3\">5. PDF &amp; Artifacts</h2>
+
+              <label className=\"inline-flex items-center gap-2 px-4 py-2 border rounded-xl cursor-pointer text-sm hover:bg-gray-50\">
+                <input
+                  type=\"file\"
+                  accept=\"application/pdf\"
+                  className=\"hidden\"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) handlePdfUpload(f)
+                    e.target.value = '' // reset
+                  }}
+                  disabled={pdfUploading}
+                />
+                {pdfUploading ? 'Uploading to secure storage…' : 'Upload Permit PDF (to portal-pdfs bucket)'}
+              </label>
+
+              {pdfError && <div className=\"mt-2\"><ErrorDisplay message={pdfError} variant=\"inline\" /></div>}
+
+              {attachedPdfs.length > 0 && (
+                <div className=\"mt-4 space-y-2\">
+                  {attachedPdfs.map((p, idx) => (
+                    <div key={idx} className=\"flex items-center justify-between text-sm border rounded-lg px-3 py-2 bg-gray-50\">
+                      <span className=\"truncate pr-2\">{p.name}</span>
+                      <a
+                        href={p.url}
+                        target=\"_blank\"
+                        rel=\"noreferrer\"
+                        className=\"text-emerald-700 underline text-xs\"
+                      >
+                        Download / View
+                      </a>
+                    </div>
+                  ))}
+                  <div className=\"text-[10px] text-gray-500\">PDF reference stored with next submission record (used for status green + audit).</div>
+                </div>
+              )}
+
+              {!attachedPdfs.length && (
+                <div className=\"text-xs text-gray-500 mt-2\">No PDFs attached yet for this state. Upload after portal response for full record.</div>
+              )}
+            </div>
+
+            {/* Current submission record summary */}
+            {submissionRecord && (
+              <div className=\"bg-white border rounded-2xl p-4 text-xs text-gray-600\">
+                <div className=\"font-semibold mb-1 text-gray-800\">Latest Submission Record (local + persisted)</div>
+                <div>State: {submissionRecord.state_code} • Status: {submissionRecord.status} • Approved: {String(submissionRecord.human_approved)}</div>
+                {submissionRecord.permit_number && <div>Permit #: {submissionRecord.permit_number}</div>}
+                {submissionRecord.pdf_reference && <div>PDF ref: {submissionRecord.pdf_reference}</div>}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className=\"mt-8 text-xs text-gray-500 border-t pt-4\">
+          All actions are logged with [portal-assist] prefix. Credentials use server-only AES (env PORTAL_CREDENTIALS_ENCRYPTION_KEY). Human approval gate is enforced before any submission record with human_approved. Full backward compatibility with existing history links, submissions table, and RLS.
+        </div>
+      </main>
+    </div>
+  )
+}
+"
+
+ ❯ app/portal-assist/portal-assist-ui.test.ts:49:24
+     47|     expect(source).toContain('handleRegeneratePrefill')
+     48|     expect(source).toMatch(/Regenerate Prefill[\s\S]*Approve & Record …
+     49|     expect(source).not.toMatch(/1\. Request Summary[\s\S]*Regenerate P…
+       |                        ^
+     50|   })
+     51| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

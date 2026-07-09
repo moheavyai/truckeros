@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processPermitRequest, type LoadDetails } from '@/agents/permit-agent'
+import { enrichOrToolsResponseWithEscorts } from '@/lib/enrich-route-escorts'
+import { normalizeDrops } from '@/lib/location-stop'
+import {
+  getOrToolsOptimizeUrl,
+  isAbortOrTimeoutError,
+  isConnectionFailure,
+} from '@/lib/ortools-config'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -7,15 +14,12 @@ export const maxDuration = 300
 /**
  * POST /api/optimize-route
  *
- * Thin proxy to the OR-Tools FastAPI service (default http://localhost:8001/optimize-route).
+ * Thin proxy to the OR-Tools FastAPI service (default http://127.0.0.1:8000/optimize-route).
  * Forwards the same JSON body shape as /api/analyze-permit (LoadDetails + optional optimizationMode).
  *
  * On connection failure only (service unreachable), falls back to pure OSRM via the permit agent.
  * Timeouts and solver errors return a clear error — no silent OSRM fallback.
  */
-const ORTOOLS_SERVICE_URL =
-  process.env.ORTOOLS_SERVICE_URL || 'http://localhost:8001/optimize-route'
-
 /** Proxy timeout must exceed OR-Tools router timeout (default 150s). */
 const ORTOOLS_TIMEOUT_MS = Math.max(
   30_000,
@@ -24,23 +28,32 @@ const ORTOOLS_TIMEOUT_MS = Math.max(
 
 const FALLBACK_MESSAGE = 'OR-Tools service unreachable — used OSRM corridor routing'
 
-function buildLoadDetails(body: Record<string, unknown>): LoadDetails {
+export function buildLoadDetails(body: Record<string, unknown>): LoadDetails {
   const origin = (body.origin || {}) as Record<string, string>
   const destination = (body.destination || {}) as Record<string, string>
 
+  const dropsResult = normalizeDrops(body.drops)
+  if (!dropsResult.ok) {
+    throw new Error(dropsResult.message)
+  }
+  const drops = dropsResult.drops
+
   return {
     origin: {
+      query: origin.query || '',
       street: origin.street || '',
       city: origin.city || '',
       state: origin.state || '',
       zip: origin.zip || '',
     },
     destination: {
+      query: destination.query || '',
       street: destination.street || '',
       city: destination.city || '',
       state: destination.state || '',
       zip: destination.zip || '',
     },
+    drops: drops.length > 0 ? drops : undefined,
     weight: Number(body.weight),
     length: Number(body.length),
     width: Number(body.width),
@@ -60,39 +73,9 @@ function buildLoadDetails(body: Record<string, unknown>): LoadDetails {
     dotNumber: body.dotNumber as string | undefined,
     vehicleInfo: body.vehicleInfo as string | undefined,
     routingEngine: 'osrm',
+    trailerLengthFt:
+      body.trailerLengthFt != null ? Number(body.trailerLengthFt) : undefined,
   }
-}
-
-function isAbortOrTimeoutError(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return false
-  const e = err as { name?: string; message?: string; code?: string; cause?: { name?: string } }
-  const name = e.name || e.cause?.name || ''
-  const msg = (e.message || '').toLowerCase()
-  return (
-    name === 'AbortError' ||
-    name === 'TimeoutError' ||
-    e.code === 'ABORT_ERR' ||
-    msg.includes('aborted') ||
-    msg.includes('timeout')
-  )
-}
-
-function isConnectionFailure(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return false
-  if (isAbortOrTimeoutError(err)) return false
-  const e = err as { code?: string; message?: string; cause?: { code?: string; message?: string } }
-  const code = e.code || e.cause?.code || ''
-  const msg = (e.message || e.cause?.message || '').toLowerCase()
-  return (
-    code === 'ECONNREFUSED' ||
-    code === 'ENOTFOUND' ||
-    code === 'ECONNRESET' ||
-    code === 'EHOSTUNREACH' ||
-    code === 'ENETUNREACH' ||
-    msg.includes('econnrefused') ||
-    msg.includes('fetch failed') ||
-    msg.includes('network')
-  )
 }
 
 function ortoolsErrorResponse(
@@ -171,17 +154,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ status: 'error', error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const loadDetails = buildLoadDetails(body)
+  let loadDetails: LoadDetails
+  try {
+    loadDetails = buildLoadDetails(body)
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Invalid drops payload'
+    return NextResponse.json({ status: 'error', error: message }, { status: 400 })
+  }
+
+  const ortoolsServiceUrl = getOrToolsOptimizeUrl()
 
   try {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), ORTOOLS_TIMEOUT_MS)
     const startMs = Date.now()
-    console.log(`[optimize-route] calling OR-Tools timeout_ms=${ORTOOLS_TIMEOUT_MS}`)
+    console.log(`[optimize-route] calling OR-Tools url=${ortoolsServiceUrl} timeout_ms=${ORTOOLS_TIMEOUT_MS}`)
 
     let upstream: Response
     try {
-      upstream = await fetch(ORTOOLS_SERVICE_URL, {
+      upstream = await fetch(ortoolsServiceUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -244,7 +235,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    return NextResponse.json(data)
+    const enriched = await enrichOrToolsResponseWithEscorts(data, {
+      width: loadDetails.width,
+      length: loadDetails.length,
+      height: loadDetails.height,
+      weight: loadDetails.weight,
+    })
+
+    return NextResponse.json(enriched)
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : String(error)
     console.error('[optimize-route] Unexpected error:', errMsg)

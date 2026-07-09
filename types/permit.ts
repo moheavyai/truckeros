@@ -50,3 +50,22 @@ export interface LoadDimensions {
   width: number
   height: number
 }
+
+/** Persisted drop stop inside permit_requests.drops (migration 014). */
+export interface PermitRequestDropStop {
+  id?: string
+  query?: string
+  street?: string
+  city?: string
+  state?: string
+  zip?: string
+  lat?: number
+  lon?: number
+}
+
+/** Query + multi-stop fields added in migration 014. */
+export interface PermitRequestQueryFields {
+  origin_query?: string | null
+  destination_query?: string | null
+  drops?: PermitRequestDropStop[] | null
+}

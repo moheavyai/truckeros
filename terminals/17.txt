@@ -1,0 +1,33 @@
+---
+pid: 3016
+cwd: "C:\Users\andre\truckeros"
+command: "foreach ($u in @(
+  'https://odot.shponline.ohio.gov/',
+  'https://shp.transportation.ohio.gov/',
+  'https://www.transportation.ohio.gov/permits/special-hauling-permits/login',
+  'https://ndot.osow.nv.gov/',
+  'https://www.dot.nv.gov/home/doing-business/commercial-vehicles/commercial-vehicle-permits/oversize-overweight-permits',
+  'https://massdot.state.ma.us/epermits/',
+  'https://webpermits.massdot.state.ma.us/',
+  'https://www.mass.gov/how-to/apply-for-a-massdot-oversize-overweight-permit'
+)) { Write-Host \"=== $u ===\"; curl.exe -sI $u 2>&1 | Select-Object -First 3 }"
+started_at: 2026-07-05T20:30:23.759Z
+running_for_ms: 404993   
+---
+=== https://odot.shponline.ohio.gov/ ===
+=== https://shp.transportation.ohio.gov/ ===
+=== https://www.transportation.ohio.gov/permits/special-hauling-permits/login ===
+HTTP/1.1 404 Not Found
+Content-Type: text/html
+Content-Length: 5160
+=== https://ndot.osow.nv.gov/ ===
+=== https://www.dot.nv.gov/home/doing-business/commercial-vehicles/commercial-vehicle-permits/oversize-overweight-permits ===
+HTTP/1.1 403 Forbidden
+Server: AkamaiGHost
+Mime-Version: 1.0
+=== https://massdot.state.ma.us/epermits/ ===
+=== https://webpermits.massdot.state.ma.us/ ===
+=== https://www.mass.gov/how-to/apply-for-a-massdot-oversize-overweight-permit ===
+HTTP/1.1 404 Not Found
+Content-Type: text/html; charset=UTF-8
+Content-Length: 87072

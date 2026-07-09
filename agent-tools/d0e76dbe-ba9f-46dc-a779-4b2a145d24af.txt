@@ -1,0 +1,1363 @@
+
+ RUN  v3.2.6 C:/Users/andre/truckeros
+
+ ❯ app/profile/profile-ui.test.ts (39 tests | 2 failed) 97ms
+   ✓ Profile page UI > documents source-only inspection as accepted RTL limitation without a render harness 6ms
+   ✓ Profile page UI > uses AppHeader with profile activePage 1ms
+   ✓ Profile page UI > guards auth and always clears loading state 1ms
+   ✓ Profile page UI > allows save on first visit when no profile row exists yet 2ms
+   ✓ Profile page UI > renders landing sections with carrier card and team roster 2ms
+   ✓ Profile page UI > orders driver identity fields before CDL state and date of birth in member edit card 1ms
+   ✓ Profile page UI > caps date of birth at today and announces save feedback 1ms
+   ✓ Profile page UI > renders team roster with add, edit, and delete actions 2ms
+   ✓ Profile page UI > shows member edit card with contextual save placement and team-member-only roles 2ms
+   ✓ Profile page UI > hides standalone User Roles section on own profile and shows Owner/Admin badge on landing 2ms
+   ✓ Profile page UI > auto-assigns bootstrap Owner roles on mount and carrier save 2ms
+   ✓ Profile page UI > renders unified owner bootstrap setup card with contact fields and Owner Operator toggle 3ms
+   ✓ Profile page UI > routes all profile saves through the team-member-profiles API 1ms
+   ✓ Profile page UI > shows editing banner from list display name and fetches profile on cache miss 1ms
+   ✓ Profile page UI > highlights active editing row and uses contextual save labels 1ms
+   ✓ Profile page UI > confirms delete, refreshes team list, and shows update success for others 1ms
+   ✓ Profile page UI > shows read-only carrier summary after first save with edit toggle for carrier managers 2ms
+   ✓ Profile page UI > places Save Carrier Info inside the carrier card with carrier-only payload and scoped feedback 1ms
+   ✓ Profile page UI > shows read-only org carrier block with expand collapse in member edit card 1ms
+   ✓ Profile page UI > enforces viewer write restrictions and role edit permissions in UI 1ms
+   ✓ Profile page UI > shows team member permission editor with global/custom toggles 1ms
+   × Profile page UI > implements driver restricted field permissions and change request flow 21ms
+     → expected 'async function handleSave(e: React.Fo…' to match /let formForSave = form[\s\S]*applyDri…/
+   ✓ Profile page UI > uses showLandingView for roster spacing and delegates isFieldDisabled to canEditProfileField 2ms
+   ✓ Profile page UI > shows driver pending changes list with withdraw action 1ms
+   ✓ Profile page UI > uses shouldShowLandingProfileView for editingLabel and avoids undefined helper typo 1ms
+   ✓ Profile page UI > shows global save feedback banner outside member edit card 1ms
+   ✓ Profile page UI > shows driver edit-my-profile action and admin pending profile changes UI 1ms
+   ✓ Profile page UI > shows account link requests for primary owners with approve and reject actions 1ms
+   ✓ Profile page UI > resets carrier form expansion when switching edit targets or saving 5ms
+   × Profile page UI > uses separate saving flags with mutual exclusion across save actions 5ms
+     → expected 'async function handleSaveCarrierInfo(…' to match /async function handleSaveCarrierInfo[…/
+   ✓ Profile page UI > refreshes own profile from API response on self-save 3ms
+   ✓ Profile page UI > persists bootstrap via single full save with welcome message 3ms
+   ✓ Profile page UI > keeps editing team member after save instead of always resetting to self 1ms
+   ✓ Profile page UI > prompts before discarding unsaved edits when switching members 1ms
+   ✓ Profile page UI > snapshots save payload from prior target before any await in handleSave 1ms
+   ✓ Profile page UI > disables cancel editing while save is in flight 4ms
+   ✓ Profile page UI > supports save and invite, re-invite, dev invite testing, and accept-as-current-user 2ms
+   ✓ Profile page UI > wires DevAccountSwitcher in AppHeader for dev account switching 2ms
+   ✓ Profile page UI > uses error or warning save messages when invite or review submission partially fails 1ms
+ ✓ lib/roster-profile-link.test.ts (3 tests) 10ms
+ ✓ lib/dev-account-switch.test.ts (22 tests) 29ms
+ ✓ lib/member-profile.test.ts (119 tests) 64ms
+ ❯ lib/team-member-profiles-api.test.ts (36 tests | 14 failed) 113ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 16 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  lib/team-member-profiles-api.test.ts > saveTeamMemberProfileForUser > rejects non-primary-owner carrier_only self-save before upsert
+AssertionError: expected [Function] to throw error including 'Forbidden – only primary owners or Ow…' but got 'supabase.from(...).select is not a fu…'
+
+Expected: "Forbidden – only primary owners or Owner/Admin accounts can save carrier-only updates"
+Received: "supabase.from(...).select is not a function"
+
+ ❯ lib/team-member-profiles-api.test.ts:351:5
+    349|     })
+    350| 
+    351|     await expect(
+       |     ^
+    352|       saveTeamMemberProfileForUser('token', {
+    353|         form: { ...emptyMemberProfileForm(), company_name: 'Hacked Car…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/16]⎯
+
+ FAIL  lib/team-member-profiles-api.test.ts > saveTeamMemberProfileForUser > allows forced carrier owner to update company name via carrier_only save
+TypeError: supabase.from(...).select is not a function
+ ❯ fetchLinkedTeamMemberRoster lib/roster-profile-link.ts:16:6
+     14|   const { data: linkedRoster, error: linkedError } = await supabase
+     15|     .from('team_member_profiles')
+     16|     .select('*')
+       |      ^
+     17|     .eq('linked_user_id', userId)
+     18|     .order('updated_at', { ascending: false })
+ ❯ Module.saveTeamMemberProfileForUser lib/team-member-profiles-api.ts:330:7
+ ❯ lib/team-member-profiles-api.test.ts:394:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/16]⎯
+
+ FAIL  lib/team-member-profiles-api.test.ts > saveTeamMemberProfileForUser > allows forced carrier owner Viewer to save carrier_only via admin upsert
+TypeError: supabase.from(...).select is not a function
+ ❯ fetchLinkedTeamMemberRoster lib/roster-profile-link.ts:16:6
+     14|   const { data: linkedRoster, error: linkedError } = await supabase
+     15|     .from('team_member_profiles')
+     16|     .select('*')
+       |      ^
+     17|     .eq('linked_user_id', userId)
+     18|     .order('updated_at', { ascending: false })
+ ❯ Module.saveTeamMemberProfileForUser lib/team-member-profiles-api.ts:330:7
+ ❯ lib/team-member-profiles-api.test.ts:441:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/16]⎯
+
+ FAIL  lib/team-member-profiles-api.test.ts > saveTeamMemberProfileForUser > rejects bootstrap carrier_only save without company name
+AssertionError: expected [Function] to throw error including 'Company name is required.' but got 'supabase.from(...).select is not a fu…'
+
+Expected: "Company name is required."
+Received: "supabase.from(...).select is not a function"
+
+ ❯ lib/team-member-profiles-api.test.ts:461:5
+    459|     })
+    460| 
+    461|     await expect(
+       |     ^
+    462|       saveTeamMemberProfileForUser('token', {
+    463|         form: emptyMemberProfileForm(),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/16]⎯
+
+ FAIL  lib/team-member-profiles-api.test.ts > saveTeamMemberProfileForUser > clamps bootstrap carrier_only roles to Owner on null actorProfile
+TypeError: supabase.from(...).select is not a function
+ ❯ fetchLinkedTeamMemberRoster lib/roster-profile-link.ts:16:6
+     14|   const { data: linkedRoster, error: linkedError } = await supabase
+     15|     .from('team_member_profiles')
+     16|     .select('*')
+       |      ^
+     17|     .eq('linked_user_id', userId)
+     18|     .order('updated_at', { ascending: false })
+ ❯ Module.saveTeamMemberProfileForUser lib/team-member-profiles-api.ts:330:7
+ ❯ lib/team-member-profiles-api.test.ts:499:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/16]⎯
+
+ FAIL  lib/team-member-profiles-api.test.ts > saveTeamMemberProfileForUser > bootstraps organization for forced carrier owner with null actorProfile
+TypeError: supabase.from(...).select is not a function
+ ❯ fetchLinkedTeamMemberRoster lib/roster-profile-link.ts:16:6
+     14|   const { data: linkedRoster, error: linkedError } = await supabase
+     15|     .from('team_member_profiles')
+     16|     .select('*')
+       |      ^
+     17|     .eq('linked_user_id', userId)
+     18|     .order('updated_at', { ascending: false })
+ ❯ Module.saveTeamMemberProfileForUser lib/team-member-profiles-api.ts:330:7
+ ❯ lib/team-member-profiles-api.test.ts:535:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/16]⎯
+
+ FAIL  lib/team-member-profiles-api.test.ts > saveTeamMemberProfileForUser > allows forced carrier owner full save via admin upsert on null profile bootstrap
+TypeError: supabase.from(...).select is not a function
+ ❯ fetchLinkedTeamMemberRoster lib/roster-profile-link.ts:16:6
+     14|   const { data: linkedRoster, error: linkedError } = await supabase
+     15|     .from('team_member_profiles')
+     16|     .select('*')
+       |      ^
+     17|     .eq('linked_user_id', userId)
+     18|     .order('updated_at', { ascending: false })
+ ❯ Module.saveTeamMemberProfileForUser lib/team-member-profiles-api.ts:330:7
+ ❯ lib/team-member-profiles-api.test.ts:581:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/16]⎯
+
+ FAIL  lib/team-member-profiles-api.test.ts > saveTeamMemberProfileForUser > creates organization before member_profiles upsert on null profile bootstrap
+TypeError: supabase.from(...).select is not a function
+ ❯ fetchLinkedTeamMemberRoster lib/roster-profile-link.ts:16:6
+     14|   const { data: linkedRoster, error: linkedError } = await supabase
+     15|     .from('team_member_profiles')
+     16|     .select('*')
+       |      ^
+     17|     .eq('linked_user_id', userId)
+     18|     .order('updated_at', { ascending: false })
+ ❯ Module.saveTeamMemberProfileForUser lib/team-member-profiles-api.ts:330:7
+ ❯ lib/team-member-profiles-api.test.ts:630:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/16]⎯
+
+ FAIL  lib/team-member-profiles-api.test.ts > saveTeamMemberProfileForUser > persists Owner Operator roles on full bootstrap save
+TypeError: supabase.from(...).select is not a function
+ ❯ fetchLinkedTeamMemberRoster lib/roster-profile-link.ts:16:6
+   ✓ selfSaveFormForActor > strips carrier fields and restricted identity fields for driver self-save 4ms
+   ✓ selfSaveFormForActor > forces member_only scope for drivers even when full is requested 0ms
+   ✓ selfSaveFormForActor > skips restricted-field baseline pass for driver carrier_only scope 1ms
+   ✓ selfSaveFormForActor > passes restricted identity fields through for non-driver actors 0ms
+   ✓ selfSaveFormForActor > preserves carrier payload for primary owner carrier-only saves 0ms
+   ✓ canActorSaveCarrierOnlyScope > allows bootstrap carrier_only when actorProfile is null 0ms
+   ✓ canActorSaveCarrierOnlyScope > allows primary owner carrier_only saves 0ms
+   ✓ canActorSaveCarrierOnlyScope > blocks org-linked driver carrier_only saves without Owner / Admin role 0ms
+   ✓ canActorSaveCarrierOnlyScope > allows Owner / Admin role holders to save carrier_only before primary owner flag is set 0ms
+   ✓ canActorSaveCarrierOnlyScope > allows bootstrap carrier_only when profile has no org and form has Owner / Admin 0ms
+   ✓ saveTeamMemberProfileForUser > rejects viewer self-save before upsert 6ms
+   × saveTeamMemberProfileForUser > rejects non-primary-owner carrier_only self-save before upsert 26ms
+     → expected [Function] to throw error including 'Forbidden – only primary owners or Ow…' but got 'supabase.from(...).select is not a fu…'
+   × saveTeamMemberProfileForUser > allows forced carrier owner to update company name via carrier_only save 5ms
+     → supabase.from(...).select is not a function
+   × saveTeamMemberProfileForUser > allows forced carrier owner Viewer to save carrier_only via admin upsert 2ms
+     → supabase.from(...).select is not a function
+   × saveTeamMemberProfileForUser > rejects bootstrap carrier_only save without company name 10ms
+     → expected [Function] to throw error including 'Company name is required.' but got 'supabase.from(...).select is not a fu…'
+   × saveTeamMemberProfileForUser > clamps bootstrap carrier_only roles to Owner on null actorProfile 2ms
+     → supabase.from(...).select is not a function
+   × saveTeamMemberProfileForUser > bootstraps organization for forced carrier owner with null actorProfile 2ms
+     → supabase.from(...).select is not a function
+   × saveTeamMemberProfileForUser > allows forced carrier owner full save via admin upsert on null profile bootstrap 1ms
+     → supabase.from(...).select is not a function
+   × saveTeamMemberProfileForUser > creates organization before member_profiles upsert on null profile bootstrap 1ms
+     → supabase.from(...).select is not a function
+   × saveTeamMemberProfileForUser > persists Owner Operator roles on full bootstrap save 1ms
+     → supabase.from(...).select is not a function
+   × saveTeamMemberProfileForUser > allows forced carrier owner full save via admin upsert when promoting org-linked non-primary owner 3ms
+     → supabase.from(...).select is not a function
+   × saveTeamMemberProfileForUser > throws when forced carrier owner needs promotion but admin access is missing 5ms
+     → expected [Function] to throw error including 'Carrier save requires SUPABASE_SERVIC…' but got 'supabase.from(...).select is not a fu…'
+   × saveTeamMemberProfileForUser > throws when forced carrier owner full bootstrap needs admin but access is missing 4ms
+     → expected [Function] to throw error including 'Carrier save requires SUPABASE_SERVIC…' but got 'supabase.from(...).select is not a fu…'
+   × saveTeamMemberProfileForUser > runs ensureOrganizationBootstrap on admin client for forced carrier owner carrier_only 2ms
+     → supabase.from(...).select is not a function
+   × saveTeamMemberProfileForUser bootstrap gate > mirrors validateBootstrapCarrierSaveRoles before carrier_only upsert when actor lacks organization_id 6ms
+     → expected 'import { createClient } from \'@supab…' to match /!actorProfile \|\| !actorProfile\.org…/
+   ✓ saveTeamMemberProfileForUser bootstrap gate > auto-assigns Owner / Admin before bootstrap carrier validation 1ms
+   ✓ deleteTeamMemberForUser > allows Owner to directly delete a team member 3ms
+   ✓ deleteTeamMemberForUser > allows Admin to directly delete a team member 1ms
+   ✓ deleteTeamMemberForUser > creates a deletion request for Permit Clerk instead of direct delete 2ms
+   ✓ deleteTeamMemberForUser > forbids Viewer from deleting team members 2ms
+   ✓ carrier-only save payload integration > preserves organization_id and company_name through scoped form and upsert prep 1ms
+   ✓ carrier-only save payload integration > bootstraps organization_id when no existing profile row 1ms
+   ✓ createOrUpdateRosterMemberForUser > inserts roster member with permissions payload for new team member save 3ms
+   ✓ createOrUpdateRosterMemberForUser > inserts roster member without explicit permissions and relies on DB default 2ms
+   ✓ createOrUpdateRosterMemberForUser > updates roster member with permissions payload 2ms
+   ✓ createOrUpdateRosterMemberForUser > writes permissions for primary owner without Owner/Admin role in user_roles 1ms
+     14|   const { data: linkedRoster, error: linkedError } = await supabase
+     15|     .from('team_member_profiles')
+     16|     .select('*')
+       |      ^
+     17|     .eq('linked_user_id', userId)
+     18|     .order('updated_at', { ascending: false })
+
+ Test Files  2 failed | 3 passed (5)
+      Tests  16 failed | 203 passed (219)
+   Start at  19:25:39
+   Duration  1.72s (transform 1.08s, setup 0ms, collect 1.99s, tests 313ms, environment 7ms, prepare 1.35s)
+
+ ❯ Module.saveTeamMemberProfileForUser lib/team-member-profiles-api.ts:330:7
+ ❯ lib/team-member-profiles-api.test.ts:693:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/16]⎯
+
+ FAIL  lib/team-member-profiles-api.test.ts > saveTeamMemberProfileForUser > allows forced carrier owner full save via admin upsert when promoting org-linked non-primary owner
+TypeError: supabase.from(...).select is not a function
+ ❯ fetchLinkedTeamMemberRoster lib/roster-profile-link.ts:16:6
+     14|   const { data: linkedRoster, error: linkedError } = await supabase
+     15|     .from('team_member_profiles')
+     16|     .select('*')
+       |      ^
+     17|     .eq('linked_user_id', userId)
+     18|     .order('updated_at', { ascending: false })
+ ❯ Module.saveTeamMemberProfileForUser lib/team-member-profiles-api.ts:330:7
+ ❯ lib/team-member-profiles-api.test.ts:748:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/16]⎯
+
+ FAIL  lib/team-member-profiles-api.test.ts > saveTeamMemberProfileForUser > throws when forced carrier owner needs promotion but admin access is missing
+AssertionError: expected [Function] to throw error including 'Carrier save requires SUPABASE_SERVIC…' but got 'supabase.from(...).select is not a fu…'
+
+Expected: "Carrier save requires SUPABASE_SERVICE_ROLE_KEY on server for account promotion."
+Received: "supabase.from(...).select is not a function"
+
+ ❯ lib/team-member-profiles-api.test.ts:780:5
+    778|     })
+    779| 
+    780|     await expect(
+       |     ^
+    781|       saveTeamMemberProfileForUser('token', {
+    782|         form: { ...emptyMemberProfileForm(), company_name: 'Needs Admi…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/16]⎯
+
+ FAIL  lib/team-member-profiles-api.test.ts > saveTeamMemberProfileForUser > throws when forced carrier owner full bootstrap needs admin but access is missing
+AssertionError: expected [Function] to throw error including 'Carrier save requires SUPABASE_SERVIC…' but got 'supabase.from(...).select is not a fu…'
+
+Expected: "Carrier save requires SUPABASE_SERVICE_ROLE_KEY on server for account promotion."
+Received: "supabase.from(...).select is not a function"
+
+ ❯ lib/team-member-profiles-api.test.ts:805:5
+    803|     })
+    804| 
+    805|     await expect(
+       |     ^
+    806|       saveTeamMemberProfileForUser('token', {
+    807|         form: {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/16]⎯
+
+ FAIL  lib/team-member-profiles-api.test.ts > saveTeamMemberProfileForUser > runs ensureOrganizationBootstrap on admin client for forced carrier owner carrier_only
+TypeError: supabase.from(...).select is not a function
+ ❯ fetchLinkedTeamMemberRoster lib/roster-profile-link.ts:16:6
+     14|   const { data: linkedRoster, error: linkedError } = await supabase
+     15|     .from('team_member_profiles')
+     16|     .select('*')
+       |      ^
+     17|     .eq('linked_user_id', userId)
+     18|     .order('updated_at', { ascending: false })
+ ❯ Module.saveTeamMemberProfileForUser lib/team-member-profiles-api.ts:330:7
+ ❯ lib/team-member-profiles-api.test.ts:859:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/16]⎯
+
+ FAIL  lib/team-member-profiles-api.test.ts > saveTeamMemberProfileForUser bootstrap gate > mirrors validateBootstrapCarrierSaveRoles before carrier_only upsert when actor lacks organization_id
+AssertionError: expected 'import { createClient } from \'@supab…' to match /!actorProfile \|\| !actorProfile\.org…/
+
+- Expected: 
+/!actorProfile \|\| !actorProfile\.organization_id[\s\S]*validateBootstrapSelfSave\(formForSave\)/
+
++ Received: 
+"import { createClient } from '@supabase/supabase-js'
+import { hasAdminAccess, supabaseAdmin } from '@/lib/supabase'
+import {
+  canDeleteMember,
+  canEditMember,
+  canManageMemberPermissions,
+  canWriteTeamData,
+  isPrimaryOwner,
+  parseTeamMemberPermissions,
+} from '@/lib/member-profile-permissions'
+import { isForcedCarrierOwner } from '@/lib/forced-carrier-owner'
+import {
+  applySelfSaveScope,
+  buildMemberProfileSavePayloadWithoutCarrier,
+  canSelfEditRoles,
+  ensureBootstrapOwnerRoles,
+  hasOwnerOrAdminRole,
+  logCarrierSaveDebug,
+  memberProfileFromRow,
+  memberProfileToUpsertPayloadWithoutCarrier,
+  needsPrimaryOwnerBootstrap,
+  normalizeBootstrapSelfRoles,
+  prepareMemberProfileSave,
+  rejectNonBootstrapOwnerRoles,
+  teamMemberProfileToPayloadWithoutCarrier,
+  validateBootstrapCarrierOnlySave,
+  validateBootstrapCarrierSaveRoles,
+  validateBootstrapSelfSave,
+  validateUserRoles,
+  type MemberProfileSaveScope,
+} from '@/lib/member-profile'
+import {
+  fetchLinkedTeamMemberRoster,
+  fetchOrganizationMembershipForUser,
+} from '@/lib/roster-profile-link'
+import { createDeletionRequest } from '@/lib/deletion-requests'
+import {
+  canActorRequestMemberDeletion,
+  mapMemberSourceToResourceType,
+  parseMemberPermissionConfig,
+} from '@/lib/team-permissions'
+import {
+  applyDriverRestrictedFieldBaseline,
+  isDriverSelfServiceActor,
+} from '@/lib/profile-field-permissions'
+import type { MemberProfile, MemberProfileFormData } from '@/types/member-profile'
+import type { OrganizationRole } from '@/types/organization'
+
+function getSupabaseUrl(): string {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!url) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
+  return url
+}
+
+function getSupabaseAnonKey(): string {
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!key) throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY')
+  return key
+}
+
+function primaryRoleFromUserRoles(
+  roles: string[] | undefined,
+  options?: { isPrimaryOwner?: boolean }
+): OrganizationRole {
+  const validated = validateUserRoles(roles, options)
+  if (validated.includes('Owner')) return 'Owner'
+  if (validated.includes('Admin')) return 'Admin'
+  if (validated.includes('Permit Clerk')) return 'Permit Clerk'
+  if (validated.includes('Driver')) return 'Driver'
+  if (validated.includes('Viewer')) return 'Viewer'
+  return 'Viewer'
+}
+
+async function syncOrganizationMembershipForMember(
+  supabase: ReturnType<typeof createAuthedSupabaseClient>,
+  organizationId: string,
+  userId: string,
+  roles: string[] | undefined,
+  permissions?: unknown
+): Promise<void> {
+  const { error } = await supabase.from('organization_memberships').upsert(
+    {
+      organization_id: organizationId,
+      user_id: userId,
+      role: primaryRoleFromUserRoles(roles),
+      is_primary_owner: false,
+      permissions: parseMemberPermissionConfig(permissions ?? { mode: 'global' }),
+    },
+    { onConflict: 'organization_id,user_id' }
+  )
+
+  if (error) throw new Error(error.message)
+}
+
+async function removeOrganizationMembership(
+  supabase: ReturnType<typeof createAuthedSupabaseClient>,
+  organizationId: string,
+  userId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('organization_memberships')
+    .delete()
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+
+  if (error) throw new Error(error.message)
+}
+
+type OrganizationWriteClient = ReturnType<typeof createAuthedSupabaseClient>
+
+function isNewOrganizationBootstrap(
+  payload: Record<string, unknown>,
+  actorProfile: MemberProfile | null
+): boolean {
+  return (
+    payload.is_primary_owner === true &&
+    typeof payload.organization_id === 'string' &&
+    !actorProfile?.organization_id
+  )
+}
+
+/** Creates the organizations row before member_profiles FK insert on first Owner bootstrap. */
+export async function ensureOrganizationRecord(
+  supabase: OrganizationWriteClient,
+  userId: string,
+  organizationId: string,
+  profile: Pick<MemberProfile, 'company_name' | 'usdot_number' | 'mc_number'>
+): Promise<void> {
+  const { error: orgError } = await supabase.from('organizations').upsert(
+    {
+      id: organizationId,
+      name: profile.company_name,
+      usdot_number: profile.usdot_number,
+      mc_number: profile.mc_number,
+      created_by_user_id: userId,
+    },
+    { onConflict: 'id' }
+  )
+
+  if (orgError) throw new Error(orgError.message)
+}
+
+async function ensureOrganizationMembership(
+  supabase: OrganizationWriteClient,
+  userId: string,
+  profile: MemberProfile
+): Promise<void> {
+  const { error: membershipError } = await supabase.from('organization_memberships').upsert(
+    {
+      organization_id: profile.organization_id,
+      user_id: userId,
+      role: primaryRoleFromUserRoles(profile.user_roles as string[] | undefined, {
+        isPrimaryOwner: true,
+      }),
+      is_primary_owner: true,
+      permissions: { mode: 'global' },
+    },
+    { onConflict: 'organization_id,user_id' }
+  )
+
+  if (membershipError) throw new Error(membershipError.message)
+}
+
+export async function ensureOrganizationBootstrap(
+  supabase: OrganizationWriteClient,
+  userId: string,
+  profile: MemberProfile,
+  options?: { organizationRecordExists?: boolean; isNewBootstrap?: boolean }
+): Promise<void> {
+  if (!profile.organization_id || !profile.is_primary_owner) return
+
+  if (!options?.organizationRecordExists) {
+    await ensureOrganizationRecord(supabase, userId, profile.organization_id, profile)
+  }
+
+  const membershipClient =
+    options?.isNewBootstrap && hasAdminAccess && supabaseAdmin ? supabaseAdmin : supabase
+
+  await ensureOrganizationMembership(membershipClient, userId, profile)
+}
+
+export function createAuthedSupabaseClient(token: string) {
+  return createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false },
+  })
+}
+
+export async function getAuthenticatedMemberProfile(token: string): Promise<{
+  supabase: ReturnType<typeof createAuthedSupabaseClient>
+  userId: string
+  profile: MemberProfile
+}> {
+  const supabase = createAuthedSupabaseClient(token)
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError || !userData.user) {
+    throw new Error('Unauthorized – invalid token')
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from('member_profiles')
+    .select('*')
+    .eq('user_id', userData.user.id)
+    .maybeSingle()
+
+  if (profileError || !profile) {
+    throw new Error('Member profile not found')
+  }
+
+  return {
+    supabase,
+    userId: userData.user.id,
+    profile: profile as MemberProfile,
+  }
+}
+
+function normalizeSaveScope(raw: unknown): MemberProfileSaveScope {
+  if (raw === 'carrier_only' || raw === 'member_only' || raw === 'full') {
+    return raw
+  }
+  return 'full'
+}
+
+/** Forced-owner self-saves that promote to primary owner or bootstrap an org need the admin client. */
+function forcedCarrierOwnerNeedsAdminPromotion(
+  actorProfile: MemberProfile | null
+): boolean {
+  if (!actorProfile) return true
+  if (!actorProfile.organization_id) return true
+  if (!actorProfile.is_primary_owner) return true
+  return false
+}
+
+/** Bootstrap (null actor), primary owners, and Owner/Admin role holders may save carrier_only. */
+export function canActorSaveCarrierOnlyScope(
+  actorProfile: MemberProfile | null,
+  form?: Pick<MemberProfileFormData, 'user_roles'>,
+  actorEmail?: string | null
+): boolean {
+  if (isForcedCarrierOwner(actorEmail)) return true
+  if (!actorProfile) return true
+  if (isPrimaryOwner(actorProfile)) return true
+  if (hasOwnerOrAdminRole(actorProfile.user_roles as string[] | undefined)) return true
+  if (
+    !actorProfile.organization_id &&
+    form &&
+    hasOwnerOrAdminRole(form.user_roles as string[] | undefined)
+  ) {
+    return true
+  }
+  return false
+}
+
+export function selfSaveFormForActor(
+  form: MemberProfileFormData,
+  actorProfile: MemberProfile | null,
+  saveScope: MemberProfileSaveScope
+): MemberProfileFormData {
+  const rolesAllowed = !actorProfile || canSelfEditRoles(actorProfile)
+  let formWithRoles = rolesAllowed
+    ? form
+    : {
+        ...form,
+        user_roles: validateUserRoles(actorProfile?.user_roles as string[] | undefined),
+      }
+
+  let effectiveScope = saveScope
+  if (actorProfile && isDriverSelfServiceActor(actorProfile)) {
+    if (saveScope === 'full') {
+      effectiveScope = 'member_only'
+    }
+    if (effectiveScope !== 'carrier_only') {
+      formWithRoles = applyDriverRestrictedFieldBaseline(
+        formWithRoles,
+        memberProfileFromRow(actorProfile)
+      )
+    }
+  }
+
+  return applySelfSaveScope(formWithRoles, actorProfile, effectiveScope)
+}
+
+export async function saveTeamMemberProfileForUser(
+  token: string,
+  body: {
+    id?: string
+    form: MemberProfileFormData
+    targetUserId?: string
+    linkedUserId?: string | null
+    saveScope?: MemberProfileSaveScope
+    permissions?: unknown
+  }
+) {
+  const supabase = createAuthedSupabaseClient(token)
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError || !userData.user) {
+    throw new Error('Unauthorized – invalid token')
+  }
+
+  const userId = userData.user.id
+  const actorEmail = userData.user.email
+  const forcedCarrierOwner = isForcedCarrierOwner(actorEmail)
+  const { data: actorProfileRow, error: profileError } = await supabase
+    .from('member_profiles')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (profileError) {
+    throw new Error(profileError.message)
+  }
+
+  const actorProfile = (actorProfileRow as MemberProfile | null) ?? null
+  const targetUserId = body.targetUserId?.trim()
+  const editingSelf = !targetUserId || targetUserId === userId
+
+  if (editingSelf) {
+    const saveScope = normalizeSaveScope(body.saveScope)
+    if (
+      actorProfile &&
+      !canWriteTeamData(actorProfile) &&
+      !(forcedCarrierOwner && saveScope === 'carrier_only')
+    ) {
+      throw new Error('Forbidden – viewer accounts cannot edit profiles')
+    }
+
+    let formForSave = selfSaveFormForActor(body.form, actorProfile, saveScope)
+
+    const [linkedRoster, organizationMembership] = await Promise.all([
+      fetchLinkedTeamMemberRoster(supabase, userId, actorEmail),
+      fetchOrganizationMembershipForUser(supabase, userId),
+    ])
+
+    const shouldBootstrap = needsPrimaryOwnerBootstrap({
+      actorEmail,
+      ownProfile: actorProfile,
+      linkedRoster,
+      organizationMembership,
+    })
+
+    if (shouldBootstrap) {
+      if (saveScope === 'full') {
+        const bootstrapValidation = validateBootstrapSelfSave(formForSave)
+        if (bootstrapValidation.ok === false) {
+          throw new Error(bootstrapValidation.message)
+        }
+        formForSave = normalizeBootstrapSelfRoles(bootstrapValidation.form, actorProfile)
+      } else {
+        const carrierValidation = validateBootstrapCarrierOnlySave(formForSave)
+        if (carrierValidation.ok === false) {
+          throw new Error(carrierValidation.message)
+        }
+        formForSave = normalizeBootstrapSelfRoles(carrierValidation.form, actorProfile)
+      }
+
+      const roleCheck = validateBootstrapCarrierSaveRoles(formForSave, actorProfile, actorEmail)
+      if (roleCheck.ok === false) {
+        throw new Error(roleCheck.message)
+      }
+    } else if (!actorProfile?.organization_id && (linkedRoster || organizationMembership)) {
+      const orgId =
+        linkedRoster?.organization_id ?? organizationMembership?.organization_id ?? null
+      if (orgId) {
+        const rosterRoles = linkedRoster
+          ? validateUserRoles(linkedRoster.user_roles as string[] | undefined)
+          : organizationMembership?.role
+            ? validateUserRoles([organizationMembership.role])
+            : validateUserRoles(formForSave.user_roles as string[] | undefined)
+        if (!formForSave.user_roles?.length && rosterRoles.length > 0) {
+          formForSave = { ...formForSave, user_roles: rosterRoles }
+        }
+      }
+    } else if (saveScope === 'carrier_only' && forcedCarrierOwner) {
+      formForSave = ensureBootstrapOwnerRoles(formForSave)
+    }
+
+    if (
+      saveScope === 'carrier_only' &&
+      !canActorSaveCarrierOnlyScope(actorProfile, formForSave, actorEmail)
+    ) {
+      throw new Error(
+        'Forbidden – only primary owners or Owner/Admin accounts can save carrier-only updates'
+      )
+    }
+
+    const payload = prepareMemberProfileSave(formForSave, userId, actorProfile, actorEmail)
+
+    if (
+      !shouldBootstrap &&
+      !actorProfile?.organization_id &&
+      !payload.organization_id &&
+      (linkedRoster?.organization_id || organizationMembership?.organization_id)
+    ) {
+      payload.organization_id =
+        linkedRoster?.organization_id ?? organizationMembership?.organization_id
+      payload.is_primary_owner = false
+    }
+
+    if (saveScope === 'carrier_only') {
+      logCarrierSaveDebug('server before upsert', {
+        actorOrgId: actorProfile?.organization_id ?? null,
+        payloadOrgId: payload.organization_id ?? null,
+        company_name: payload.company_name ?? null,
+        save_scope: saveScope,
+      })
+    }
+
+    const needsAdminPromotion =
+      forcedCarrierOwner && forcedCarrierOwnerNeedsAdminPromotion(actorProfile)
+
+    if (needsAdminPromotion && !(hasAdminAccess && supabaseAdmin)) {
+      throw new Error(
+        'Carrier save requires SUPABASE_SERVICE_ROLE_KEY on server for account promotion.'
+      )
+    }
+
+    const upsertClient =
+      forcedCarrierOwner && hasAdminAccess && supabaseAdmin ? supabaseAdmin : supabase
+
+    const bootstrappingNewOrg = isNewOrganizationBootstrap(payload, actorProfile)
+    if (bootstrappingNewOrg) {
+      await ensureOrganizationRecord(
+        upsertClient,
+        userId,
+        payload.organization_id as string,
+        {
+          company_name: String(payload.company_name ?? ''),
+          usdot_number: payload.usdot_number as string | undefined,
+          mc_number: payload.mc_number as string | undefined,
+        }
+      )
+    }
+
+    const { data, error } = await upsertClient
+      .from('member_profiles')
+      .upsert(payload, { onConflict: 'user_id' })
+      .select('*')
+      .single()
+
+    if (error) throw new Error(error.message)
+
+    if (saveScope === 'carrier_only') {
+      const saved = data as MemberProfile
+      logCarrierSaveDebug('server after upsert', {
+        actorOrgId: actorProfile?.organization_id ?? null,
+        payloadOrgId: payload.organization_id ?? null,
+        savedOrgId: saved.organization_id ?? null,
+        company_name: saved.company_name ?? null,
+      })
+    }
+
+    await ensureOrganizationBootstrap(upsertClient, userId, data as MemberProfile, {
+      organizationRecordExists: bootstrappingNewOrg,
+      isNewBootstrap: bootstrappingNewOrg,
+    })
+
+    if (
+      !shouldBootstrap &&
+      typeof payload.organization_id === 'string' &&
+      (linkedRoster || organizationMembership)
+    ) {
+      await syncOrganizationMembershipForMember(
+        supabase,
+        payload.organization_id,
+        userId,
+        (data as MemberProfile).user_roles as string[] | undefined
+      )
+    }
+
+    return { source: 'member_profile' as const, data }
+  }
+
+  if (!actorProfile?.organization_id) {
+    throw new Error('Organization not configured for this account')
+  }
+
+  if (!canEditMember(actorProfile, { user_id: targetUserId, is_self: false })) {
+    throw new Error('Forbidden – cannot edit this team member')
+  }
+
+  const scopedForm = buildMemberProfileSavePayloadWithoutCarrier(body.form, actorProfile)
+  rejectNonBootstrapOwnerRoles(scopedForm.user_roles as string[])
+
+  const payload = memberProfileToUpsertPayloadWithoutCarrier(scopedForm, targetUserId, actorProfile)
+  payload.organization_id = actorProfile.organization_id
+  payload.is_primary_owner = false
+
+  const { data, error } = await supabase
+    .from('member_profiles')
+    .upsert(payload, { onConflict: 'user_id' })
+    .select('*')
+    .single()
+
+  if (error) throw new Error(error.message)
+
+  const membershipPermissions =
+    body.permissions !== undefined && canManageMemberPermissions(actorProfile)
+      ? parseTeamMemberPermissions(body.permissions)
+      : undefined
+
+  await syncOrganizationMembershipForMember(
+    supabase,
+    actorProfile.organization_id,
+    targetUserId,
+    scopedForm.user_roles as string[],
+    membershipPermissions
+  )
+
+  return { source: 'member_profile' as const, data }
+}
+
+export async function createOrUpdateRosterMemberForUser(
+  token: string,
+  body: {
+    id?: string
+    form: MemberProfileFormData
+    linkedUserId?: string | null
+    permissions?: unknown
+  }
+) {
+  const { supabase, userId, profile: actorProfile } = await getAuthenticatedMemberProfile(token)
+
+  if (!canManageMemberPermissions(actorProfile) && !isPrimaryOwner(actorProfile)) {
+    throw new Error('Forbidden – only owners and admins can manage roster members')
+  }
+
+  if (!actorProfile.organization_id) {
+    throw new Error('Organization not configured for this account')
+  }
+
+  const linkedUserId = body.linkedUserId?.trim() || null
+  if (linkedUserId) {
+    await assertLinkedUserInOrganization(supabase, actorProfile.organization_id, linkedUserId)
+  }
+
+  const scopedForm = buildMemberProfileSavePayloadWithoutCarrier(body.form, actorProfile)
+  rejectNonBootstrapOwnerRoles(scopedForm.user_roles as string[])
+
+  const payload = teamMemberProfileToPayloadWithoutCarrier(
+    scopedForm,
+    actorProfile.organization_id,
+    userId,
+    actorProfile,
+    linkedUserId
+  )
+
+  if (
+    body.permissions !== undefined &&
+    (canManageMemberPermissions(actorProfile) || isPrimaryOwner(actorProfile))
+  ) {
+    payload.permissions = parseTeamMemberPermissions(body.permissions)
+  }
+
+  if (body.id) {
+    const { created_by_user_id: _createdBy, ...updatePayload } = payload
+
+    const { data, error } = await supabase
+      .from('team_member_profiles')
+      .update(updatePayload)
+      .eq('id', body.id)
+      .eq('organization_id', actorProfile.organization_id)
+      .select('*')
+      .single()
+
+    if (error) throw new Error(error.message)
+
+    if (linkedUserId && updatePayload.permissions) {
+      await syncOrganizationMembershipForMember(
+        supabase,
+        actorProfile.organization_id,
+        linkedUserId,
+        scopedForm.user_roles as string[],
+        updatePayload.permissions
+      )
+    }
+
+    return { source: 'team_member_profile' as const, data }
+  }
+
+  const { data, error } = await supabase
+    .from('team_member_profiles')
+    .insert(payload)
+    .select('*')
+    .single()
+
+  if (error) throw new Error(error.message)
+
+  if (linkedUserId && payload.permissions) {
+    await syncOrganizationMembershipForMember(
+      supabase,
+      actorProfile.organization_id,
+      linkedUserId,
+      scopedForm.user_roles as string[],
+      payload.permissions
+    )
+  }
+
+  return { source: 'team_member_profile' as const, data }
+}
+
+export async function deleteTeamMemberForUser(
+  token: string,
+  body: {
+    source: 'member_profile' | 'team_member_profile'
+    id: string
+    userId?: string
+  }
+) {
+  const { supabase, userId, profile: actorProfile } = await getAuthenticatedMemberProfile(token)
+
+  const target = {
+    user_id: body.userId ?? null,
+    is_self: body.userId === userId,
+    is_primary_owner: false,
+    user_roles: [] as string[],
+  }
+
+  if (body.source === 'member_profile' && body.userId) {
+    const { data: targetProfile } = await supabase
+      .from('member_profiles')
+      .select('is_primary_owner, user_roles')
+      .eq('user_id', body.userId)
+      .eq('organization_id', actorProfile.organization_id)
+      .maybeSingle()
+
+    if (targetProfile) {
+      target.is_primary_owner = targetProfile.is_primary_owner === true
+      target.user_roles = (targetProfile.user_roles as string[]) ?? []
+    }
+  }
+
+  const resourceType = mapMemberSourceToResourceType(body.source)
+  const resourceId = body.source === 'member_profile' ? (body.userId ?? body.id) : body.id
+
+  if (canActorRequestMemberDeletion(actorProfile, target, resourceType)) {
+    const request = await createDeletionRequest(supabase, actorProfile, {
+      resourceType,
+      resourceId,
+      targetUserId: body.userId ?? null,
+      source: body.source,
+    })
+    return { deleted: false, source: body.source, deletion_request: request }
+  }
+
+  if (!canDeleteMember(actorProfile, target)) {
+    throw new Error('Forbidden – cannot delete this team member')
+  }
+
+  if (body.source === 'member_profile') {
+    if (!body.userId) {
+      throw new Error('userId is required to delete a member profile')
+    }
+
+    const { error } = await supabase
+      .from('member_profiles')
+      .delete()
+      .eq('user_id', body.userId)
+      .eq('organization_id', actorProfile.organization_id)
+
+    if (error) throw new Error(error.message)
+
+    await removeOrganizationMembership(supabase, actorProfile.organization_id, body.userId)
+    return { deleted: true, source: body.source }
+  }
+
+  const { error } = await supabase
+    .from('team_member_profiles')
+    .delete()
+    .eq('id', body.id)
+    .eq('organization_id', actorProfile.organization_id)
+
+  if (error) throw new Error(error.message)
+  return { deleted: true, source: body.source }
+}
+
+async function assertLinkedUserInOrganization(
+  supabase: ReturnType<typeof createAuthedSupabaseClient>,
+  organizationId: string,
+  linkedUserId: string
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('member_profiles')
+    .select('user_id')
+    .eq('organization_id', organizationId)
+    .eq('user_id', linkedUserId)
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  if (!data) {
+    throw new Error('Forbidden – linked user is not a member of this organization')
+  }
+}
+
+export function parseMemberProfileForm(body: Record<string, unknown>): MemberProfileFormData {
+  const roles = validateUserRoles(
+    Array.isArray(body.user_roles) ? body.user_roles.map(String) : []
+  )
+
+  return {
+    company_name: String(body.company_name ?? ''),
+    usdot_number: String(body.usdot_number ?? ''),
+    mc_number: String(body.mc_number ?? ''),
+    ein: String(body.ein ?? ''),
+    carrier_address: String(body.carrier_address ?? ''),
+    carrier_phone: String(body.carrier_phone ?? ''),
+    carrier_email: String(body.carrier_email ?? ''),
+    insurance_contact: String(body.insurance_contact ?? ''),
+    driver_full_name: String(body.driver_full_name ?? ''),
+    cdl_number: String(body.cdl_number ?? ''),
+    cdl_state: String(body.cdl_state ?? ''),
+    date_of_birth: String(body.date_of_birth ?? ''),
+    driver_phone: String(body.driver_phone ?? ''),
+    driver_email: String(body.driver_email ?? ''),
+    emergency_contact: String(body.emergency_contact ?? ''),
+    user_roles: roles,
+  }
+}"
+
+ ❯ lib/team-member-profiles-api.test.ts:893:20
+    891|     expect(source).toContain('validateBootstrapSelfSave')
+    892|     expect(source).toContain('validateBootstrapCarrierOnlySave')
+    893|     expect(source).toMatch(
+       |                    ^
+    894|       /!actorProfile \|\| !actorProfile\.organization_id[\s\S]*validat…
+    895|     )
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/16]⎯
+
+ FAIL  app/profile/profile-ui.test.ts > Profile page UI > implements driver restricted field permissions and change request flow
+AssertionError: expected 'async function handleSave(e: React.Fo…' to match /let formForSave = form[\s\S]*applyDri…/
+
+- Expected: 
+/let formForSave = form[\s\S]*applyDriverRestrictedFieldBaseline\(form, memberProfileFromRow\(effectiveOwnProfile\)\)[\s\S]*buildSavePayloadForTarget\(priorTarget, formForSave/
+
++ Received: 
+"async function handleSave(e: React.FormEvent, options?: { andInvite?: boolean }) {
+    e.preventDefault()
+    const forcedCarrierOwner = isForcedCarrierOwner(user?.email)
+    if (!user || (!forcedCarrierOwner && !canWriteTeamData(effectiveOwnProfile))) return
+    if (savingCarrier || savingProfile) return
+
+    if (editingTarget.kind === 'member_profile') {
+      const targetMember = teamMembers.find(
+        (member) => member.source === 'member_profile' && member.user_id === editingTarget.userId
+      )
+      if (
+        !effectiveOwnProfile ||
+        !targetMember ||
+        !canEditMember(effectiveOwnProfile, targetMember)
+      ) {
+        setSaveMessage({ type: 'error', text: 'You do not have permission to edit this team member.' })
+        return
+      }
+    }
+
+    const priorTarget = editingTarget
+    const priorMemberKey = editingMemberKey
+    const priorDisplayName = editingDisplayName
+    const wasProfileBootstrap = isProfileBootstrap
+    let formForSave = form
+    if (wasProfileBootstrap && priorTarget.kind === 'self') {
+      const bootstrapValidation = validateBootstrapSelfSave(form)
+      if (bootstrapValidation.ok === false) {
+        setSaveMessage({ type: 'error', text: bootstrapValidation.message })
+        return
+      }
+      formForSave = bootstrapValidation.form
+      const roleCheck = validateBootstrapCarrierSaveRoles(formForSave, ownProfile, user?.email)
+      if (!forcedCarrierOwner && roleCheck.ok === false) {
+        setSaveMessage({ type: 'error', text: roleCheck.message })
+        return
+      }
+    } else if (
+      effectiveOwnProfile &&
+      isDriverSelfServiceActor(effectiveOwnProfile) &&
+      isEditingOwnProfileTarget()
+    ) {
+      formForSave = applyDriverRestrictedFieldBaseline(
+        form,
+        memberProfileFromRow(effectiveOwnProfile)
+      )
+    }
+    const savePayload = buildSavePayloadForTarget(priorTarget, formForSave, ownProfile)
+    const shouldInviteAfterSave =
+      Boolean(options?.andInvite) &&
+      priorTarget.kind === 'team_member_profile' &&
+      !priorTarget.id
+
+    if (shouldInviteAfterSave) {
+      const inviteEmail = formForSave.driver_email?.trim()
+      const invitePhone = formForSave.driver_phone?.trim()
+      if (!inviteEmail && !invitePhone) {
+        setSaveMessage({
+          type: 'error',
+          text: 'Add an email or phone number before saving and inviting.',
+        })
+        return
+      }
+    }
+
+    setSavingProfile(true)
+    if (shouldInviteAfterSave) setSavingAndInviting(true)
+    setSaveMessage(null)
+    setCarrierMessage(null)
+
+    const supabase = createClient()
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData.session?.access_token
+
+    try {
+      let savedOwnProfile: MemberProfile | null = null
+
+      if (!accessToken) throw new Error('Session expired. Please sign in again.')
+
+      const result = await saveViaApi(accessToken, savePayload)
+      if (!result.ok) throw new Error(result.error)
+      if (priorTarget.kind === 'self') {
+        savedOwnProfile = result.savedProfile ?? null
+      }
+
+      let submittedChangeCount = 0
+      let changeRequestError: string | null = null
+      try {
+        submittedChangeCount = await submitRestrictedFieldChangeRequests(accessToken, formForSave)
+      } catch (changeError) {
+        changeRequestError =
+          changeError instanceof Error
+            ? changeError.message
+            : 'Failed to submit profile changes for review.'
+      }
+
+      const profile = await refreshOwnProfileAfterSave(supabase, user.id, savedOwnProfile)
+      const wasEditingOther = priorTarget.kind !== 'self'
+      const updatedName = priorDisplayName?.trim() || 'team member'
+      setOwnProfile(profile)
+      if (profile) {
+        setLinkedRosterProfile(null)
+        setOrganizationMembership(null)
+      }
+      setLoadingMemberKey(null)
+      setCarrierFormExpanded(false)
+
+      const teamData = await loadTeamData(supabase, user.id, profile)
+
+      const createdNewRosterMember =
+        priorTarget.kind === 'team_member_profile' && !priorTarget.id && Boolean(result.savedRoster?.id)
+
+      if (createdNewRosterMember) {
+        setEditingTarget({ kind: 'self' })
+        setEditingDisplayName(null)
+        setEditingMemberKey(null)
+        setFormState(memberProfileFromRow(profile))
+      } else if (wasEditingOther) {
+        restoreEditingTargetAfterSave(
+          priorTarget,
+          priorMemberKey,
+          priorDisplayName,
+          profile,
+          teamData,
+          result.savedRoster?.id ?? null
+        )
+      } else {
+        setEditingTarget({ kind: 'self' })
+        setEditingDisplayName(null)
+        setEditingMemberKey(null)
+        setFormState(memberProfileFromRow(profile))
+      }
+
+      const reviewSuffix =
+        submittedChangeCount > 0
+          ? ` ${submittedChangeCount} field change${submittedChangeCount === 1 ? '' : 's'} submitted for admin review.`
+          : ''
+
+      const baseSuccessText = wasProfileBootstrap
+        ? 'Welcome! Your carrier account is ready.'
+        : createdNewRosterMember
+          ? 'New team member saved.'
+          : wasEditingOther
+            ? `Updated ${updatedName} successfully.${reviewSuffix}`
+            : `Profile saved successfully.${reviewSuffix}`
+
+      let finalText = baseSuccessText
+      let finalType: 'success' | 'error' | 'warning' = 'success'
+
+      if (shouldInviteAfterSave && accessToken) {
+        const inviteOutcome = await sendTeamInviteAfterMemberSave(
+          accessToken,
+          formForSave,
+          baseSuccessText
+        )
+        finalText = inviteOutcome.text
+        if (!inviteOutcome.ok) {
+          finalType = 'error'
+        } else if (changeRequestError) {
+          finalType = 'warning'
+          finalText = `${inviteOutcome.text} Review submission failed: ${changeRequestError}`
+        }
+      } else if (changeRequestError) {
+        finalType = 'warning'
+        finalText = `${baseSuccessText} Review submission failed: ${changeRequestError}`
+      }
+
+      setSaveMessage({
+        type: finalType,
+        text: finalText,
+      })
+
+      if (isDriverSelfServiceActor(profile)) {
+        await loadOwnPendingChangeRequests(supabase, user.id)
+      }
+      if (isPrimaryOwner(profile) && accessToken) {
+        await loadAdminPendingChangeRequests(accessToken)
+      }
+
+      if (!wasProfileBootstrap) {
+        requestAnimationFrame(() => {
+          teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        })
+      }
+    } catch (error) {
+      console.warn('profile save', error)
+      setSaveMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to save profile. Please try again.',
+      })
+    } finally {
+      setSavingProfile(false)
+      setSavingAndInviting(false)
+    }
+  }
+
+  "
+
+ ❯ app/profile/profile-ui.test.ts:447:25
+    445|     expect(source).toContain('buildRestrictedChangeRequestPayload')
+    446|     expect(source).not.toContain('baseline_profile')
+    447|     expect(saveHandler).toMatch(
+       |                         ^
+    448|       /let formForSave = form[\s\S]*applyDriverRestrictedFieldBaseline…
+    449|     )
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/16]⎯
+
+ FAIL  app/profile/profile-ui.test.ts > Profile page UI > uses separate saving flags with mutual exclusion across save actions
+AssertionError: expected 'async function handleSaveCarrierInfo(…' to match /async function handleSaveCarrierInfo[…/
+
+- Expected: 
+/async function handleSaveCarrierInfo[\s\S]*const formSnapshot = ensureBootstrapOwnerRoles\([\s\S]*setSavingCarrier\(true\)/
+
++ Received: 
+"async function handleSaveCarrierInfo(e: React.SyntheticEvent) {
+    e.preventDefault()
+    const formSnapshot = isProfileBootstrap
+      ? ensureBootstrapOwnerRoles({
+          ...form,
+          user_roles: [...form.user_roles],
+        })
+      : {
+          ...form,
+          user_roles: [...form.user_roles],
+        }
+    const actorEmail = user?.email
+    const forcedCarrierOwner = isForcedCarrierOwner(actorEmail)
+    if (!user || editingTarget.kind !== 'self') return
+    if (!forcedCarrierOwner && !canWriteTeamData(effectiveOwnProfile)) return
+    if (!canSaveCarrierInfo(effectiveOwnProfile, formSnapshot, actorEmail)) {
+      setCarrierMessage({ type: 'error', text: CARRIER_SAVE_FORBIDDEN_MESSAGE })
+      return
+    }
+    if (savingCarrier || savingProfile) return
+
+    const roleCheck = validateBootstrapCarrierSaveRoles(formSnapshot, ownProfile, actorEmail)
+    if (!forcedCarrierOwner && roleCheck.ok === false) {
+      setCarrierMessage({ type: 'error', text: roleCheck.message })
+      return
+    }
+
+    const wasProfileBootstrap = isProfileBootstrap
+
+    setSavingCarrier(true)
+    setCarrierMessage(null)
+    setSaveMessage(null)
+
+    const supabase = createClient()
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData.session?.access_token
+
+    try {
+      if (!accessToken) throw new Error('Session expired. Please sign in again.')
+
+      const carrierPayload = buildCarrierOnlyApiSavePayload(formSnapshot, ownProfile, actorEmail)
+      const apiPayload = {
+        source: 'member_profile',
+        save_scope: 'carrier_only' as const,
+        ...carrierPayload,
+      }
+      logCarrierSaveDebug('client before', {
+        keys: Object.keys(apiPayload),
+        organization_id: apiPayload.organization_id ?? null,
+        company_name: apiPayload.company_name,
+        save_scope: apiPayload.save_scope,
+      })
+
+      const result = await saveViaApi(accessToken, apiPayload)
+      logCarrierSaveDebug('client after', {
+        ok: result.ok,
+        error: result.error ?? null,
+        payloadOrgId: apiPayload.organization_id ?? null,
+        savedOrgId: result.savedProfile?.organization_id ?? null,
+        orgMatch: wasProfileBootstrap
+          ? null
+          : (apiPayload.organization_id ?? null) ===
+            (result.savedProfile?.organization_id ?? null),
+        savedCompanyName: result.savedProfile?.company_name ?? null,
+      })
+      if (!result.ok) {
+        throw new Error(result.error?.trim() || 'Failed to save carrier information.')
+      }
+
+      const refreshed = await refreshOwnProfileAfterSave(supabase, user.id, result.savedProfile)
+      const profile = mergeCarrierFieldsOntoProfile(refreshed, result.savedProfile)
+      setOwnProfile(profile)
+      if (profile) {
+        setLinkedRosterProfile(null)
+        setOrganizationMembership(null)
+      }
+      setFormState(memberProfileFromRow(profile))
+      setCarrierFormExpanded(false)
+      await loadTeamData(supabase, user.id, profile)
+      setCarrierMessage({
+        type: 'success',
+        text: wasProfileBootstrap
+          ? 'Carrier information saved. Finish setup from the profile completion prompt below.'
+          : 'Carrier information saved.',
+      })
+    } catch (error) {
+      logCarrierSaveWarn('client error', error)
+      setCarrierMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to save carrier information.',
+      })
+    } finally {
+      setSavingCarrier(false)
+    }
+  }
+
+  "
+
+ ❯ app/profile/profile-ui.test.ts:561:28
+    559|     expect(carrierHandler).toContain('logCarrierSaveWarn')
+    560|     expect(source).toContain('logCarrierSaveDebug')
+    561|     expect(carrierHandler).toMatch(
+       |                            ^
+    562|       /async function handleSaveCarrierInfo[\s\S]*const formSnapshot =…
+    563|     )
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/16]⎯
+

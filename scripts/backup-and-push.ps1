@@ -21,6 +21,7 @@ $script:ExcludeDirNames = @(
     "build",
     ".vercel",
     "__pycache__",
+    ".pytest_cache",
     ".venv",
     "dist",
     "coverage",
@@ -45,18 +46,15 @@ $script:ExcludeFileNames = @(
     "id_ed25519",
     "id_ed25519.pub",
     "credentials.json",
+    "secrets.json",
+    "production.env",
     ".npmrc"
 )
 
-$script:SecretNamePatterns = @(
-    '\.env',
-    '\.pem$',
-    '\.key$',
-    'credentials\.json$',
-    '^id_rsa$',
-    '^id_ed25519$',
-    '\.p12$',
-    '\.pfx$'
+$script:SecretScanBinaryExtensions = @(
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".zip", ".pdf",
+    ".exe", ".dll", ".woff", ".woff2", ".mp4", ".mp3", ".pyc", ".so",
+    ".db", ".sqlite", ".bin", ".dat"
 )
 
 $script:SecretContentPatterns = @(
@@ -66,7 +64,9 @@ $script:SecretContentPatterns = @(
     '(?i)DATABASE_URL\s*=\s*postgres(?:ql)?://\S+',
     '(?i)AWS_SECRET_ACCESS_KEY\s*=\s*\S{16,}',
     '(?i)GITHUB_TOKEN\s*=\s*(?:ghp_|github_pat_)\S+',
-    '(?i)api[_-]?key\s*[:=]\s*[''"][^''"]{20,}[''"]'
+    '(?i)api[_-]?key\s*[:=]\s*[''"][^''"]{20,}[''"]',
+    '(?i)//registry\.npmjs\.org/:_authToken=\S{20,}',
+    '(?i)_authToken=\S{20,}'
 )
 
 $script:SecretScanSkipPaths = @(
@@ -185,7 +185,7 @@ function Test-BackupExcluded {
     }
 
     $leaf = [System.IO.Path]::GetFileName($normalized)
-    if ($leaf -like ".env*") {
+    if ($leaf -like ".env*" -or $leaf -like "*.env") {
         return $true
     }
 
@@ -253,12 +253,13 @@ function Protect-BackupsDirectory {
     }
 
     $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $grantArg = "`"${currentUser}:(OI)(CI)F`""
     $aclResult = Invoke-External -Command @(
         "icacls",
         $BackupsDir,
         "/inheritance:r",
         "/grant:r",
-        "${currentUser}:(OI)(CI)F"
+        $grantArg
     ) -Quiet
 
     if ($aclResult.ExitCode -ne 0) {
@@ -267,6 +268,17 @@ function Protect-BackupsDirectory {
     }
 
     Write-Ok "Restricted backups/ folder ACL to $currentUser"
+}
+
+function Unquote-GitPath {
+    param([string]$Path)
+
+    $trimmed = $Path.Trim()
+    if ($trimmed.Length -ge 2 -and $trimmed.StartsWith('"') -and $trimmed.EndsWith('"')) {
+        return $trimmed.Substring(1, $trimmed.Length - 2)
+    }
+
+    return $trimmed
 }
 
 function Get-ChangedGitPaths {
@@ -278,20 +290,59 @@ function Get-ChangedGitPaths {
             continue
         }
 
-        $path = $null
-        if ($line.Length -ge 4) {
-            $path = $line.Substring(3).Trim()
-            if ($path -match ' -> ') {
-                $path = ($path -split ' -> ')[-1].Trim()
-            }
+        if ($line.Length -lt 3) {
+            continue
         }
 
-        if (-not [string]::IsNullOrWhiteSpace($path)) {
-            $paths.Add($path)
+        $pathPart = $line.Substring(3).Trim()
+        $resolvedPath = $null
+
+        if ($pathPart -match '^"([^"]+)"\s+->\s+"([^"]+)"$') {
+            $resolvedPath = $matches[2]
+        }
+        elseif ($pathPart -match '^(.+?)\s+->\s+(.+)$') {
+            $resolvedPath = Unquote-GitPath -Path $matches[2]
+        }
+        else {
+            $resolvedPath = Unquote-GitPath -Path $pathPart
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($resolvedPath)) {
+            $paths.Add($resolvedPath)
         }
     }
 
     return $paths.ToArray()
+}
+
+function Test-SensitiveFileName {
+    param([string]$RelativePath)
+
+    $leaf = [System.IO.Path]::GetFileName(($RelativePath -replace '\\', '/'))
+    if ($leaf -like ".env*" -or $leaf -like "*.env") {
+        return $true
+    }
+
+    if ($leaf -like "*.pem" -or $leaf -like "*.key" -or $leaf -like "*.p12" -or $leaf -like "*.pfx") {
+        return $true
+    }
+
+    if ($script:ExcludeFileNames -contains $leaf) {
+        return $true
+    }
+
+    return $false
+}
+
+function Test-IsBinaryScanExtension {
+    param([string]$RelativePath)
+
+    $extension = [System.IO.Path]::GetExtension($RelativePath)
+    if ([string]::IsNullOrWhiteSpace($extension)) {
+        return $false
+    }
+
+    return $script:SecretScanBinaryExtensions -contains $extension.ToLowerInvariant()
 }
 
 function Test-ChangedFilesForSecrets {
@@ -301,6 +352,7 @@ function Test-ChangedFilesForSecrets {
     )
 
     $findings = New-Object System.Collections.Generic.List[string]
+    $warnings = New-Object System.Collections.Generic.List[string]
 
     foreach ($relativePath in $ChangedPaths) {
         $normalizedForSkip = $relativePath -replace '\\', '/'
@@ -308,14 +360,17 @@ function Test-ChangedFilesForSecrets {
             continue
         }
 
-        $normalized = $relativePath -replace '/', '\'
-        foreach ($pattern in $script:SecretNamePatterns) {
-            if ($normalized -match $pattern) {
-                $findings.Add("sensitive filename: $relativePath")
-                break
-            }
+        if (Test-SensitiveFileName -RelativePath $relativePath) {
+            $findings.Add("sensitive filename: $relativePath")
+            continue
         }
 
+        if (Test-IsBinaryScanExtension -RelativePath $relativePath) {
+            $warnings.Add("skipped binary content scan: $relativePath")
+            continue
+        }
+
+        $normalized = $relativePath -replace '/', '\'
         $fullPath = Join-Path $ProjectRoot $normalized
         if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
             continue
@@ -331,11 +386,14 @@ function Test-ChangedFilesForSecrets {
             }
         }
         catch {
-            $findings.Add("could not scan: $relativePath ($($_.Exception.Message))")
+            $warnings.Add("could not scan: $relativePath ($($_.Exception.Message))")
         }
     }
 
-    return $findings.ToArray()
+    return [pscustomobject]@{
+        Findings = $findings.ToArray()
+        Warnings = $warnings.ToArray()
+    }
 }
 
 function Get-BackupCandidateFiles {
@@ -421,8 +479,11 @@ function New-ProjectBackupZip {
     $zip = $null
     try {
         $candidateResult = Get-BackupCandidateFiles -Directory $ProjectRoot -ProjectRoot $ProjectRoot
-        foreach ($enumError in $candidateResult.Errors) {
-            Write-Warn $enumError
+        if ($candidateResult.Errors.Count -gt 0) {
+            foreach ($enumError in $candidateResult.Errors) {
+                Write-Warn $enumError
+            }
+            throw "Backup enumeration failed with $($candidateResult.Errors.Count) error(s)."
         }
 
         if ($candidateResult.Files.Count -eq 0) {
@@ -473,7 +534,16 @@ function New-ProjectBackupZip {
         }
     }
 
-    Move-Item -LiteralPath $partialPath -Destination $ZipPath -Force
+    try {
+        Move-Item -LiteralPath $partialPath -Destination $ZipPath -Force
+    }
+    catch {
+        if (Test-Path $partialPath) {
+            Remove-Item -LiteralPath $partialPath -Force -ErrorAction SilentlyContinue
+        }
+        throw "Failed to finalize backup archive: $($_.Exception.Message)"
+    }
+
     return $added
 }
 
@@ -557,10 +627,13 @@ function Invoke-SafetyBackupWorkflow {
         }
 
         $changedPaths = Get-ChangedGitPaths -StatusText $statusResult.OutputText
-        $secretFindings = Test-ChangedFilesForSecrets -ProjectRoot $ProjectRoot -ChangedPaths $changedPaths
-        if ($secretFindings.Count -gt 0) {
+        $secretScan = Test-ChangedFilesForSecrets -ProjectRoot $ProjectRoot -ChangedPaths $changedPaths
+        foreach ($scanWarning in $secretScan.Warnings) {
+            Write-Warn $scanWarning
+        }
+        if ($secretScan.Findings.Count -gt 0) {
             Write-Fail "Aborting commit: potential secrets detected in changed files."
-            foreach ($finding in $secretFindings) {
+            foreach ($finding in $secretScan.Findings) {
                 Write-Host "    - $finding" -ForegroundColor Red
             }
             throw "Remove or gitignore sensitive files before running safety backup."
@@ -609,49 +682,48 @@ function Invoke-SafetyBackupWorkflow {
     Write-Step "Step 4/4: Supabase migrations"
 
     try {
-        $MigrationsDir = Join-Path $ProjectRoot (Join-Path "supabase" "migrations")
-        if (-not (Test-Path $MigrationsDir)) {
-            Write-Skip "No supabase/migrations folder found."
-            $script:MigrationOutcome = "skipped (no migrations folder)"
+        $ConfigToml = Join-Path $ProjectRoot (Join-Path "supabase" "config.toml")
+        if (-not (Test-Path $ConfigToml)) {
+            Write-Warn "supabase/config.toml not found - db push not attempted."
+            Write-Warn "Step 4 attempts migrations only when CLI is initialized and linked (expected until first-time setup)."
+            Write-SupabaseSetupInstructions
+            Write-Warn "Apply migrations manually in the Supabase SQL editor until CLI is linked."
+            $script:MigrationOutcome = "deferred (expected until init/login/link)"
         }
         else {
-            $migrationCount = (Get-ChildItem -Path $MigrationsDir -Filter "*.sql" -ErrorAction Stop).Count
-            Write-Ok "Found $migrationCount migration file(s) in supabase/migrations/"
-
-            $ConfigToml = Join-Path $ProjectRoot (Join-Path "supabase" "config.toml")
-            if (-not (Test-Path $ConfigToml)) {
-                Write-Warn "supabase/config.toml not found - Supabase CLI project not initialized."
-                Write-Warn "Migrations are deferred until the CLI is linked."
-                Write-SupabaseSetupInstructions
-                Write-Warn "Skipping db push. Apply migrations manually in the Supabase SQL editor if needed."
-                $script:MigrationOutcome = "deferred (run npx supabase init, login, link)"
+            $MigrationsDir = Join-Path $ProjectRoot (Join-Path "supabase" "migrations")
+            if (Test-Path $MigrationsDir) {
+                $migrationCount = (Get-ChildItem -Path $MigrationsDir -Filter "*.sql" -ErrorAction Stop).Count
+                Write-Ok "Found $migrationCount migration file(s) in supabase/migrations/"
             }
             else {
-                $npxCmd = Get-Command npx -ErrorAction SilentlyContinue
-                if (-not $npxCmd) {
-                    Write-Warn "npx not found. Install Node.js/npm to run Supabase CLI."
-                    Write-Warn "Skipping db push."
-                    $script:MigrationOutcome = "skipped (npx not found)"
-                }
-                else {
-                    Write-Host "  Running: npx supabase db push" -ForegroundColor DarkGray
-                    $pushResult = Invoke-External -Command @("npx", "supabase", "db", "push")
+                Write-Warn "No supabase/migrations folder found; db push may have nothing to apply."
+            }
 
-                    if ($pushResult.ExitCode -ne 0) {
-                        if (Test-SupabaseBenignError -OutputText $pushResult.OutputText) {
-                            Write-Warn "Supabase project is not linked or you are not logged in."
-                            Write-SupabaseSetupInstructions
-                            Write-Warn "Skipping db push (backup and git steps completed)."
-                            $script:MigrationOutcome = "deferred (not linked or not logged in)"
-                        }
-                        else {
-                            throw "npx supabase db push failed (exit $($pushResult.ExitCode)). $($pushResult.OutputText)"
-                        }
+            $npxCmd = Get-Command npx -ErrorAction SilentlyContinue
+            if (-not $npxCmd) {
+                Write-Warn "npx not found. Install Node.js/npm to run Supabase CLI."
+                Write-Warn "Skipping db push."
+                $script:MigrationOutcome = "skipped (npx not found)"
+            }
+            else {
+                Write-Host "  Running: npx supabase db push" -ForegroundColor DarkGray
+                $pushResult = Invoke-External -Command @("npx", "supabase", "db", "push")
+
+                if ($pushResult.ExitCode -ne 0) {
+                    if (Test-SupabaseBenignError -OutputText $pushResult.OutputText) {
+                        Write-Warn "Supabase project is not linked or you are not logged in."
+                        Write-SupabaseSetupInstructions
+                        Write-Warn "Skipping db push (backup and git steps completed)."
+                        $script:MigrationOutcome = "deferred (not linked or not logged in)"
                     }
                     else {
-                        Write-Ok "Supabase migrations pushed successfully."
-                        $script:MigrationOutcome = "pushed successfully"
+                        throw "npx supabase db push failed (exit $($pushResult.ExitCode)). $($pushResult.OutputText)"
                     }
+                }
+                else {
+                    Write-Ok "Supabase migrations pushed successfully."
+                    $script:MigrationOutcome = "pushed successfully"
                 }
             }
         }

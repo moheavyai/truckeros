@@ -1,10 +1,26 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import BrandedLoader from '@/components/BrandedLoader'
 import ErrorDisplay from '@/components/ErrorDisplay'
+import {
+  clearPostLoginRedirect,
+  DEFAULT_POST_LOGIN_PATH,
+  persistPostLoginRedirect,
+  readRedirectSearchParam,
+  resolveClientPostLoginPath,
+  resolvePostLoginRedirect,
+} from '@/lib/auth-redirect'
+import {
+  isExplicitPostLoginPath,
+  isIncompleteOnboarding,
+  ONBOARDING_PATH,
+  resolveAuthenticatedLandingPath,
+} from '@/lib/onboarding'
+import { fetchActorTeamContext } from '@/lib/roster-profile-link'
+import type { User } from '@supabase/supabase-js'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -13,42 +29,124 @@ export default function LoginPage() {
   const [checkingSession, setCheckingSession] = useState(true)
   const [authError, setAuthError] = useState<string | null>(null)
   const router = useRouter()
+  const redirectingRef = useRef(false)
 
-  // Detect placeholder Supabase config so we can warn the user before they hit network errors.
-  // These values come from .env.local at dev server startup (NEXT_PUBLIC_* are inlined for the client).
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
-  const isUsingPlaceholderEnv =
-    supabaseUrl.includes('your-project.supabase.co') ||
-    anonKey === 'your-anon-key' ||
-    anonKey.includes('your-anon-key')
+  /** Candidate from ?redirect= / storage only (no onboarding check yet). */
+  const candidatePostLoginPath = useMemo(() => {
+    if (typeof window === 'undefined') return DEFAULT_POST_LOGIN_PATH
+    return resolveClientPostLoginPath(window.location.search)
+  }, [])
+
+  const hasExplicitRedirect = useMemo(() => {
+    if (typeof window === 'undefined') return false
+    const queryRaw = readRedirectSearchParam(window.location.search)
+    if (queryRaw) {
+      const safe = resolvePostLoginRedirect(queryRaw, '')
+      if (safe && isExplicitPostLoginPath(safe)) return true
+    }
+    // Stored signup redirect is already folded into candidatePostLoginPath.
+    return isExplicitPostLoginPath(candidatePostLoginPath)
+  }, [candidatePostLoginPath])
+
+  /**
+   * After auth: honor invite/explicit redirects; otherwise send incomplete
+   * first-time accounts to Welcome/profile instead of Dashboard.
+   * Onboarding status unknown → fail-closed to profile (not dashboard).
+   */
+  const resolveLandingPath = useCallback(
+    async (user: User): Promise<string> => {
+      if (hasExplicitRedirect) {
+        return resolveAuthenticatedLandingPath({
+          candidatePath: candidatePostLoginPath,
+          incompleteOnboarding: false,
+          hasExplicitRedirect: true,
+        })
+      }
+
+      try {
+        const supabase = createClient()
+        const { data: profile, error: profileError } = await supabase
+          .from('member_profiles')
+          .select('organization_id, is_primary_owner, user_id')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (profileError) {
+          console.warn('[login] profile load failed', profileError)
+          // Fail-closed: unknown status → Welcome/profile, not Dashboard bounce.
+          return ONBOARDING_PATH
+        }
+
+        let linkedRoster = null
+        let organizationMembership = null
+        if (!profile?.organization_id) {
+          const teamContext = await fetchActorTeamContext(supabase, user.id, user.email)
+          linkedRoster = teamContext.linkedRoster
+          organizationMembership = teamContext.organizationMembership
+        }
+
+        const incomplete = isIncompleteOnboarding({
+          actorEmail: user.email,
+          ownProfile: profile ?? null,
+          linkedRoster,
+          organizationMembership,
+        })
+
+        return resolveAuthenticatedLandingPath({
+          candidatePath: candidatePostLoginPath,
+          incompleteOnboarding: incomplete,
+          hasExplicitRedirect: false,
+        })
+      } catch (error) {
+        console.warn('[login] onboarding landing resolution failed', error)
+        // Fail-closed to onboarding when status is unknown (Dashboard gate is a secondary recovery).
+        return ONBOARDING_PATH
+      }
+    },
+    [candidatePostLoginPath, hasExplicitRedirect]
+  )
+
+  const redirectAuthenticated = useCallback(
+    async (user: User) => {
+      if (redirectingRef.current) return
+      redirectingRef.current = true
+      try {
+        clearPostLoginRedirect()
+        const path = await resolveLandingPath(user)
+        router.push(path)
+      } catch (error) {
+        console.warn('[login] redirect failed', error)
+        redirectingRef.current = false
+        router.push(ONBOARDING_PATH)
+      }
+    },
+    [resolveLandingPath, router]
+  )
 
   /**
    * Redirect already-authenticated users away from the login page.
-   * This provides a consistent experience across the app:
-   * - Protected pages (/dashboard, /permit-test) redirect unauthenticated users to /login.
-   * - The login page redirects authenticated users to /dashboard.
+   * Honors a safe ?redirect= path (e.g. invite accept flow).
    */
   useEffect(() => {
     const supabase = createClient()
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        router.push('/dashboard')
+      if (session?.user) {
+        void redirectAuthenticated(session.user)
       } else {
         setCheckingSession(false)
       }
     })
 
     // Also listen for auth changes (e.g. user logs in via another tab)
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        router.push('/dashboard')
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        void redirectAuthenticated(session.user)
       }
     })
 
     return () => listener.subscription.unsubscribe()
-  }, [router])
+  }, [redirectAuthenticated])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,7 +156,7 @@ export default function LoginPage() {
     const supabase = createClient()
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
@@ -72,8 +170,8 @@ export default function LoginPage() {
       // before redirecting. This helps avoid "Invalid Refresh Token" errors.
       const { data: { session } } = await supabase.auth.getSession()
 
-      if (session) {
-        router.push('/dashboard')
+      if (session?.user) {
+        await redirectAuthenticated(session.user)
       } else {
         setAuthError('Login succeeded but no active session was found. Please try again or confirm your email if required.')
       }
@@ -101,9 +199,22 @@ export default function LoginPage() {
     const supabase = createClient()
 
     try {
+      // Keep invite (or other) redirect across email confirmation → login.
+      // Do not persist default dashboard — first login will route incomplete users to Welcome.
+      const pathToPersist = hasExplicitRedirect ? candidatePostLoginPath : null
+      persistPostLoginRedirect(pathToPersist)
+
+      const emailRedirectTo =
+        typeof window !== 'undefined'
+          ? pathToPersist
+            ? `${window.location.origin}/login?redirect=${encodeURIComponent(pathToPersist)}`
+            : `${window.location.origin}/login`
+          : undefined
+
       const { error } = await supabase.auth.signUp({
         email,
         password,
+        options: emailRedirectTo ? { emailRedirectTo } : undefined,
       })
 
       if (error) {
@@ -218,3 +329,12 @@ export default function LoginPage() {
     </div>
   )
 }
+
+// Detect placeholder Supabase config so we can warn the user before they hit network errors.
+// These values come from .env.local at dev server startup (NEXT_PUBLIC_* are inlined for the client).
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+const isUsingPlaceholderEnv =
+  supabaseUrl.includes('your-project.supabase.co') ||
+  anonKey === 'your-anon-key' ||
+  anonKey.includes('your-anon-key')

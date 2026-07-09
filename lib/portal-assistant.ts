@@ -8,7 +8,7 @@
 // Current: 49 states (all US except HI); selector is 100% dynamic from this const
 //
 // HOW TO ADD A NEW STATE (e.g. for the remaining 49; HI excluded by design):
-//   1. Add entry to STATE_PORTAL_CONFIGS below: { name, portalUrl, loginUrl?, instructions, fieldMapping, requiresVehicleInfo?, typicalRestrictions? }
+//   1. Add entry to STATE_PORTAL_CONFIGS below: { name, portalUrl, portalType?, portalSystemName?, instructions, fieldMapping, requiresVehicleInfo?, typicalRestrictions? }
 //   2. (Optional) Extend parsePortalOutput() with state-specific regex if portal format differs significantly.
 //   3. Rebuild. Zero changes to UI, APIs, or history needed — selector, prefill, status, everything auto-adapts.
 //
@@ -28,21 +28,36 @@
 // NOTE: 'crypto' import was moved to the API route (app/api/portal-credentials/route.ts)
 // to prevent Turbopack client bundle errors. This file must remain safe for both client and server.
 
+import { formatDimensionDisplay } from '@/lib/parse-dimension'
+
+export type PortalType = 'online' | 'gotpermits' | 'phone' | 'efee'
+
 export interface PortalStateConfig {
   name: string
+  /** Direct URL to apply for or manage OS/OW permits (login or application landing). */
   portalUrl: string
-  loginUrl?: string
+  /** Optional state DOT info page when portalUrl is a login system. */
+  infoUrl?: string
+  /** Permit system vendor/category for UX badges and tests. */
+  portalType?: PortalType
+  /** Official permit system name (TxPROS, ALPASS, etc.). */
+  portalSystemName?: string
   instructions: string
-  fieldMapping: Record<string, string> // our field -> portal field label
+  fieldMapping: Record<string, string>
   requiresVehicleInfo?: boolean
   typicalRestrictions?: string[]
 }
 
+// Portal URLs verified against state DOT sites, gotpermits.com state index, and FHWA OSOW contacts (2026).
+// portalUrl = direct login/application entry; infoUrl = secondary DOT guidance page when useful.
 export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
+  // TxPROS is the TxDMV OSOW application system (not the generic motor-carriers info page).
   TX: {
     name: 'Texas (TxDOT)',
-    portalUrl: 'https://www.txdmv.gov/motor-carriers/oversize-overweight-permits',
-    loginUrl: 'https://txdot.gov/osow',
+    portalUrl: 'https://txpros.txdmv.gov/',
+    portalType: 'online',
+    portalSystemName: 'TxPROS',
+    infoUrl: 'https://www.txdmv.gov/motor-carriers/oversize-overweight-permits',
     instructions: 'Log into the TxDOT OSOW portal. Use the prefilled values below for the application. Pay special attention to route and bridge analysis.',
     fieldMapping: {
       origin: 'Origin Location',
@@ -59,7 +74,8 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   CA: {
     name: 'California (Caltrans)',
     portalUrl: 'https://ctps.dot.ca.gov/index.php/auth/login',
-    loginUrl: 'https://caltrans.ca.gov/osow-portal',
+    portalType: 'online',
+    portalSystemName: 'CTPS',
     instructions: 'Use the Caltrans OSOW One-Stop Permitting system. California has strict curfew and heat restrictions.',
     fieldMapping: {
       origin: 'Origin',
@@ -76,7 +92,8 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   FL: {
     name: 'Florida (FDOT)',
     portalUrl: 'https://pas.fdot.gov/',
-    loginUrl: 'https://fdot.gov/osow',
+    portalType: 'online',
+    portalSystemName: 'PAS',
     instructions: 'Florida One Stop Permitting System. Note hurricane season restrictions and Turnpike rules.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -92,7 +109,8 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   IL: {
     name: 'Illinois (IDOT)',
     portalUrl: 'https://webapps1.dot.illinois.gov/ITAP/',
-    loginUrl: 'https://idot.gov/osow',
+    portalType: 'online',
+    portalSystemName: 'ITAP',
     instructions: 'IDOT OSOW Permitting System. Chicago metro has very strict weight and curfew rules.',
     fieldMapping: {
       origin: 'Origin',
@@ -109,7 +127,8 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   MO: {
     name: 'Missouri (MoDOT)',
     portalUrl: 'https://mcs.modot.mo.gov/mce/login.htm',
-    loginUrl: 'https://modot.gov/osow',
+    portalType: 'online',
+    portalSystemName: 'MoDOT MCS',
     instructions: 'Missouri OSOW Permitting. Use prefill for multi-state corridor loads; note Missouri River crossings and I-70 restrictions.',
     fieldMapping: {
       origin: 'Origin',
@@ -126,7 +145,8 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   GA: {
     name: 'Georgia (GDOT)',
     portalUrl: 'https://www.gaprospermits.com/',
-    loginUrl: 'https://gdot.gov/osow-portal',
+    portalType: 'online',
+    portalSystemName: 'GAPROS',
     instructions: 'Georgia DOT Oversize/Overweight Permitting. Prefill route and dimensions; pay attention to Atlanta metro curfews and I-75/I-85.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -143,7 +163,8 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   TN: {
     name: 'Tennessee (TDOT)',
     portalUrl: 'https://tntrips.tdot.tn.gov/TNEnterprise',
-    loginUrl: 'https://tdot.tn.gov/osow',
+    portalType: 'online',
+    portalSystemName: 'TN Trips',
     instructions: 'TDOT Oversize and Overweight Permit System. Use for Southeast corridors; watch for mountain route clearances and Memphis/ Nashville rules.',
     fieldMapping: {
       origin: 'Origin',
@@ -157,10 +178,13 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
     requiresVehicleInfo: true,
     typicalRestrictions: ['Cumberland Plateau clearances', 'I-40 Memphis weight limits'],
   },
+  // SWOOP (akswoop.com) is AKDOT's statewide OSOW application portal.
   AK: {
     name: 'Alaska (AKDOT&PF)',
-    portalUrl: 'https://dot.alaska.gov/permits/osow.shtml',
-    loginUrl: 'https://alaska.gov/osow',
+    portalUrl: 'https://www.akswoop.com/',
+    portalType: 'online',
+    portalSystemName: 'SWOOP',
+    infoUrl: 'https://dot.alaska.gov/mscve/pages/permits.shtml',
     instructions: 'Use the AKDOT&PF OSOW portal. Prefill the values below; account for remote and seasonal routes.',
     fieldMapping: {
       origin: 'Origin',
@@ -177,7 +201,8 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   AL: {
     name: 'Alabama (ALDOT)',
     portalUrl: 'https://alpass.dot.state.al.us/permits/login.asp',
-    loginUrl: 'https://aldot.gov/osow',
+    portalType: 'online',
+    portalSystemName: 'ALPASS',
     instructions: 'Use the ALDOT OSOW portal. Prefill the values below for permit application.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -194,7 +219,8 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   AR: {
     name: 'Arkansas (ARDOT)',
     portalUrl: 'https://ar.gotpermits.com/',
-    loginUrl: 'https://ardot.gov/osow',
+    portalType: 'gotpermits',
+    portalSystemName: 'GotPermits',
     instructions: 'Use the ARDOT OSOW permitting system. Prefill values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -211,7 +237,8 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   AZ: {
     name: 'Arizona (ADOT)',
     portalUrl: 'https://adotepro.azdot.gov/adot/login.asp',
-    loginUrl: 'https://azdot.gov/osow',
+    portalType: 'efee',
+    portalSystemName: 'ADOT ePRO',
     instructions: 'Arizona DOT OSOW permits. Use prefill for the values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -228,7 +255,8 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   CO: {
     name: 'Colorado (CDOT)',
     portalUrl: 'https://coopr.codot.gov/',
-    loginUrl: 'https://codot.gov/osow',
+    portalType: 'online',
+    portalSystemName: 'COOPR',
     instructions: 'Use the CDOT OSOW portal. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -242,10 +270,13 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
     requiresVehicleInfo: true,
     typicalRestrictions: ['Mountain pass clearances', 'I-70 restrictions'],
   },
+  // CT-CONNECT on gotpermits.com is CTDOT's online OSOW system (not portal.ct.gov/.../osow placeholder).
   CT: {
     name: 'Connecticut (CTDOT)',
-    portalUrl: 'https://portal.ct.gov/dot/permits/osow',
-    loginUrl: 'https://ct.gov/osow',
+    portalUrl: 'https://ct.gotpermits.com/',
+    portalType: 'gotpermits',
+    portalSystemName: 'CT-CONNECT',
+    infoUrl: 'https://portal.ct.gov/DOT/Permits/Highways/Oversize-Overweight-Permits',
     instructions: 'CTDOT Oversize/Overweight permits. Prefill below.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -260,8 +291,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   DE: {
     name: 'Delaware (DelDOT)',
-    portalUrl: 'https://deldot.gov/permits/osow',
-    loginUrl: 'https://deldot.gov/osow',
+    portalUrl: 'https://www.deldot.gov/osow/application/',
+    portalType: 'online',
+    portalSystemName: 'DelDOT OSOW',
     instructions: 'DelDOT OSOW portal. Use the prefilled values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -277,8 +309,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   ID: {
     name: 'Idaho (ITD)',
-    portalUrl: 'https://itd.idaho.gov/permits/osow',
-    loginUrl: 'https://itd.idaho.gov/osow',
+    portalUrl: 'https://permits4idaho.com/',
+    portalType: 'online',
+    portalSystemName: 'ITRPS',
     instructions: 'Idaho Transportation Dept OSOW. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -292,10 +325,12 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
     requiresVehicleInfo: true,
     typicalRestrictions: ['Mountain route limits'],
   },
+  // OSOW permits are issued via IN Department of Revenue Motor Carrier Services (not INDOT).
   IN: {
     name: 'Indiana (INDOT)',
-    portalUrl: 'https://www.in.gov/indot/permits/osow',
-    loginUrl: 'https://indot.gov/osow',
+    portalUrl: 'https://motorcarrier.dor.in.gov/loginHome.html',
+    portalType: 'online',
+    portalSystemName: 'INDOR OSW',
     instructions: 'INDOT OSOW Permitting. Prefill values for the portal.',
     fieldMapping: {
       origin: 'Origin',
@@ -312,7 +347,8 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   IA: {
     name: 'Iowa (Iowa DOT)',
     portalUrl: 'https://ia.gotpermits.com/',
-    loginUrl: 'https://iowadot.gov/osow',
+    portalType: 'gotpermits',
+    portalSystemName: 'GotPermits',
     instructions: 'Use Iowa DOT OSOW system. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -328,8 +364,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   KS: {
     name: 'Kansas (KDOT)',
-    portalUrl: 'https://www.ksdot.gov/permits/osow',
-    loginUrl: 'https://ksdot.gov/osow',
+    portalUrl: 'https://k-trips.ksdot.gov/',
+    portalType: 'online',
+    portalSystemName: 'K-TRIPS',
     instructions: 'KDOT OSOW permits. Prefill below for application.',
     fieldMapping: {
       origin: 'Origin',
@@ -345,8 +382,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   KY: {
     name: 'Kentucky (KYTC)',
-    portalUrl: 'https://transportation.ky.gov/permits/osow',
-    loginUrl: 'https://ky.gov/osow',
+    portalUrl: 'https://www.kyautomatedpermitsystem.com/',
+    portalType: 'online',
+    portalSystemName: 'KAPS',
     instructions: 'Kentucky Transportation Cabinet OSOW. Use prefill.',
     fieldMapping: {
       origin: 'Origin',
@@ -362,8 +400,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   LA: {
     name: 'Louisiana (LADOTD)',
-    portalUrl: 'https://www.dotd.la.gov/permits/osow',
-    loginUrl: 'https://ladotd.gov/osow',
+    portalUrl: 'https://lageauxpm.dotd.la.gov/safehaul/permitting/client/permitmanager/#login',
+    portalType: 'online',
+    portalSystemName: 'LaGeaux',
     instructions: 'LADOTD Oversize/Overweight permits. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -379,8 +418,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   ME: {
     name: 'Maine (MaineDOT)',
-    portalUrl: 'https://www.maine.gov/mdot/permits/osow',
-    loginUrl: 'https://maine.gov/osow',
+    portalUrl: 'https://www.movememaine.com/',
+    portalType: 'online',
+    portalSystemName: 'MoveME',
     instructions: 'MaineDOT OSOW portal. Prefill values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -396,8 +436,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   MD: {
     name: 'Maryland (MDOT)',
-    portalUrl: 'https://www.roads.maryland.gov/permits/osow',
-    loginUrl: 'https://mdot.gov/osow',
+    portalUrl: 'https://marylandone.gotpermits.com/',
+    portalType: 'gotpermits',
+    portalSystemName: 'Maryland One',
     instructions: 'MDOT OSOW permitting. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -413,8 +454,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   MA: {
     name: 'Massachusetts (MassDOT)',
-    portalUrl: 'https://www.mass.gov/permits/osow',
-    loginUrl: 'https://mass.gov/osow',
+    portalUrl: 'https://oasis.massdot.state.ma.us/',
+    portalType: 'online',
+    portalSystemName: 'OASIS',
     instructions: 'MassDOT OSOW permits. Use the prefill values below.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -430,8 +472,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   MI: {
     name: 'Michigan (MDOT)',
-    portalUrl: 'https://www.michigan.gov/mdot/permits/osow',
-    loginUrl: 'https://michigan.gov/osow',
+    portalUrl: 'https://milogintp.michigan.gov/eai/tplogin/authenticate?URL=/',
+    portalType: 'online',
+    portalSystemName: 'MiLogin TP',
     instructions: 'MDOT Michigan OSOW portal. Prefill below.',
     fieldMapping: {
       origin: 'Origin',
@@ -447,8 +490,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   MN: {
     name: 'Minnesota (MnDOT)',
-    portalUrl: 'https://www.dot.state.mn.us/permits/osow',
-    loginUrl: 'https://mndot.gov/osow',
+    portalUrl: 'https://mn.gotpermits.com/',
+    portalType: 'gotpermits',
+    portalSystemName: 'SUPERLOAD',
     instructions: 'MnDOT OSOW permitting. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -464,8 +508,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   MS: {
     name: 'Mississippi (MDOT)',
-    portalUrl: 'https://mdot.ms.gov/permits/osow',
-    loginUrl: 'https://msdot.gov/osow',
+    portalUrl: 'https://permits.mdot.ms.gov/',
+    portalType: 'online',
+    portalSystemName: 'Express Pass',
     instructions: 'Mississippi DOT OSOW. Prefill values below.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -481,8 +526,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   MT: {
     name: 'Montana (MDT)',
-    portalUrl: 'https://www.mdt.mt.gov/permits/osow',
-    loginUrl: 'https://mdt.mt.gov/osow',
+    portalUrl: 'https://etrips.mtmdt.us/Login',
+    portalType: 'online',
+    portalSystemName: 'eTRIPS',
     instructions: 'Montana Dept of Transportation OSOW. Use prefill.',
     fieldMapping: {
       origin: 'Origin',
@@ -498,8 +544,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   NE: {
     name: 'Nebraska (NDOT)',
-    portalUrl: 'https://dot.nebraska.gov/permits/osow',
-    loginUrl: 'https://ndot.gov/osow',
+    portalUrl: 'https://ne.gotpermits.com/neconnect',
+    portalType: 'gotpermits',
+    portalSystemName: 'NEConnect',
     instructions: 'Nebraska DOT OSOW permits. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -515,8 +562,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   NV: {
     name: 'Nevada (NDOT)',
-    portalUrl: 'https://www.dot.nv.gov/permits/osow',
-    loginUrl: 'https://ndot.nv.gov/osow',
+    portalUrl: 'https://odvp.dot.nv.gov/',
+    portalType: 'online',
+    portalSystemName: 'ODVP',
     instructions: 'Nevada DOT OSOW. Prefill below for the portal.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -532,8 +580,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   NH: {
     name: 'New Hampshire (NHDOT)',
-    portalUrl: 'https://www.nh.gov/dot/permits/osow',
-    loginUrl: 'https://nh.gov/osow',
+    portalUrl: 'https://nhdotpermits.org/',
+    portalType: 'online',
+    portalSystemName: 'NHDOT Permits',
     instructions: 'NHDOT OSOW permits. Use prefilled values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -549,8 +598,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   NJ: {
     name: 'New Jersey (NJDOT)',
-    portalUrl: 'https://www.nj.gov/transportation/permits/osow',
-    loginUrl: 'https://njdot.gov/osow',
+    portalUrl: 'https://nj.gotpermits.com/njpass',
+    portalType: 'gotpermits',
+    portalSystemName: 'SUPERLOAD',
     instructions: 'NJDOT OSOW portal. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -564,10 +614,13 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
     requiresVehicleInfo: true,
     typicalRestrictions: ['Turnpike/Parkway rules', 'NY metro curfews'],
   },
+  // NM-OPS (truckpermits.dot.nm.gov) is NMDOT's statewide online OSOW application portal.
   NM: {
     name: 'New Mexico (NMDOT)',
-    portalUrl: 'https://www.dot.nm.gov/permits/osow',
-    loginUrl: 'https://nmdot.gov/osow',
+    portalUrl: 'https://truckpermits.dot.nm.gov/',
+    portalType: 'online',
+    portalSystemName: 'NM-OPS',
+    infoUrl: 'https://www.dot.nm.gov/planning-research-multimodal-and-safety/modal/ports-of-entry/',
     instructions: 'NMDOT OSOW permitting. Prefill values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -583,8 +636,10 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   NY: {
     name: 'New York (NYSDOT)',
-    portalUrl: 'https://www.dot.ny.gov/permits/osow',
-    loginUrl: 'https://nysdot.gov/osow',
+    portalUrl: 'https://hoocs.dot.ny.gov/HOOCS/',
+    portalType: 'online',
+    portalSystemName: 'HOOCS',
+    infoUrl: 'https://www.dot.ny.gov/nypermits',
     instructions: 'NYSDOT OSOW permits. Use the prefill for the application below; note strict metro rules.',
     fieldMapping: {
       origin: 'Origin',
@@ -601,7 +656,8 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   NC: {
     name: 'North Carolina (NCDOT)',
     portalUrl: 'https://pims.services.ncdot.gov/',
-    loginUrl: 'https://ncdot.gov/osow',
+    portalType: 'online',
+    portalSystemName: 'PIMS',
     instructions: 'NCDOT OSOW portal. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -617,8 +673,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   ND: {
     name: 'North Dakota (NDDOT)',
-    portalUrl: 'https://www.dot.nd.gov/permits/osow',
-    loginUrl: 'https://nddot.gov/osow',
+    portalUrl: 'https://apps.nd.gov/ndhp/epermits/users/main.htm',
+    portalType: 'online',
+    portalSystemName: 'E-Permits',
     instructions: 'North Dakota DOT OSOW. Prefill values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -634,8 +691,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   OH: {
     name: 'Ohio (ODOT)',
-    portalUrl: 'https://www.transportation.ohio.gov/permits/osow',
-    loginUrl: 'https://odot.gov/osow',
+    portalUrl: 'https://haulingpermits.transportation.ohio.gov/',
+    portalType: 'online',
+    portalSystemName: 'OHPS',
     instructions: 'ODOT OSOW permits. Prefill the values below for Ohio portals.',
     fieldMapping: {
       origin: 'Origin',
@@ -651,8 +709,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   OK: {
     name: 'Oklahoma (ODOT)',
-    portalUrl: 'https://www.odot.org/permits/osow',
-    loginUrl: 'https://odot.org/osow',
+    portalUrl: 'https://permitmanager.okladot.state.ok.us/okiepros/login/LoginMain!input.action',
+    portalType: 'online',
+    portalSystemName: 'OkiePROS',
     instructions: 'Oklahoma DOT OSOW. Use prefill below.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -668,8 +727,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   OR: {
     name: 'Oregon (ODOT)',
-    portalUrl: 'https://www.oregon.gov/odot/permits/osow',
-    loginUrl: 'https://oregon.gov/osow',
+    portalUrl: 'https://www.oregonorion.com/',
+    portalType: 'online',
+    portalSystemName: 'ORION',
     instructions: 'Oregon DOT OSOW portal. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -685,8 +745,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   PA: {
     name: 'Pennsylvania (PennDOT)',
-    portalUrl: 'https://www.penndot.gov/permits/osow',
-    loginUrl: 'https://penndot.gov/osow',
+    portalUrl: 'https://apras.penndot.pa.gov/',
+    portalType: 'online',
+    portalSystemName: 'APRAS',
     instructions: 'PennDOT OSOW permitting. Prefill values for the portal.',
     fieldMapping: {
       origin: 'Origin',
@@ -702,8 +763,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   RI: {
     name: 'Rhode Island (RIDOT)',
-    portalUrl: 'https://www.dot.ri.gov/permits/osow',
-    loginUrl: 'https://ridot.gov/osow',
+    portalUrl: 'https://www.ri.gov/DOT/osow/users/sign_in',
+    portalType: 'online',
+    portalSystemName: 'RIDOT OSOW',
     instructions: 'RIDOT OSOW. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -718,8 +780,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   SC: {
     name: 'South Carolina (SCDOT)',
-    portalUrl: 'https://www.scdot.org/permits/osow',
-    loginUrl: 'https://scdot.gov/osow',
+    portalUrl: 'https://safehaul.scdot.org/ihaul/login/LoginMain!input.action',
+    portalType: 'online',
+    portalSystemName: 'SafeHaul',
     instructions: 'SCDOT OSOW portal. Use prefill for application.',
     fieldMapping: {
       origin: 'Origin',
@@ -735,8 +798,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   SD: {
     name: 'South Dakota (SDDOT)',
-    portalUrl: 'https://dot.sd.gov/permits/osow',
-    loginUrl: 'https://sddot.gov/osow',
+    portalUrl: 'https://sdaps.sd.gov/sdaps',
+    portalType: 'online',
+    portalSystemName: 'SDAPS',
     instructions: 'South Dakota DOT OSOW. Prefill values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -752,8 +816,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   UT: {
     name: 'Utah (UDOT)',
-    portalUrl: 'https://www.udot.utah.gov/permits/osow',
-    loginUrl: 'https://udot.gov/osow',
+    portalUrl: 'https://app.udot.utah.gov/public/mcs/f?p=155:1',
+    portalType: 'online',
+    portalSystemName: 'UDOT MCS',
     instructions: 'UDOT OSOW permits. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -769,8 +834,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   VT: {
     name: 'Vermont (VTrans)',
-    portalUrl: 'https://vtrans.vermont.gov/permits/osow',
-    loginUrl: 'https://vtrans.vermont.gov/osow',
+    portalUrl: 'https://vthaulpass.vermont.gov/',
+    portalType: 'online',
+    portalSystemName: 'VT Haul Pass',
     instructions: 'Vermont Agency of Transportation OSOW. Prefill below.',
     fieldMapping: {
       origin: 'Origin',
@@ -784,10 +850,12 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
     requiresVehicleInfo: true,
     typicalRestrictions: [],
   },
+  // VA hauling permits are issued by DMV VAHPS (EZ Haul), not VDOT directly.
   VA: {
     name: 'Virginia (VDOT)',
-    portalUrl: 'https://www.vdot.virginia.gov/permits/osow',
-    loginUrl: 'https://vdot.virginia.gov/osow',
+    portalUrl: 'https://transactions.dmv.virginia.gov/apps/vahps/vahps_home.aspx',
+    portalType: 'online',
+    portalSystemName: 'VAHPS',
     instructions: 'VDOT OSOW portal. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -803,8 +871,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   WA: {
     name: 'Washington (WSDOT)',
-    portalUrl: 'https://www.wsdot.wa.gov/permits/osow',
-    loginUrl: 'https://wsdot.wa.gov/osow',
+    portalUrl: 'https://www.esnoopipro.com/',
+    portalType: 'online',
+    portalSystemName: 'eSNOOPI Pro',
     instructions: 'WSDOT OSOW permitting. Prefill the values below for Washington portals.',
     fieldMapping: {
       origin: 'Origin',
@@ -820,8 +889,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   WV: {
     name: 'West Virginia (WVDOT)',
-    portalUrl: 'https://transportation.wv.gov/permits/osow',
-    loginUrl: 'https://wvdot.gov/osow',
+    portalUrl: 'https://wv.gotpermits.com/wvconnect',
+    portalType: 'gotpermits',
+    portalSystemName: 'WVConnect',
     instructions: 'West Virginia DOT OSOW. Use the prefill values below.',
     fieldMapping: {
       origin: 'Origin City/State',
@@ -837,8 +907,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   WI: {
     name: 'Wisconsin (WisDOT)',
-    portalUrl: 'https://wisconsindot.gov/permits/osow',
-    loginUrl: 'https://wisdot.gov/osow',
+    portalUrl: 'https://wi.gotpermits.com/WIConnect',
+    portalType: 'gotpermits',
+    portalSystemName: 'WIConnect',
     instructions: 'WisDOT OSOW portal. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -854,8 +925,9 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
   WY: {
     name: 'Wyoming (WYDOT)',
-    portalUrl: 'https://www.dot.state.wy.us/permits/osow',
-    loginUrl: 'https://wydot.gov/osow',
+    portalUrl: 'https://jweb.dot.state.wy.us/oversize_weight_application/',
+    portalType: 'online',
+    portalSystemName: 'WYDOT OSOW',
     instructions: 'WYDOT OSOW permits. Prefill the values below.',
     fieldMapping: {
       origin: 'Origin',
@@ -881,6 +953,137 @@ export interface PrefillPackage {
   approvalNotes: string[]
 }
 
+/** Minimal shape from permit analysis (primary or route option). */
+export interface PortalAnalysisSource {
+  routeCorridor?: string[] | null
+  permitRequiredStates?: string[] | null
+}
+
+function normalizeStateCode(code: string): string {
+  return code.trim().toUpperCase()
+}
+
+function isUsStateCode(code: string): boolean {
+  return /^[A-Z]{2}$/.test(code)
+}
+
+/**
+ * Derives state codes whose portals should open for a route analysis.
+ * Order: routeCorridor first (deduped), then permit-only states not in corridor.
+ * Filters to states with entries in STATE_PORTAL_CONFIGS (49 states; HI excluded).
+ */
+export function getPortalStatesForAnalysis(primary: PortalAnalysisSource): string[] {
+  const corridor = (primary.routeCorridor || [])
+    .map(normalizeStateCode)
+    .filter(isUsStateCode)
+
+  const permitStates = (primary.permitRequiredStates || [])
+    .map(normalizeStateCode)
+    .filter(isUsStateCode)
+
+  const seen = new Set<string>()
+  const ordered: string[] = []
+
+  for (const state of corridor) {
+    if (!seen.has(state)) {
+      seen.add(state)
+      ordered.push(state)
+    }
+  }
+
+  for (const state of permitStates) {
+    if (!seen.has(state)) {
+      seen.add(state)
+      ordered.push(state)
+    }
+  }
+
+  return ordered.filter((state) => state in STATE_PORTAL_CONFIGS)
+}
+
+/** First portal state to focus after approval / launch — corridor order, then origin_state, then TX. */
+export function resolveInitialPortalState(request: {
+  origin_state?: string | null
+  route_corridor?: string[] | null
+  permit_required_states?: string[] | null
+}): string {
+  const fromAnalysis = getPortalStatesForAnalysis({
+    routeCorridor: request.route_corridor,
+    permitRequiredStates: request.permit_required_states,
+  })
+  if (fromAnalysis.length > 0) return fromAnalysis[0]
+
+  const origin = normalizeStateCode(request.origin_state || '')
+  if (origin in STATE_PORTAL_CONFIGS) return origin
+
+  return 'TX'
+}
+
+function formatPortalDimension(feet: number | null | undefined): string {
+  if (feet == null || !Number.isFinite(Number(feet)) || Number(feet) <= 0) return ''
+  return formatDimensionDisplay(Number(feet))
+}
+
+function formatPortalWeight(lbs: number | null | undefined): string | number {
+  if (lbs == null || !Number.isFinite(Number(lbs)) || Number(lbs) <= 0) return ''
+  return `${Math.round(Number(lbs)).toLocaleString()} lbs`
+}
+
+function pickEquipmentField(equip: Record<string, any>, ...keys: string[]): any {
+  for (const key of keys) {
+    const val = equip[key]
+    if (val != null && val !== '') return val
+  }
+  return null
+}
+
+export interface OpenStatePortalsOptions {
+  /** Delay between tab opens (ms). 0 = all synchronous in the same turn. Default 75. */
+  staggerMs?: number
+  /** Custom window.open implementation (for tests). */
+  openTab?: (url: string, target: string) => void
+}
+
+/**
+ * Opens each configured state portal in a new tab.
+ * Use staggerMs: 0 when called synchronously inside a click handler to avoid popup blockers.
+ */
+export function openStatePortals(
+  states: string[],
+  options?: OpenStatePortalsOptions
+): void {
+  const staggerMs = options?.staggerMs ?? 75
+  const openTab =
+    options?.openTab ??
+    ((url: string, target: string) => {
+      window.open(url, target, 'noopener,noreferrer')
+    })
+
+  const entries = states
+    .map((state) => {
+      const config = STATE_PORTAL_CONFIGS[state]
+      return config ? { state, url: config.portalUrl } : null
+    })
+    .filter((entry): entry is { state: string; url: string } => entry !== null)
+
+  if (staggerMs <= 0) {
+    entries.forEach(({ state, url }) => {
+      openTab(url, `_truckeros_portal_${state}`)
+    })
+    return
+  }
+
+  entries.forEach(({ state, url }, index) => {
+    if (index === 0) {
+      openTab(url, `_truckeros_portal_${state}`)
+    } else {
+      setTimeout(() => {
+        openTab(url, `_truckeros_portal_${state}`)
+      }, index * staggerMs)
+    }
+  })
+}
+
 /**
  * Generates a structured prefill package for a specific state portal.
  * This is the core of the "auto-prefill" feature.
@@ -894,37 +1097,112 @@ export function generatePortalPrefill(
 
   const generated: Record<string, any> = {}
 
-  // Map common fields
+  // Map common fields (dimensions as clean X' Y" for portal copy-paste)
   generated.origin = `${request.origin_city}, ${request.origin_state}`
   generated.destination = `${request.destination_city}, ${request.destination_state}`
-  generated.weight = request.weight
-  generated.length = request.length
-  generated.width = request.width
-  generated.height = request.height
+  generated.weight = formatPortalWeight(request.weight) || request.weight
+  generated.length = formatPortalDimension(request.length) || request.length
+  generated.width = formatPortalDimension(request.width) || request.width
+  generated.height = formatPortalDimension(request.height) || request.height
 
   if (request.route_corridor) {
     generated.route = request.route_corridor.join(' → ')
   }
 
   // Pull rich equipment/cargo snapshots from saved permit_request for accurate vehicle prefill
-  // (axles, unit/vin, overhangs etc. matter for many portals that requireVehicleInfo)
   const equip = request.equipment || {}
   const cargo = request.cargo || {}
-  if (equip.axles || equip.total_axles) {
-    generated.axles = equip.axles || equip.total_axles
+  const rig = equip.rig as Record<string, any> | null | undefined
+
+  if (rig) {
+    if (rig.rigName) generated.rig_name = rig.rigName
+    if (rig.overallLengthFt) {
+      generated.rig_length = `${Number(rig.overallLengthFt).toFixed(1)} ft`
+    }
+    if (rig.totalAxles) generated.axles = rig.totalAxles
+
+    const tractor = (rig.tractor || {}) as Record<string, any>
+    const tractorId =
+      tractor.unit_number ||
+      tractor.unitNumber ||
+      tractor.profile_name ||
+      tractor.profileName
+    const tractorVin = tractor.vin
+    if (tractorId || tractorVin) {
+      generated.vehicle_id = tractorId || tractorVin
+      generated.tractor = tractor.profile_name || tractor.profileName || tractorId
+    }
+    if (tractor.num_axles || tractor.numAxles) {
+      generated.tractor_axles = tractor.num_axles || tractor.numAxles
+    }
+
+    const trailers = Array.isArray(rig.trailers) ? rig.trailers : []
+    if (trailers.length > 0) {
+      generated.trailer_count = trailers.length
+      const primary = trailers[0] as Record<string, any>
+      const trailerLen = primary.overall_length_ft ?? primary.overallLengthFt
+      if (trailerLen) generated.trailer_length = `${Number(trailerLen).toFixed(1)} ft`
+      const trailerVin = primary.vin
+      if (trailerVin && !generated.vehicle_id) generated.vehicle_id = trailerVin
+      generated.trailers = trailers
+        .map((tr: Record<string, any>, i: number) => {
+          const name = tr.profile_name || tr.profileName || `Trailer ${i + 1}`
+          const len = tr.overall_length_ft ?? tr.overallLengthFt
+          const axles = tr.num_axles ?? tr.numAxles
+          const bits = [name]
+          if (len) bits.push(`${Number(len).toFixed(1)} ft`)
+          if (axles) bits.push(`${axles} axles`)
+          return bits.join(' — ')
+        })
+        .join('; ')
+    }
   }
-  if (equip.unit_number || equip.vin) {
-    generated.vehicle_id = equip.unit_number || equip.vin
+
+  // Legacy flat equipment fields (pre–rig snapshot saves)
+  if (!generated.axles) {
+    const axles = pickEquipmentField(equip, 'axles', 'total_axles', 'totalAxles')
+    if (axles) generated.axles = axles
   }
-  if (equip.kingpin_setting_in || equip.kingpin) {
-    generated.kingpin = equip.kingpin_setting_in
+  if (!generated.vehicle_id) {
+    const vehicleId = pickEquipmentField(equip, 'unit_number', 'unitNumber', 'vin')
+    if (vehicleId) generated.vehicle_id = vehicleId
   }
-  if (cargo.overhang_front_ft || cargo.overhang_rear_ft || cargo.overhang) {
+  const kingpin = pickEquipmentField(equip, 'kingpin_setting_in', 'kingpinSettingIn', 'kingpin')
+  if (kingpin) generated.kingpin = kingpin
+
+  const loadOverhangs = equip.loadOverhangs as Record<string, number> | undefined
+  if (loadOverhangs) {
+    const front = Number(loadOverhangs.frontOfRigFt || 0) + Number(loadOverhangs.frontOfTrailerFt || 0)
+    const rear = Number(loadOverhangs.rearFt || 0)
+    if (front || rear) generated.overhang = `front ${front} ft / rear ${rear} ft`
+  } else if (cargo.overhang_front_ft || cargo.overhang_rear_ft || cargo.overhang) {
     generated.overhang = cargo.overhang_front_ft || cargo.overhang_rear_ft || cargo.overhang
   }
-  if (equip.trailer_length_ft) {
-    generated.trailer_length = equip.trailer_length_ft
+
+  const trailerLen = pickEquipmentField(equip, 'trailer_length_ft', 'trailerLengthFt')
+  if (trailerLen && !generated.trailer_length) {
+    generated.trailer_length = `${Number(trailerLen).toFixed(1)} ft`
   }
+
+  const carrierDriver = (cargo.carrierDriver || {}) as Record<string, any>
+  const carrierCompany = pickEquipmentField(carrierDriver, 'companyName', 'company_name')
+  if (carrierCompany) generated.carrier_company = carrierCompany
+  const carrierUsdot = pickEquipmentField(carrierDriver, 'usdotNumber', 'usdot_number')
+  if (carrierUsdot) generated.carrier_usdot = carrierUsdot
+  const carrierMc = pickEquipmentField(carrierDriver, 'mcNumber', 'mc_number')
+  if (carrierMc) generated.carrier_mc = carrierMc
+  const carrierPhone = pickEquipmentField(carrierDriver, 'carrierPhone', 'carrier_phone')
+  if (carrierPhone) generated.carrier_phone = carrierPhone
+  const carrierEmail = pickEquipmentField(carrierDriver, 'carrierEmail', 'carrier_email')
+  if (carrierEmail) generated.carrier_email = carrierEmail
+  const driverName = pickEquipmentField(carrierDriver, 'driverFullName', 'driver_full_name')
+  if (driverName) generated.driver_name = driverName
+  const driverCdl = pickEquipmentField(carrierDriver, 'cdlNumber', 'cdl_number')
+  if (driverCdl) generated.driver_cdl = driverCdl
+  const driverCdlState = pickEquipmentField(carrierDriver, 'cdlState', 'cdl_state')
+  if (driverCdlState) generated.driver_cdl_state = driverCdlState
+  const driverPhone = pickEquipmentField(carrierDriver, 'driverPhone', 'driver_phone')
+  if (driverPhone) generated.driver_phone = driverPhone
 
   // State-specific enhancements
   if (stateCode === 'TX') {

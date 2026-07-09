@@ -1,0 +1,132 @@
+---
+pid: 27456
+cwd: "C:\Users\andre\truckeros"
+command: "cmd /c \"cd /d C:\\Users\\andre\\truckeros && npm test\""
+started_at: 2026-07-07T01:03:13.112Z
+running_for_ms: 35013    
+---
+
+> truckeros@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.6 C:/Users/andre/truckeros
+
+ ✓ lib/portal-assistant.test.ts (14 tests) 38ms
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+stderr | app/api/optimize-route/route.test.ts > POST /api/optimize-route > falls back to OSRM with query and normalized drops when OR-Tools is unreachable
+[optimize-route] OR-Tools fetch failed after 3ms: ECONNREFUSED 127.0.0.1:8000
+[optimize-route] OR-Tools unreachable, falling back to OSRM: unreachable ECONNREFUSED 127.0.0.1:8000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] responded in 2ms status=200
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns connected when upstream health is ok
+[ortools-health] connected service=or-tools version=1.0.0 buildId=abc123def456
+
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > falls back to OSRM with query and normalized drops when OR-Tools is unreachable
+[optimize-route] calling OR-Tools url=http://127.0.0.1:8000/optimize-route timeout_ms=180000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] responded in 0ms status=503
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] responded in 0ms status=200
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on connection refused
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on timeout
+[ortools-health] probing http://127.0.0.1:8000/health timeout_ms=5000
+
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > post-processes successful OR-Tools response with escort enrichment
+[optimize-route] calling OR-Tools url=http://127.0.0.1:8000/optimize-route timeout_ms=180000
+
+stdout | app/api/optimize-route/route.test.ts > POST /api/optimize-route > post-processes successful OR-Tools response with escort enrichment
+[optimize-route] OR-Tools responded in 0ms status=200
+
+ ✓ app/api/ortools-health/route.test.ts (5 tests) 39ms
+ ✓ app/api/optimize-route/route.test.ts (5 tests) 42ms
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on non-ok HTTP status
+[ortools-health] non-ok HTTP 503 from http://127.0.0.1:8000/health
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable when body status is not ok
+[ortools-health] unexpected body status=degraded service=undefined
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on connection refused
+[ortools-health] probe failed after 0ms: fetch failed
+
+stderr | app/api/ortools-health/route.test.ts > GET /api/ortools-health > returns unreachable on timeout
+[ortools-health] probe failed after 0ms: The operation was aborted
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when restart script is missing
+[restart-ortools] restart script not found: C:\Users\andre\truckeros\restart-ortools.ps1
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when spawn throws synchronously
+[restart-ortools] failed to spawn restart script: spawn EACCES
+
+stderr | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 500 when child emits an error event
+[restart-ortools] failed to spawn restart script: ENOENT: powershell.exe not found
+
+stdout | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > spawns detached restart script on Windows for authenticated users
+[restart-ortools] restart initiated by user user-123
+
+stdout | app/api/restart-ortools/route.test.ts > POST /api/restart-ortools > returns 429 when restart is requested within 60 seconds
+[restart-ortools] restart initiated by user user-123
+
+ ✓ app/api/restart-ortools/route.test.ts (8 tests) 32ms
+ ✓ app/api/geocode/route.test.ts (7 tests) 46ms
+stderr | app/api/admin/migrate/route.test.ts > GET /api/admin/migrate > flags missing equipment_profiles license plate columns
+[admin/migrate] schema check failed for equipment_profiles: column equipment_profiles.license_plate does not exist
+
+stderr | app/api/admin/migrate/route.test.ts > GET /api/admin/migrate > flags missing rig_configurations table as needsMigration
+[admin/migrate] schema check failed for rig_configurations: relation "rig_configurations" does not exist
+
+ ✓ app/equipment/default-rig-button.test.ts (3 tests) 31ms
+stderr | app/api/admin/migrate/route.test.ts > POST /api/admin/migrate > returns needsManualRun when runMigrationSql throws
+[admin/migrate] POST live migration: connection refused { correlationId: 'fafea18b-53f3-420c-a5da-f25718d09ec6' }
+ ✓ app/api/admin/migrate/route.test.ts (16 tests) 87ms
+
+stderr | app/api/admin/migrate/route.test.ts > POST /api/admin/migrate > returns partial success when SQL applies but columns remain missing
+[admin/migrate] schema check failed for rig_configurations: column rig_configurations.is_default does not exist
+
+ ✓ lib/geocode-client.test.ts (11 tests) 1540ms
+   ✓ fetchGeocodeWithRetry > retries 429 then succeeds  508ms
+   ✓ fetchGeocodeWithRetry > retries 500 then fails  502ms
+   ✓ fetchGeocodeWithRetry > retries network throw then fails retryable  509ms
+ ✓ lib/db-migrate.test.ts (9 tests) 23ms
+ ✓ lib/location-stop.test.ts (23 tests) 24ms
+ ✓ lib/geocode-query.test.ts (18 tests) 21ms
+ ✓ lib/admin-auth.test.ts (9 tests) 49ms
+ ✓ agents/permit-agent.test.ts (4 tests) 18ms
+ ✓ lib/build-corridor.test.ts (10 tests) 18ms
+ ✓ lib/ortools-config.test.ts (15 tests) 11ms
+ ✓ app/api/analyze-permit/route.test.ts (2 tests) 87ms
+ ✓ lib/escort-analysis.test.ts (13 tests) 15ms
+ ✓ lib/geocode-server.test.ts (9 tests) 13ms
+ ✓ components/LicensePlateFields.test.ts (3 tests) 9ms
+ ✓ lib/migrations.test.ts (4 tests) 12ms
+ ✓ lib/license-plate.test.ts (7 tests) 10ms
+ ✓ types/equipment.test.ts (6 tests) 11ms
+ ✓ lib/routing-envelope-display.test.ts (6 tests) 10ms
+ ✓ components/OverhangFeetInput.test.ts (4 tests) 12ms
+ ✓ lib/enrich-route-escorts.test.ts (3 tests) 11ms
+ ✓ lib/permit-length.test.ts (9 tests) 12ms
+ ✓ components/DimensionInput.test.ts (1 test) 7ms
+ ✓ lib/permit-requests.test.ts (3 tests) 9ms
+ ↓ lib/geocode-live.integration.test.ts (3 tests | 3 skipped)
+ ↓ scripts/geocode-report.integration.test.ts (1 test | 1 skipped)
+
+ Test Files  28 passed | 2 skipped (30)
+      Tests  227 passed | 4 skipped (231)
+   Start at  21:03:16
+   Duration  18.70s (transform 12.68s, setup 0ms, collect 20.87s, tests 2.24s, environment 12ms, prepare 31.30s)
+
