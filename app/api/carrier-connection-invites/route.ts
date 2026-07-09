@@ -6,30 +6,13 @@ import {
   listOutgoingCarrierConnectionInvites,
   revokeCarrierConnectionInvite,
 } from '@/lib/carrier-connection-invite-service'
+import { isSafeLocalDevHost } from '@/lib/safe-local-dev-host'
 import { getAuthenticatedMemberProfile } from '@/lib/team-member-profiles-api'
 
 function extractBearerToken(request: NextRequest): string | null {
   const authHeader = request.headers.get('authorization')
   if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) return null
   return authHeader.replace(/^Bearer\s+/i, '').trim()
-}
-
-/**
- * True only for exact local dev hostnames (not localhost.evil.com or userinfo@host).
- */
-export function isSafeLocalDevHost(host: string): boolean {
-  const raw = host.trim().toLowerCase()
-  if (!raw) return false
-  if (raw.includes('@')) return false
-
-  try {
-    const parsed = new URL(`http://${raw}`)
-    if (parsed.username || parsed.password) return false
-    const hostname = parsed.hostname.replace(/^\[|\]$/g, '')
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
-  } catch {
-    return false
-  }
 }
 
 function appBaseUrl(request: NextRequest): string {

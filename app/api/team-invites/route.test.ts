@@ -321,28 +321,3 @@ describe('/api/team-invites', () => {
   })
 })
 
-describe('isSafeLocalDevHost', () => {
-  it('allows exact local hosts with optional port', async () => {
-    const { isSafeLocalDevHost } = await import('./route')
-    expect(isSafeLocalDevHost('localhost')).toBe(true)
-    expect(isSafeLocalDevHost('localhost:3000')).toBe(true)
-    expect(isSafeLocalDevHost('127.0.0.1')).toBe(true)
-    expect(isSafeLocalDevHost('127.0.0.1:3000')).toBe(true)
-    expect(isSafeLocalDevHost('[::1]')).toBe(true)
-    expect(isSafeLocalDevHost('[::1]:3000')).toBe(true)
-  })
-
-  it('rejects localhost.evil.com and similar prefix tricks', async () => {
-    const { isSafeLocalDevHost } = await import('./route')
-    expect(isSafeLocalDevHost('localhost.evil.com')).toBe(false)
-    expect(isSafeLocalDevHost('127.0.0.1.nip.io')).toBe(false)
-    expect(isSafeLocalDevHost('evil.com')).toBe(false)
-  })
-
-  it('rejects userinfo / @ authority tricks', async () => {
-    const { isSafeLocalDevHost } = await import('./route')
-    expect(isSafeLocalDevHost('127.0.0.1:80@evil.com')).toBe(false)
-    expect(isSafeLocalDevHost('localhost:3000@evil.com')).toBe(false)
-    expect(isSafeLocalDevHost('user@localhost')).toBe(false)
-  })
-})

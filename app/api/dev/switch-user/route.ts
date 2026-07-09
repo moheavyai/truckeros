@@ -5,6 +5,7 @@ import {
   resolveDevSwitchOrganizationId,
 } from '@/lib/dev-account-switch'
 import { isDevAccountSwitcherEnabled } from '@/lib/dev-mode'
+import { isSafeLocalDevHost } from '@/lib/safe-local-dev-host'
 import { normalizeInviteEmail } from '@/lib/team-invites'
 import { hasAdminAccess, supabaseAdmin } from '@/lib/supabase'
 import { createAuthedSupabaseClient } from '@/lib/team-member-profiles-api'
@@ -24,12 +25,7 @@ function appBaseUrl(request: NextRequest): string {
     throw new Error('NEXT_PUBLIC_APP_URL must be configured for dev account switching')
   }
 
-  const isLocalHost =
-    host.startsWith('localhost') ||
-    host.startsWith('127.0.0.1') ||
-    host.startsWith('[::1]')
-
-  if (!isLocalHost) {
+  if (!isSafeLocalDevHost(host)) {
     throw new Error('NEXT_PUBLIC_APP_URL must be configured for dev account switching')
   }
 
