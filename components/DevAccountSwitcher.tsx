@@ -217,7 +217,7 @@ export default function DevAccountSwitcher({ currentEmail }: DevAccountSwitcherP
       }
 
       const switchResult = await completeDevAccountSwitch(supabase, normalizedTarget, hashedToken)
-      if (!switchResult.success) {
+      if (switchResult.success === false) {
         throw new Error(switchResult.error)
       }
 
