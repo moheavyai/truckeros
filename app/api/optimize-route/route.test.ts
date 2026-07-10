@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
-import { buildLoadDetails, POST } from './route'
+import { buildLoadDetails } from '@/lib/build-load-details'
+import { POST } from './route'
 
 const mockProcessPermitRequest = vi.fn()
 const mockEnrichOrToolsResponseWithEscorts = vi.fn()
