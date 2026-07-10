@@ -1817,6 +1817,83 @@ describe('deleteTeamMemberForUser', () => {
       })
     ).rejects.toThrow('Forbidden – cannot delete this team member')
   })
+
+  it('forbids deleting a primary owner target', async () => {
+    supabaseMocks.mockTargetMaybeSingle.mockResolvedValue({
+      data: {
+        is_primary_owner: true,
+        user_roles: ['Owner'],
+      },
+      error: null,
+    })
+
+    await expect(
+      deleteTeamMemberForUser('token', {
+        source: 'member_profile',
+        id: 'other-owner',
+        userId: 'other-owner',
+      })
+    ).rejects.toThrow('Forbidden – cannot delete this team member')
+    expect(supabaseMocks.mockDelete).not.toHaveBeenCalled()
+    expect(deletionMocks.mockCreateDeletionRequest).not.toHaveBeenCalled()
+  })
+
+  it('forbids deleting a primary owner even when user_roles lacks Owner', async () => {
+    supabaseMocks.mockTargetMaybeSingle.mockResolvedValue({
+      data: {
+        is_primary_owner: true,
+        user_roles: ['Driver'],
+      },
+      error: null,
+    })
+
+    await expect(
+      deleteTeamMemberForUser('token', {
+        source: 'member_profile',
+        id: 'other-owner',
+        userId: 'other-owner',
+      })
+    ).rejects.toThrow('Forbidden – cannot delete this team member')
+    expect(supabaseMocks.mockDelete).not.toHaveBeenCalled()
+  })
+
+  it('forbids deleting a non-primary Owner role target', async () => {
+    supabaseMocks.mockTargetMaybeSingle.mockResolvedValue({
+      data: {
+        is_primary_owner: false,
+        user_roles: ['Owner'],
+      },
+      error: null,
+    })
+
+    await expect(
+      deleteTeamMemberForUser('token', {
+        source: 'member_profile',
+        id: 'owner-role-user',
+        userId: 'owner-role-user',
+      })
+    ).rejects.toThrow('Forbidden – cannot delete this team member')
+    expect(supabaseMocks.mockDelete).not.toHaveBeenCalled()
+  })
+
+  it('forbids deleting primary owner with legacy Owner / Admin roles', async () => {
+    supabaseMocks.mockTargetMaybeSingle.mockResolvedValue({
+      data: {
+        is_primary_owner: true,
+        user_roles: ['Owner / Admin'],
+      },
+      error: null,
+    })
+
+    await expect(
+      deleteTeamMemberForUser('token', {
+        source: 'member_profile',
+        id: 'legacy-owner',
+        userId: 'legacy-owner',
+      })
+    ).rejects.toThrow('Forbidden – cannot delete this team member')
+    expect(supabaseMocks.mockDelete).not.toHaveBeenCalled()
+  })
 })
 
 describe('carrier-only save payload integration', () => {

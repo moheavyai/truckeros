@@ -847,7 +847,7 @@ export async function deleteTeamMemberForUser(
     user_id: body.userId ?? null,
     is_self: body.userId === userId,
     is_primary_owner: false,
-    user_roles: [] as string[],
+    user_roles: [] as UserRole[],
   }
 
   if (body.source === 'member_profile' && body.userId) {
@@ -860,7 +860,11 @@ export async function deleteTeamMemberForUser(
 
     if (targetProfile) {
       target.is_primary_owner = targetProfile.is_primary_owner === true
-      target.user_roles = (targetProfile.user_roles as string[]) ?? []
+      // Keep legacy "Owner / Admin" as Owner for primary targets so delete stays fail-closed
+      // (canDeleteResource also rejects is_primary_owner; Owner role is a second guard).
+      target.user_roles = validateUserRoles(targetProfile.user_roles as string[] | undefined, {
+        isPrimaryOwner: target.is_primary_owner,
+      })
     }
   }
 
