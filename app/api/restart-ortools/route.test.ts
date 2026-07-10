@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { _resetRestartRateLimitForTests, POST } from './route'
+import { POST } from './route'
+import { _resetRestartRateLimitForTests } from '@/lib/restart-ortools-rate-limit'
 
 const mockGetUser = vi.fn()
 const mockUnref = vi.fn()
@@ -45,7 +46,6 @@ function createMockChild(options?: { pid?: number; emitError?: Error; emitSpawn?
 
 describe('POST /api/restart-ortools', () => {
   const originalPlatform = process.platform
-  const originalNodeEnv = process.env.NODE_ENV
 
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -54,12 +54,12 @@ describe('POST /api/restart-ortools', () => {
     mockExistsSync.mockReturnValue(true)
     mockSpawn.mockImplementation(() => createMockChild({ pid: 4242 }))
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
-    process.env.NODE_ENV = 'development'
+    vi.stubEnv('NODE_ENV', 'development')
   })
 
   afterEach(() => {
     Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
-    process.env.NODE_ENV = originalNodeEnv
+    vi.unstubAllEnvs()
     _resetRestartRateLimitForTests()
   })
 
@@ -75,7 +75,7 @@ describe('POST /api/restart-ortools', () => {
   })
 
   it('returns 403 in production', async () => {
-    process.env.NODE_ENV = 'production'
+    vi.stubEnv('NODE_ENV', 'production')
 
     const res = await POST()
     const body = await res.json()

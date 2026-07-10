@@ -3,18 +3,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import {
+  RESTART_RATE_LIMIT_MS,
+  getRestartRateLimitAt,
+  setRestartRateLimitAt,
+} from '@/lib/restart-ortools-rate-limit'
 
 export const dynamic = 'force-dynamic'
 
 const RESTART_COMMAND = 'npm run restart:ortools'
-const RATE_LIMIT_MS = 60_000
-
-const restartRateLimit = new Map<string, number>()
-
-/** Clears in-memory rate-limit state (test-only). */
-export function _resetRestartRateLimitForTests(): void {
-  restartRateLimit.clear()
-}
 
 function getRestartScriptPath(): string {
   return path.join(process.cwd(), 'restart-ortools.ps1')
@@ -81,9 +78,9 @@ export async function POST() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const lastRestartAt = restartRateLimit.get(user.id)
-  if (lastRestartAt !== undefined && Date.now() - lastRestartAt < RATE_LIMIT_MS) {
-    const retryAfterSeconds = Math.ceil((RATE_LIMIT_MS - (Date.now() - lastRestartAt)) / 1000)
+  const lastRestartAt = getRestartRateLimitAt(user.id)
+  if (lastRestartAt !== undefined && Date.now() - lastRestartAt < RESTART_RATE_LIMIT_MS) {
+    const retryAfterSeconds = Math.ceil((RESTART_RATE_LIMIT_MS - (Date.now() - lastRestartAt)) / 1000)
     return NextResponse.json(
       {
         success: false,
@@ -133,7 +130,7 @@ export async function POST() {
     )
   }
 
-  restartRateLimit.set(user.id, Date.now())
+  setRestartRateLimitAt(user.id, Date.now())
   console.log('[restart-ortools] restart initiated by user', user.id)
 
   return NextResponse.json({
