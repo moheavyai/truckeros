@@ -37,14 +37,17 @@ export const CARRIER_SUMMARY_LABELS: { key: CarrierFieldKey; label: string }[] =
   { key: 'insurance_contact', label: 'Insurance Contact' },
 ]
 
-const TEXT_FIELDS: (keyof MemberProfileFormData)[] = [
+/** String-valued form fields only (excludes `user_roles` arrays). */
+const TEXT_FIELDS = [
   ...CARRIER_FIELD_KEYS,
   'driver_full_name',
   'cdl_number',
   'driver_phone',
   'driver_email',
   'emergency_contact',
-]
+] as const satisfies readonly (keyof MemberProfileFormData)[]
+
+type TextFieldKey = (typeof TEXT_FIELDS)[number]
 
 export function hasCarrierData(source: CarrierSummarySource | null | undefined): boolean {
   if (!source) return false
@@ -1015,7 +1018,10 @@ function trimOrNull(value: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
-export function memberProfileFromRow(row: MemberProfile | null): MemberProfileFormData {
+/** Accepts member or team-roster rows; only form field keys (+ optional is_primary_owner) are read. */
+export function memberProfileFromRow(
+  row: MemberProfile | TeamMemberProfile | null
+): MemberProfileFormData {
   if (!row) return emptyMemberProfileForm()
 
   const form = emptyMemberProfileForm()
@@ -1024,15 +1030,17 @@ export function memberProfileFromRow(row: MemberProfile | null): MemberProfileFo
   }
   form.cdl_state = row.cdl_state ?? ''
   form.date_of_birth = row.date_of_birth ? row.date_of_birth.slice(0, 10) : ''
+  const isPrimaryOwner =
+    'is_primary_owner' in row && (row as MemberProfile).is_primary_owner === true
   form.user_roles = validateUserRoles(row.user_roles as string[] | undefined, {
-    isPrimaryOwner: row.is_primary_owner === true,
+    isPrimaryOwner,
   })
   return form
 }
 
 function profileFieldsToPayload(
   form: MemberProfileFormData,
-  fieldKeys: readonly (keyof MemberProfileFormData)[] = TEXT_FIELDS
+  fieldKeys: readonly TextFieldKey[] = TEXT_FIELDS
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {}
 
