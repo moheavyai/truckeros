@@ -269,7 +269,7 @@ export type OrganizationContextValue = {
   activeOrganizationId: string | null
   setActiveOrganization: (organizationId: string | null) => void
   accessibleCarriers: AccessibleCarrier[]
-  activeOrganization: Organization | null
+  activeOrganization: AccessibleCarrier | null
   effectiveOrganizationId: string | null
   ownOrganizationId: string | null
   canEnterServiceMode: boolean

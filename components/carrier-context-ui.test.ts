@@ -79,4 +79,17 @@ describe('Carrier context UI — service mode', () => {
     expect(source).toContain('accessibleOrganizationIdsKey,')
     expect(source).toContain('carriersLoadedForUser,')
   })
+
+  it('activeOrganization is typed as AccessibleCarrier for CarrierSelector', () => {
+    const orgSource = read(orgContextPath)
+    const selectorSource = read(selectorPath)
+    const barSource = read(contextBarPath)
+
+    // Context exposes AccessibleCarrier (not bare Organization) so Service Mode
+    // selector props stay assignable without mapping access_source.
+    expect(orgSource).toContain('activeOrganization: AccessibleCarrier | null')
+    expect(orgSource).not.toContain('activeOrganization: Organization | null')
+    expect(selectorSource).toContain('activeOrganization: AccessibleCarrier | null')
+    expect(barSource).toContain('activeOrganization={activeOrganization}')
+  })
 })
