@@ -174,7 +174,7 @@ describe('normalizeDrops', () => {
       { query: 'B', lat: 'bad', lon: '-102' },
     ])
     expect(result.ok).toBe(false)
-    if (!result.ok) {
+    if (result.ok === false) {
       expect(result.message).toContain('drops[1]')
     }
   })
@@ -187,7 +187,7 @@ describe('normalizeDrops', () => {
     }))
     const result = normalizeDrops(tooMany)
     expect(result.ok).toBe(false)
-    if (!result.ok) {
+    if (result.ok === false) {
       expect(result.message).toContain(String(MAX_DROPS))
     }
   })

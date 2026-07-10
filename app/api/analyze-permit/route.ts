@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     const dropsResult = normalizeDrops(body.drops)
-    if (!dropsResult.ok) {
+    if (dropsResult.ok === false) {
       return NextResponse.json(
         {
           status: 'invalid',
