@@ -7,6 +7,7 @@ import {
   decideServiceModeActiveOrganizationUpdate,
   getActiveOrganizationId,
   getWorkspaceMode,
+  normalizeJoinedOrganization,
   organizationDisplayName,
   parseAccessibleOrganizationIdsKey,
   resolveEffectiveOrganizationId,
@@ -15,7 +16,7 @@ import {
   setWorkspaceMode,
   toAccessibleOrganizationIdsKey,
 } from './organization-context'
-import type { AccessibleCarrier } from '@/types/organization'
+import type { AccessibleCarrier, Organization } from '@/types/organization'
 
 function carrier(id: string, role = 'Permit Clerk'): AccessibleCarrier {
   return {
@@ -372,5 +373,25 @@ describe('areAccessibleCarrierListsEqual', () => {
     expect(
       areAccessibleCarrierListsEqual([carrier('a', 'Viewer')], [carrier('a', 'Permit Clerk')])
     ).toBe(false)
+  })
+})
+
+describe('normalizeJoinedOrganization', () => {
+  const org: Organization = { id: 'org-1', name: 'Acme' }
+
+  it('returns a single organization object as-is when it has an id', () => {
+    expect(normalizeJoinedOrganization(org)).toEqual(org)
+  })
+
+  it('unwraps the first element when PostgREST returns an array join', () => {
+    expect(normalizeJoinedOrganization([org])).toEqual(org)
+  })
+
+  it('returns null for null, undefined, empty array, or missing id', () => {
+    expect(normalizeJoinedOrganization(null)).toBeNull()
+    expect(normalizeJoinedOrganization(undefined)).toBeNull()
+    expect(normalizeJoinedOrganization([])).toBeNull()
+    expect(normalizeJoinedOrganization({ id: '', name: 'x' })).toBeNull()
+    expect(normalizeJoinedOrganization([{ id: '', name: 'x' }])).toBeNull()
   })
 })

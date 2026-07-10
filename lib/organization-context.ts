@@ -221,6 +221,28 @@ function dedupeCarriers(rows: AccessibleCarrier[]): AccessibleCarrier[] {
   )
 }
 
+/** Raw membership row from Supabase nested select (organization may be typed as array). */
+type MembershipWithOrganizationRow = {
+  role?: string | null
+  is_primary_owner?: boolean | null
+  organization?: Organization | Organization[] | null
+}
+
+/**
+ * PostgREST/Supabase client types often model nested many-to-one joins as arrays.
+ * At runtime the value is usually a single object (or null); normalize either shape.
+ */
+export function normalizeJoinedOrganization(
+  organization: Organization | Organization[] | null | undefined
+): Organization | null {
+  if (organization == null) return null
+  if (Array.isArray(organization)) {
+    const first = organization[0]
+    return first?.id ? first : null
+  }
+  return organization.id ? organization : null
+}
+
 export async function fetchAccessibleCarriers(userId: string): Promise<AccessibleCarrier[]> {
   const supabase = createClient()
   const carriers: AccessibleCarrier[] = []
@@ -234,16 +256,15 @@ export async function fetchAccessibleCarriers(userId: string): Promise<Accessibl
   ])
 
   if (memberships) {
-    for (const row of memberships as Array<{
-      role: string
-      is_primary_owner: boolean
-      organization: Organization | null
-    }>) {
-      if (!row.organization?.id) continue
+    // Cast via unknown: generated join types use organization: any[] which does not overlap Organization.
+    const rows = memberships as unknown as MembershipWithOrganizationRow[]
+    for (const row of rows) {
+      const organization = normalizeJoinedOrganization(row.organization)
+      if (!organization) continue
       carriers.push({
-        ...row.organization,
+        ...organization,
         access_source: row.is_primary_owner ? 'primary_owner' : 'membership',
-        membership_role: row.role,
+        membership_role: row.role ?? undefined,
       })
     }
   }
