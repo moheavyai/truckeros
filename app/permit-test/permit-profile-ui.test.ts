@@ -280,6 +280,51 @@ describe('Permit test page — member profile autofill UI', () => {
   })
 })
 
+describe('Permit test page — routing envelope form string→number coercion', () => {
+  const coercedFields = [
+    'trailerWidthFt: Number(formData.trailerWidthFt) || 0',
+    'loadWidthFt: Number(formData.loadWidthFt) || 0',
+    'deckHeightFt: Number(formData.trailerDeckHeightFt) || 0',
+    'loadHeightFt: Number(formData.loadHeightFt) || 0',
+    'loadWeightLbs: Number(formData.loadWeightLbs) || 0',
+  ] as const
+
+  function computeRoutingEnvelopeCallSlices(source: string): string[] {
+    const slices: string[] = []
+    let searchFrom = 0
+    while (true) {
+      const start = source.indexOf('const envelope = computeRoutingEnvelope({', searchFrom)
+      if (start === -1) break
+      const end = source.indexOf('})', start)
+      expect(end).toBeGreaterThan(start)
+      slices.push(source.slice(start, end + 2))
+      searchFrom = start + 1
+    }
+    return slices
+  }
+
+  it('coerces string form fields with Number(...) || 0 at both computeRoutingEnvelope call sites', () => {
+    const source = readPermitPageSource()
+    const slices = computeRoutingEnvelopeCallSlices(source)
+
+    // Envelope useEffect + formatRigSummaryLine
+    expect(slices).toHaveLength(2)
+    expect(source).toContain('function formatRigSummaryLine()')
+
+    for (const slice of slices) {
+      for (const field of coercedFields) {
+        expect(slice).toContain(field)
+      }
+      // Must not pass raw string form fields into the number-typed envelope input
+      expect(slice).not.toContain('trailerWidthFt: formData.trailerWidthFt,')
+      expect(slice).not.toContain('loadWidthFt: formData.loadWidthFt,')
+      expect(slice).not.toContain('deckHeightFt: formData.trailerDeckHeightFt,')
+      expect(slice).not.toContain('loadHeightFt: formData.loadHeightFt,')
+      expect(slice).not.toContain('loadWeightLbs: formData.loadWeightLbs,')
+    }
+  })
+})
+
 describe('permit-profile-autofill lib — service mode', () => {
   it('documents effectiveOrganizationId driver filtering via org-scoped roster loads', () => {
     const source = readAutofillLibSource()

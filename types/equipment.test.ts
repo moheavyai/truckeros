@@ -41,6 +41,27 @@ describe('computeRoutingEnvelope', () => {
     })
   })
 
+  it('treats NaN inputs as zero via Number coercion', () => {
+    expect(
+      computeRoutingEnvelope({
+        trailerWidthFt: NaN,
+        loadWidthFt: NaN,
+        deckHeightFt: NaN,
+        loadHeightFt: NaN,
+        rigEmptyWeightLbs: NaN,
+        loadWeightLbs: NaN,
+        rigLengthFt: NaN,
+        loadOverhangFrontFt: NaN,
+        loadOverhangRearFt: NaN,
+      })
+    ).toEqual({
+      lengthFt: 0,
+      widthFt: 0,
+      heightFt: 0,
+      weightLbs: 0,
+    })
+  })
+
   it('includes only front overhang when rear is zero', () => {
     expect(
       computeRoutingEnvelope({ rigLengthFt: 60, loadOverhangFrontFt: 4, loadOverhangRearFt: 0 })

@@ -583,12 +583,12 @@ export default function PermitTestPage() {
       rigLengthFt: rigBaseLength,
       loadOverhangFrontFt,
       loadOverhangRearFt,
-      trailerWidthFt: formData.trailerWidthFt,
-      loadWidthFt: formData.loadWidthFt,
-      deckHeightFt: formData.trailerDeckHeightFt,
-      loadHeightFt: formData.loadHeightFt,
+      trailerWidthFt: Number(formData.trailerWidthFt) || 0,
+      loadWidthFt: Number(formData.loadWidthFt) || 0,
+      deckHeightFt: Number(formData.trailerDeckHeightFt) || 0,
+      loadHeightFt: Number(formData.loadHeightFt) || 0,
       rigEmptyWeightLbs: rigEmpty,
-      loadWeightLbs: formData.loadWeightLbs,
+      loadWeightLbs: Number(formData.loadWeightLbs) || 0,
     })
     setFormData((prev) => {
       const next = { ...prev }
@@ -858,12 +858,12 @@ export default function PermitTestPage() {
       rigLengthFt: rigBaseLength,
       loadOverhangFrontFt,
       loadOverhangRearFt,
-      trailerWidthFt: formData.trailerWidthFt,
-      loadWidthFt: formData.loadWidthFt,
-      deckHeightFt: formData.trailerDeckHeightFt,
-      loadHeightFt: formData.loadHeightFt,
+      trailerWidthFt: Number(formData.trailerWidthFt) || 0,
+      loadWidthFt: Number(formData.loadWidthFt) || 0,
+      deckHeightFt: Number(formData.trailerDeckHeightFt) || 0,
+      loadHeightFt: Number(formData.loadHeightFt) || 0,
       rigEmptyWeightLbs: rigEmpty,
-      loadWeightLbs: formData.loadWeightLbs,
+      loadWeightLbs: Number(formData.loadWeightLbs) || 0,
     })
     return buildRigSummaryLine({
       name: selectedRigSnapshot?.rigName || 'Custom rig',
