@@ -80,6 +80,7 @@ import {
   resolvePiecesForSubmit,
 } from '@/lib/load-details-options'
 import { buildPermitCargoSnapshot } from '@/lib/permit-cargo-snapshot'
+import { isDevEnvironment } from '@/lib/dev-mode'
 import type { MemberProfile, TeamMemberListItem, TeamMemberProfile } from '@/types/member-profile'
 
 type DropStop = LocationStop & { lat?: number; lon?: number }
@@ -111,6 +112,18 @@ function stateRequiresPermit(primary: PermitPrimary | null | undefined, state: s
   if (Array.isArray(primary.permitWarnings) && primary.permitWarnings.length > 0) return true
   return primary.permitRequiredStates?.includes(state) ?? false
 }
+
+/** Form controls — stronger borders/text on mobile; softer from sm+ */
+const fieldControlClass =
+  'border border-gray-500 sm:border-gray-300 text-gray-900 placeholder:text-gray-500 bg-white'
+const inputClass = `${fieldControlClass} rounded w-full p-2`
+const inputCompactClass = `${fieldControlClass} rounded w-full text-sm p-1.5`
+const selectClass = `${fieldControlClass} p-2 rounded-lg text-sm w-full`
+const textareaClass = `${fieldControlClass} rounded w-full text-sm p-3 min-h-[60px] resize-y`
+const readoutClass = `${fieldControlClass} p-2 rounded w-full text-sm font-mono`
+const fieldHintClass = 'text-xs text-gray-600 sm:text-gray-500'
+const fieldHintTinyClass = 'text-[10px] text-gray-600 sm:text-gray-500'
+const fieldLabelTinyClass = 'block text-[10px] text-gray-600 sm:text-gray-500'
 
 export default function PermitTestPage() {
   const [user, setUser] = useState<any>(null)
@@ -1613,7 +1626,10 @@ export default function PermitTestPage() {
     } finally {
       if (runId === routeAnalysisAbortRef.current) {
         setLoading(false)
-        void checkOrToolsHealthRef.current?.()
+        // Dev-only: refresh OR-Tools status banner after analyze runs
+        if (isDevEnvironment()) {
+          void checkOrToolsHealthRef.current?.()
+        }
       }
     }
   }
@@ -2034,7 +2050,8 @@ export default function PermitTestPage() {
       setShowChangeRouteInput(true) // keep input open on error
     } finally {
       setLoading(false)
-      if (optimizationMode === 'ortools') {
+      // Dev-only: refresh OR-Tools status banner after change-route runs
+      if (isDevEnvironment() && optimizationMode === 'ortools') {
         void checkOrToolsHealthRef.current?.()
       }
     }
@@ -2202,16 +2219,18 @@ export default function PermitTestPage() {
     }
   }, [restartingOrTools, checkOrToolsHealth, waitForRestartPollDelay])
 
-  // Auto-check OR-Tools health once per mount after auth (not on TOKEN_REFRESHED)
+  // Auto-check OR-Tools health once per mount after auth (dev-only debug chrome)
   useEffect(() => {
+    if (!isDevEnvironment()) return
     if (!loadingAuth && user?.id && !hasCheckedHealthRef.current) {
       hasCheckedHealthRef.current = true
       checkOrToolsHealth()
     }
   }, [loadingAuth, user?.id, checkOrToolsHealth])
 
-  // Re-probe when user returns to tab if service was unreachable
+  // Re-probe when user returns to tab if service was unreachable (dev-only)
   useEffect(() => {
+    if (!isDevEnvironment()) return
     const onFocus = () => {
       if (ortoolsHealth?.status === 'unreachable' && !checkingOrToolsHealth) {
         void checkOrToolsHealth()
@@ -2286,7 +2305,7 @@ export default function PermitTestPage() {
             <span className="text-white text-3xl font-bold tracking-tighter">T</span>
           </div>
           <p className="text-gray-700 font-semibold text-lg">Checking authentication...</p>
-          <p className="text-gray-500 text-sm mt-1">Please wait while we verify your session</p>
+          <p className="text-gray-600 sm:text-gray-500 text-sm mt-1">Please wait while we verify your session</p>
         </div>
       </div>
     )
@@ -2331,11 +2350,11 @@ export default function PermitTestPage() {
       <div className="mb-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">New Route Analysis</h1>
-          <p className="text-sm text-gray-500">Enter origin and destination — routing and permits calculate automatically</p>
+          <p className="text-sm text-gray-600 sm:text-gray-500">Enter origin and destination — routing and permits calculate automatically</p>
         </div>
 
-        {/* OR-Tools Service Connection Status */}
-        {(() => {
+        {/* OR-Tools Service Connection Status — dev-only debug chrome (hidden in production) */}
+        {isDevEnvironment() && (() => {
           const isOrToolsChecking = checkingOrToolsHealth || ortoolsHealth === null
           const isHealthProbeTimeout = ortoolsHealth?.message?.toLowerCase().includes('timed out') ?? false
           return (
@@ -2420,7 +2439,7 @@ export default function PermitTestPage() {
           )
         })()}
 
-        {restartOrToolsMessage && (
+        {isDevEnvironment() && restartOrToolsMessage && (
           <div className="mt-2 p-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-900 text-sm">
             {restartOrToolsMessage}
             <span className="block mt-1 text-xs text-indigo-700">
@@ -2444,7 +2463,7 @@ export default function PermitTestPage() {
 
         {/* Quick Voice Actions */}
         <div className="mt-3 flex items-center gap-2 text-xs">
-          <span className="text-gray-500">Load Pilot:</span>
+          <span className="text-gray-600 sm:text-gray-500">Load Pilot:</span>
           <button
             type="button"
             onClick={confirmWithVoice}
@@ -2453,7 +2472,7 @@ export default function PermitTestPage() {
           >
             🔊 Read back values
           </button>
-          <span className="text-gray-400">• Use the 🎤 buttons below for voice input</span>
+          <span className="text-gray-600 sm:text-gray-500">• Use the 🎤 buttons below for voice input</span>
         </div>
       </div>
 
@@ -2474,7 +2493,7 @@ export default function PermitTestPage() {
         <section className="space-y-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Driver for this load</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className={`${fieldHintClass} mt-0.5`}>
               Select a saved driver — carrier details are applied automatically for permits.
             </p>
           </div>
@@ -2557,7 +2576,7 @@ export default function PermitTestPage() {
                     id="permit-select-driver"
                     value={selectedDriverKey}
                     onChange={(e) => handleDriverSelect(e.target.value)}
-                    className="border border-gray-300 bg-white p-2 rounded-lg text-sm w-full"
+                    className={selectClass}
                   >
                     <option value="">— Select a driver —</option>
                     {driverSelectOptions.map((option) => (
@@ -2567,7 +2586,7 @@ export default function PermitTestPage() {
                     ))}
                   </select>
                   {workspaceMode === 'carrier' && (
-                    <a href="/profile" className="text-xs text-gray-500 hover:text-gray-700">
+                    <a href="/profile" className={`text-xs text-gray-600 sm:text-gray-500 hover:text-gray-700`}>
                       Manage drivers →
                     </a>
                   )}
@@ -2633,7 +2652,7 @@ export default function PermitTestPage() {
                 if (rig) handleSelectRig(rig as any)
                 setShowRigPicker(false)
               }}
-              className="border border-gray-300 bg-white p-2 rounded-lg text-sm w-full"
+              className={selectClass}
               disabled={loadingRigs}
             >
               <option value="">— Custom dimensions —</option>
@@ -2643,7 +2662,7 @@ export default function PermitTestPage() {
                 </option>
               ))}
             </select>
-            <a href="/equipment" className="text-xs text-gray-500 hover:text-gray-700">Manage equipment →</a>
+            <a href="/equipment" className="text-xs text-gray-600 sm:text-gray-500 hover:text-gray-700">Manage equipment →</a>
           </div>
         )}
 
@@ -2655,11 +2674,11 @@ export default function PermitTestPage() {
           >
             {showRigDetails ? 'Hide Rig Details' : 'Show Rig Details'}
           </button>
-          <a href="/equipment" className="text-xs text-gray-500 hover:text-emerald-700">Edit in Equipment →</a>
+          <a href="/equipment" className="text-xs text-gray-600 sm:text-gray-500 hover:text-emerald-700">Edit in Equipment →</a>
         </div>
         {showRigDetails && (
           <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/80 space-y-3 text-sm">
-            <p className="text-xs text-gray-500">Read-only — edit tractor, trailer, and rig specs in Equipment Management.</p>
+            <p className={fieldHintClass}>Read-only — edit tractor, trailer, and rig specs in Equipment Management.</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">
               {[
                 ['Tractor plate', formatLicensePlateDisplay(selectedRigSnapshot?.tractor?.license_plate, selectedRigSnapshot?.tractor?.license_plate_state) || '—'],
@@ -2674,8 +2693,8 @@ export default function PermitTestPage() {
                 ['Rig length', selectedRigSnapshot?.overallLengthFt ? `${Number(selectedRigSnapshot.overallLengthFt).toFixed(1)} ft` : '—'],
               ].map(([label, val]) => (
                 <div key={label}>
-                  <div className="text-[10px] text-gray-500">{label}</div>
-                  <div className="font-mono text-gray-800">{val}</div>
+                  <div className={fieldHintTinyClass}>{label}</div>
+                  <div className="font-mono text-gray-900 sm:text-gray-800">{val}</div>
                 </div>
               ))}
             </div>
@@ -2691,10 +2710,10 @@ export default function PermitTestPage() {
         {/* Legacy equipment profile selector (kept for backward compat with old saved profiles).
            The primary path is now the clean Rig Selector at the top of the form (from dedicated Equipment page). */}
         {equipmentProfiles.length > 0 && (
-          <div className="text-xs text-gray-500 bg-gray-50 border rounded p-2">
+          <div className={`${fieldHintClass} bg-gray-50 border border-gray-300 sm:border-gray-200 rounded p-2`}>
             Legacy profiles available: <select value={selectedProfileId || ''} onChange={(e) => {
               const p = equipmentProfiles.find((x: any) => x.id === e.target.value); if (p) handleSelectProfile(p)
-            }} className="border px-1 py-0.5 rounded text-xs"><option value="">None</option>{equipmentProfiles.map((p: any) => <option key={p.id} value={p.id}>{p.profile_name}</option>)}</select>
+            }} className={`${fieldControlClass} px-1 py-0.5 rounded text-xs`}><option value="">None</option>{equipmentProfiles.map((p: any) => <option key={p.id} value={p.id}>{p.profile_name}</option>)}</select>
           </div>
         )}
 
@@ -2706,18 +2725,18 @@ export default function PermitTestPage() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <div className="md:col-span-2">
-              <label className="block text-xs font-medium mb-1">Description — what are you hauling?</label>
+              <label className="block text-xs font-medium text-gray-800 mb-1">Description — what are you hauling?</label>
               <input
                 value={formData.cargoDescription}
                 onChange={(e) => setFormData((p) => ({ ...p, cargoDescription: e.target.value }))}
-                className="border p-2 rounded w-full"
+                className={inputClass}
                 placeholder="e.g. Oversize transformer on lowboy, 42k lb compressor skid"
               />
             </div>
             <div className="md:col-span-2">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs border rounded p-2 bg-gray-50">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs border border-gray-300 sm:border-gray-200 rounded p-2 bg-gray-50 text-gray-900">
                 <div className="flex items-center gap-1.5">
-                  <label htmlFor="numberOfPieces" className="font-medium whitespace-nowrap">No. of Pieces</label>
+                  <label htmlFor="numberOfPieces" className="font-medium whitespace-nowrap text-gray-800">No. of Pieces</label>
                   <input
                     id="numberOfPieces"
                     type="number"
@@ -2731,7 +2750,7 @@ export default function PermitTestPage() {
                       setFormData((p) => ({ ...p, numberOfPieces: clamped }))
                       setNumberOfPiecesDraft(null)
                     }}
-                    className="border rounded w-14 p-1 text-center"
+                    className={`${fieldControlClass} rounded w-14 p-1 text-center`}
                   />
                 </div>
                 <fieldset
@@ -2775,12 +2794,12 @@ export default function PermitTestPage() {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1">Manufacturer</label>
-              <input value={formData.cargoManufacturer} onChange={(e) => setFormData((p) => ({ ...p, cargoManufacturer: e.target.value }))} className="border p-2 rounded w-full" />
+              <label className="block text-xs font-medium text-gray-800 mb-1">Manufacturer</label>
+              <input value={formData.cargoManufacturer} onChange={(e) => setFormData((p) => ({ ...p, cargoManufacturer: e.target.value }))} className={inputClass} />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1">Make / Model / SN</label>
-              <input value={formData.cargoMakeModel} onChange={(e) => setFormData((p) => ({ ...p, cargoMakeModel: e.target.value }))} className="border p-2 rounded w-full" placeholder="Serial optional" />
+              <label className="block text-xs font-medium text-gray-800 mb-1">Make / Model / SN</label>
+              <input value={formData.cargoMakeModel} onChange={(e) => setFormData((p) => ({ ...p, cargoMakeModel: e.target.value }))} className={inputClass} placeholder="Serial optional" />
             </div>
           </div>
 
@@ -2788,15 +2807,15 @@ export default function PermitTestPage() {
               These are distinct from the top-level routing envelope (weight/length/width/height at top of form).
               Static capture only for now — no calculations, validation, or auto-sync. */}
           <div className="mb-3">
-            <div className="text-xs font-medium mb-1 text-gray-600">Load Dimensions (specific cargo)</div>
+            <div className="text-xs font-medium mb-1 text-gray-700 sm:text-gray-600">Load Dimensions (specific cargo)</div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
-                <label className="block text-[10px] text-gray-500">Load Weight (lbs)</label>
+                <label className={fieldLabelTinyClass}>Load Weight (lbs)</label>
                 <input
                   type="number"
                   value={formData.loadWeightLbs || ''}
                   onChange={(e) => setFormData((p) => ({ ...p, loadWeightLbs: e.target.value }))}
-                  className="border p-1.5 rounded w-full text-sm"
+                  className={inputCompactClass}
                   placeholder="e.g. 42000"
                 />
               </div>
@@ -2857,9 +2876,9 @@ export default function PermitTestPage() {
           </details>
 
           {/* Dynamic axle weights (driven by axles count) + auto gross + helpers */}
-          <div className="border rounded-lg p-3 bg-white">
+          <div className="border border-gray-300 sm:border-gray-200 rounded-lg p-3 bg-white">
             <div className="flex items-center justify-between mb-2">
-              <div className="font-medium text-sm">Axle Weight Distribution (lbs) — auto from gross weight</div>
+              <div className="font-medium text-sm text-gray-900">Axle Weight Distribution (lbs) — auto from gross weight</div>
               <div className="flex gap-2 text-xs">
                 <button type="button" onClick={() => {
                   const n = Math.max(1, Math.min(12, Number(formData.axles) || 5))
@@ -2884,7 +2903,7 @@ export default function PermitTestPage() {
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-2">
                     {Array.from({ length: n }).map((_, i) => (
                       <div key={i}>
-                        <label className="text-[10px] text-gray-500">Axle {i + 1}</label>
+                        <label className={fieldLabelTinyClass}>Axle {i + 1}</label>
                         <input
                           type="number"
                           value={weights[i] || 0}
@@ -2897,7 +2916,7 @@ export default function PermitTestPage() {
                               return { ...prev, axleWeights: arr, grossLoadedWeight: newSum || prev.grossLoadedWeight }
                             })
                           }}
-                          className="border p-1.5 rounded w-full text-sm"
+                          className={inputCompactClass}
                         />
                       </div>
                     ))}
@@ -2909,10 +2928,10 @@ export default function PermitTestPage() {
                         type="number"
                         value={gross}
                         onChange={(e) => setFormData((p) => ({ ...p, grossLoadedWeight: parseFloat(e.target.value) || 0 }))}
-                        className="ml-2 w-28 border p-1 rounded"
+                        className={`${fieldControlClass} ml-2 w-28 p-1 rounded`}
                       /> lbs
                     </div>
-                    <div className="text-xs text-gray-500">Sum of shown axles: <span className="font-mono">{sum.toLocaleString()}</span></div>
+                    <div className={fieldHintClass}>Sum of shown axles: <span className="font-mono text-gray-900">{sum.toLocaleString()}</span></div>
                     {gross !== sum && gross > 0 && (
                       <div className="text-amber-600 text-xs">⚠ Gross differs from axle sum (normal for 5th-wheel/kingpin load transfer)</div>
                     )}
@@ -2921,7 +2940,7 @@ export default function PermitTestPage() {
               )
             })()}
           </div>
-          <p className="text-[10px] text-gray-500 mt-1">Auto-calc + distribute helpers match real carrier bridge-law workflows. Values are captured on save.</p>
+          <p className={`${fieldHintTinyClass} mt-1`}>Auto-calc + distribute helpers match real carrier bridge-law workflows. Values are captured on save.</p>
         </div>
 
         {/* Routing envelope — auto-calculated from rig + load; sent to routing/agent */}
@@ -2930,43 +2949,43 @@ export default function PermitTestPage() {
           <p className="text-xs text-emerald-800 mb-3">Auto-calculated from rig base length, overhangs, trailer, and load dimensions.</p>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm mb-1">Gross weight</label>
-              <div className="border p-2 rounded w-full bg-white text-sm font-mono">
+              <label className="block text-sm mb-1 text-gray-800">Gross weight</label>
+              <div className={readoutClass}>
                 {formData.weight > 0 ? `${formData.weight.toLocaleString()} lbs` : '—'}
                 {formData.weight > 0 && formData.weight <= LEGAL_GROSS_LBS && (
                   <span className="text-emerald-600 font-medium ml-1">(legal)</span>
                 )}
               </div>
-              <p className="text-[10px] text-gray-500 mt-0.5">Rig empty + load weight</p>
+              <p className={`${fieldHintTinyClass} mt-0.5`}>Rig empty + load weight</p>
             </div>
             <div>
-              <label className="block text-sm mb-1">Gross length</label>
-              <div className="border p-2 rounded w-full bg-white text-sm font-mono">
+              <label className="block text-sm mb-1 text-gray-800">Gross length</label>
+              <div className={readoutClass}>
                 {formatDimensionDisplay(formData.length) || '—'}
               </div>
-              <p className="text-[10px] text-gray-500 mt-0.5">Rig length + front rig overhang + rear overhang</p>
+              <p className={`${fieldHintTinyClass} mt-0.5`}>Rig length + front rig overhang + rear overhang</p>
             </div>
             <div>
-              <label className="block text-sm mb-1">Gross width</label>
-              <div className="border p-2 rounded w-full bg-white text-sm font-mono">
+              <label className="block text-sm mb-1 text-gray-800">Gross width</label>
+              <div className={readoutClass}>
                 {formatDimensionDisplay(formData.width) || '—'}
               </div>
-              <p className="text-[10px] text-gray-500 mt-0.5">max(trailer width, load width)</p>
+              <p className={`${fieldHintTinyClass} mt-0.5`}>max(trailer width, load width)</p>
             </div>
             <div>
-              <label className="block text-sm mb-1">Gross height</label>
+              <label className="block text-sm mb-1 text-gray-800">Gross height</label>
               {(() => {
                 const heightDisplay = getGrossHeightDisplay(formData.height)
                 return (
                   <>
-                    <div className="border p-2 rounded w-full bg-white text-sm font-mono">
+                    <div className={readoutClass}>
                       {heightDisplay.displayText || '—'}
                       {heightDisplay.showLegalBadge && (
                         <span className="text-emerald-600 font-medium ml-1">(legal)</span>
                       )}
                     </div>
                     {heightDisplay.helperText && (
-                      <p className="text-[10px] text-gray-500 mt-0.5">{heightDisplay.helperText}</p>
+                      <p className={`${fieldHintTinyClass} mt-0.5`}>{heightDisplay.helperText}</p>
                     )}
                   </>
                 )
@@ -2989,7 +3008,7 @@ export default function PermitTestPage() {
               🎤
             </button>
           </h2>
-          <p className="text-xs text-gray-500 mb-2">
+          <p className={`${fieldHintClass} mb-2`}>
             Enter any route preferences here before entering addresses — they will be used in the first optimization.
             {' '}With multiple drops, &quot;include&quot; / via preferences are not applied — only avoid-state rules are enforced.
           </p>
@@ -2997,9 +3016,9 @@ export default function PermitTestPage() {
             placeholder="E.g. avoid AR, avoid IL, include Corinth MS, prefer I-40 southern, stay on interstates..."
             value={manualRoute}
             onChange={(e) => setManualRoute(e.target.value)}
-            className="border p-3 rounded w-full text-sm min-h-[60px] resize-y"
+            className={textareaClass}
           />
-          <p className="text-[10px] text-gray-500 mt-1">Hard-enforced in OR-Tools routing. Voice or type.</p>
+          <p className={`${fieldHintTinyClass} mt-1`}>Hard-enforced in OR-Tools routing. Voice or type.</p>
         </div>
 
         {/* Pickup */}
@@ -3049,13 +3068,13 @@ export default function PermitTestPage() {
               + Add drop {formData.drops.length >= MAX_DROPS ? `(max ${MAX_DROPS})` : ''}
             </button>
           </div>
-          <p className="text-xs text-gray-500 -mt-2">
+          <p className={`${fieldHintClass} -mt-2`}>
             Enter each delivery stop in order. Business names and full street addresses work.
           </p>
           {formData.drops.map((drop, idx) => {
             const key = dropStopKey(drop)
             return (
-            <div key={drop.id} className="border border-gray-100 rounded-xl p-3">
+            <div key={drop.id} className="border border-gray-300 sm:border-gray-200 rounded-xl p-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1">
                   <LocationStopInput
@@ -3237,7 +3256,7 @@ export default function PermitTestPage() {
                   <button
                     type="button"
                     onClick={() => setShowRouteDetails((v) => !v)}
-                    className="text-xs text-gray-500 hover:text-gray-800 underline underline-offset-2"
+                    className="text-xs text-gray-600 sm:text-gray-500 hover:text-gray-800 underline underline-offset-2"
                   >
                     {showRouteDetails ? 'Hide details' : 'Show route details'}
                   </button>
@@ -3282,7 +3301,7 @@ export default function PermitTestPage() {
                             value={manualRoute}
                             onChange={(e) => setManualRoute(e.target.value)}
                             placeholder="AL, MS, TN, MO, NE"
-                            className="flex-1 border rounded px-3 py-2 text-sm"
+                            className={`${fieldControlClass} flex-1 rounded px-3 py-2 text-sm`}
                             onKeyDown={(e) => { if (e.key === 'Enter') handleChangeRoute() }}
                           />
                           <button
@@ -3319,7 +3338,7 @@ export default function PermitTestPage() {
                           <h3 className="font-semibold text-gray-900 text-lg">Primary Recommended Route</h3>
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">RECOMMENDED</span>
                         </div>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-gray-600 sm:text-gray-500">
                           {primary.routeCorridor.length} states
                           {primary.distanceMiles && ` • ${primary.distanceMiles} miles`}
                           {primary.durationHours && ` • ~${primary.durationHours} hrs`}
@@ -3610,7 +3629,7 @@ export default function PermitTestPage() {
                       {/* TruckerOS Platform Fee */}
                       <div className="flex justify-between items-baseline mb-3">
                         <span className="text-sm text-gray-600">
-                          TruckerOS Platform Fee <span className="text-xs text-gray-400">({selectedTier})</span>
+                          TruckerOS Platform Fee <span className="text-xs text-gray-600 sm:text-gray-500">({selectedTier})</span>
                         </span>
                         <span className="font-medium text-blue-600">
                           ${(() => {
@@ -3633,13 +3652,13 @@ export default function PermitTestPage() {
                               return stateCost + platformFee
                             })()}
                           </span>
-                          <span className="text-sm text-gray-500">USD</span>
+                          <span className="text-sm text-gray-600 sm:text-gray-500">USD</span>
                         </div>
                       </div>
 
                       {/* Surcharges breakdown (if any) */}
                       {primary.costBreakdown.surcharges && Object.keys(primary.costBreakdown.surcharges).length > 0 && (
-                        <div className="mt-3 text-xs text-gray-500">
+                        <div className="mt-3 text-xs text-gray-600 sm:text-gray-500">
                           Includes dimensional/weight surcharges
                         </div>
                       )}
@@ -3686,7 +3705,7 @@ export default function PermitTestPage() {
                         </div>
                       ))}
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">These are alternative corridors returned by the routing engine. Review and approve one if the primary is not suitable.</p>
+                    <p className="text-xs text-gray-600 sm:text-gray-500 mt-2">These are alternative corridors returned by the routing engine. Review and approve one if the primary is not suitable.</p>
                   </div>
                 )}
 
@@ -3697,14 +3716,14 @@ export default function PermitTestPage() {
                   </summary>
                   <div className="mt-4 grid md:grid-cols-2 gap-4">
                     <div>
-                      <h4 className="text-xs font-semibold text-gray-500 mb-1">AGENT RESPONSE</h4>
+                      <h4 className="text-xs font-semibold text-gray-600 sm:text-gray-500 mb-1">AGENT RESPONSE</h4>
                       <pre className="text-xs bg-white p-3 rounded border overflow-auto max-h-80">
                         {JSON.stringify(agentResult || result?.agent, null, 2)}
                       </pre>
                     </div>
                     {(savedToDatabase || result?.savedToDatabase) && (
                       <div>
-                        <h4 className="text-xs font-semibold text-gray-500 mb-1">SAVED TO SUPABASE</h4>
+                        <h4 className="text-xs font-semibold text-gray-600 sm:text-gray-500 mb-1">SAVED TO SUPABASE</h4>
                         <pre className="text-xs bg-white p-3 rounded border overflow-auto max-h-80">
                           {JSON.stringify(result?.savedToDatabase, null, 2)}
                         </pre>
@@ -3722,7 +3741,7 @@ export default function PermitTestPage() {
                     setShowChangeRouteInput(false)
                     setManualRoute('')
                   }}
-                  className="text-sm text-gray-500 hover:text-gray-700 underline"
+                  className="text-sm text-gray-600 sm:text-gray-500 hover:text-gray-700 underline"
                 >
                   Clear results and test another load
                 </button>
@@ -3792,10 +3811,10 @@ export default function PermitTestPage() {
             )}
           </div>
         ) : (
-          <p className="text-sm text-gray-500">Click &quot;Check Status&quot; to verify permit, equipment, and rig-builder schema columns.</p>
+          <p className="text-sm text-gray-600 sm:text-gray-500">Click &quot;Check Status&quot; to verify permit, equipment, and rig-builder schema columns.</p>
         )}
 
-        <p className="text-xs text-gray-400 mt-2">
+        <p className="text-xs text-gray-600 sm:text-gray-500 mt-2">
           Covers permit route metadata, equipment license plates, and default rig selection for the Permit Agent.
         </p>
       </div>

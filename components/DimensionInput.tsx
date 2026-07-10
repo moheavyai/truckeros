@@ -55,7 +55,7 @@ export default function DimensionInput({
   return (
     <div className={className}>
       {label && (
-        <label htmlFor={id} className="block text-[10px] text-gray-500 mb-0.5">
+        <label htmlFor={id} className="block text-[10px] text-gray-600 sm:text-gray-500 mb-0.5">
           {label}
         </label>
       )}
@@ -78,7 +78,7 @@ export default function DimensionInput({
             commit((e.target as HTMLInputElement).value)
           }
         }}
-        className="border p-1.5 rounded w-full text-sm font-mono"
+        className="border border-gray-500 sm:border-gray-300 text-gray-900 placeholder:text-gray-500 bg-white p-1.5 rounded w-full text-sm font-mono"
       />
     </div>
   )

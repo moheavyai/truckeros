@@ -25,10 +25,10 @@ export default function OverhangFeetInput({
 
   return (
     <div>
-      <label htmlFor={id} className="block text-xs text-gray-600">
+      <label htmlFor={id} className="block text-xs text-gray-600 sm:text-gray-500">
         {label}
         {sublabel ? (
-          <span className="text-amber-600 text-[9px] ml-1">{sublabel}</span>
+          <span className="text-amber-700 sm:text-amber-600 text-[9px] ml-1">{sublabel}</span>
         ) : null}
       </label>
       <input
@@ -46,7 +46,7 @@ export default function OverhangFeetInput({
           const n = parseFloat(raw)
           if (Number.isFinite(n) && n >= 0) onChange(n)
         }}
-        className="border p-1.5 rounded w-full text-sm font-mono"
+        className="border border-gray-500 sm:border-gray-300 text-gray-900 bg-white p-1.5 rounded w-full text-sm font-mono"
       />
     </div>
   )

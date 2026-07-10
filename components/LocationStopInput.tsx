@@ -77,20 +77,20 @@ export default function LocationStopInput({
         maxLength={MAX_Q_LEN}
         onChange={(e) => onQueryChange(e.target.value)}
         onBlur={onBlurGeocode}
-        className={`border p-4 min-h-[48px] rounded-lg w-full text-base touch-manipulation ${errorKey && errors[errorKey] ? 'border-red-500' : 'border-gray-300'}`}
+        className={`border p-4 min-h-[48px] rounded-lg w-full text-base text-gray-900 placeholder:text-gray-500 bg-white touch-manipulation ${errorKey && errors[errorKey] ? 'border-red-500' : 'border-gray-500 sm:border-gray-300'}`}
       />
       {errorKey && errors[errorKey] && (
         <p className="text-red-500 text-xs mt-1">{errors[errorKey]}</p>
       )}
 
       {resolved && (
-        <div className="text-xs text-gray-600 mt-1.5">
+        <div className="text-xs text-gray-700 sm:text-gray-600 mt-1.5">
           Resolved: {[stop.street, stop.city, stop.state, stop.zip].filter(Boolean).join(', ')}
         </div>
       )}
 
       {geocoded && (
-        <div className="text-[10px] text-gray-500 mt-1 font-mono">
+        <div className="text-[10px] text-gray-600 sm:text-gray-500 mt-1 font-mono">
           {lat.toFixed(5)}, {lon.toFixed(5)}
         </div>
       )}
@@ -108,7 +108,7 @@ export default function LocationStopInput({
               placeholder="Latitude"
               value={lat ?? ''}
               onChange={(e) => onCoordsChange(parseCoord(e.target.value), lon)}
-              className="border p-3 min-h-[44px] rounded-lg text-base touch-manipulation"
+              className="border border-gray-500 sm:border-gray-300 text-gray-900 placeholder:text-gray-500 bg-white p-3 min-h-[44px] rounded-lg text-base touch-manipulation"
             />
             <input
               type="number"
@@ -116,7 +116,7 @@ export default function LocationStopInput({
               placeholder="Longitude"
               value={lon ?? ''}
               onChange={(e) => onCoordsChange(lat, parseCoord(e.target.value))}
-              className="border p-3 min-h-[44px] rounded-lg text-base touch-manipulation"
+              className="border border-gray-500 sm:border-gray-300 text-gray-900 placeholder:text-gray-500 bg-white p-3 min-h-[44px] rounded-lg text-base touch-manipulation"
             />
           </div>
           <button
