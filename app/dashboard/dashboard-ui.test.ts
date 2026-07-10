@@ -76,3 +76,52 @@ describe('Dashboard page — onboarding + role tools', () => {
     expect(source).toContain('ownOrganizationId is home only')
   })
 })
+
+describe('Dashboard page — mobile contrast classes', () => {
+  it('defines centralized contrast tokens for buttons, body text, and cards', () => {
+    const source = readDashboardSource()
+
+    expect(source).toContain('const buttonSecondaryClass =')
+    expect(source).toContain('const buttonPrimaryClass =')
+    expect(source).toContain('const mutedTextClass =')
+    expect(source).toContain('const bodyTextClass =')
+    expect(source).toContain('const cardClass =')
+
+    expect(source).toMatch(/border-gray-500 sm:border-gray-300/)
+    expect(source).toMatch(/text-gray-600 sm:text-gray-500/)
+    expect(source).toMatch(/text-gray-700 sm:text-gray-600/)
+    expect(source).toMatch(/border-gray-300 sm:border-gray-200/)
+    expect(source).toMatch(/border-gray-200 sm:border-gray-100/)
+    expect(source).toMatch(/text-gray-900/)
+  })
+
+  it('wires CTAs, stats cards, and list chrome to shared contrast classes', () => {
+    const source = readDashboardSource()
+
+    expect(source).toContain('className={buttonPrimaryClass}')
+    expect(source).toContain('className={buttonSecondaryClass}')
+    expect(source).toContain('className={cardClass}')
+    expect(source).toContain('className={`lg:col-span-2 ${cardClass}`}')
+    expect(source).toContain('className={`${mutedTextClass} text-xs`}')
+    expect(source).toContain('className={`${bodyTextClass} text-xs`}')
+    expect(source).toContain('border-t border-gray-200 sm:border-gray-100')
+    expect(source).toContain('divide-y divide-gray-200 sm:divide-gray-100')
+
+    // No bare low-contrast gray-400 date/meta text
+    const faintUi = source.match(/className=\{?[`'"][^`'"]*text-gray-400/g) || []
+    expect(faintUi).toEqual([])
+    // Secondary tool buttons no longer use faint gray-300-only borders
+    expect(source).not.toMatch(
+      /className="inline-flex items-center gap-3 border border-gray-300 hover:bg-white/
+    )
+    // No inverted sm contrast pairs
+    expect(source).not.toMatch(/border-gray-300 sm:border-gray-500/)
+    expect(source).not.toMatch(/text-gray-500 sm:text-gray-600/)
+    // Bare border-t without gray token should not appear
+    const bareDividers =
+      source.match(
+        /className=["'`][^"'`]*\bborder-t(?=[\s"'`]|$)(?![^"'`]*border-gray)/g
+      ) || []
+    expect(bareDividers).toEqual([])
+  })
+})

@@ -768,7 +768,8 @@ describe('Profile page UI', () => {
     expect(source).toContain('sendTeamInviteAfterMemberSave')
     expect(source).toContain('createTeamInviteViaApi')
     expect(memberCard).toContain('showSaveAndInviteButton')
-    expect(memberCard).toContain('bg-emerald-600')
+    expect(memberCard).toContain('buttonSuccessClass')
+    expect(source).toMatch(/bg-emerald-700 hover:bg-emerald-800/)
 
     expect(source).toContain('handleReinviteMember')
     expect(source).toContain('canReinviteMember')
@@ -855,5 +856,107 @@ describe('Profile page UI', () => {
     expect(saveHandler).toContain("finalType = 'warning'")
     expect(source).toContain("type: 'success' | 'error' | 'warning'")
     expect(source).toContain('bg-amber-50 text-amber-900')
+  })
+
+  it('defines centralized mobile-first contrast tokens for fields, hints, cards, and buttons', () => {
+    const source = readProfileSource()
+
+    expect(source).toContain('const fieldControlClass =')
+    expect(source).toContain('const inputClass =')
+    expect(source).toContain('const buttonSecondaryClass =')
+    expect(source).toContain('const buttonPrimaryClass =')
+    expect(source).toContain('const buttonPrimaryCompactClass =')
+    expect(source).toContain('const buttonSuccessClass =')
+    expect(source).toContain('const buttonSuccessOutlineClass =')
+    expect(source).toContain('const fieldLabelClass =')
+    expect(source).toContain('const fieldHintClass =')
+    expect(source).toContain('const mutedTextClass =')
+    expect(source).toContain('const bodyTextClass =')
+    expect(source).toContain('const dividerBorderClass =')
+    expect(source).toContain('const softDividerBorderClass =')
+    expect(source).toContain('const listDivideClass =')
+    expect(source).toContain('const sectionHeaderClass =')
+    expect(source).toContain('const checkboxClass =')
+    expect(source).toContain('const radioClass =')
+    expect(source).toContain('const cardClass =')
+    expect(source).toContain('const cardSectionClass =')
+    expect(source).toContain('const nestedPanelClass =')
+
+    expect(source).toMatch(/border-gray-500 sm:border-gray-300/)
+    expect(source).toMatch(/text-gray-900/)
+    expect(source).toMatch(/placeholder:text-gray-500/)
+    expect(source).toMatch(/text-gray-600 sm:text-gray-500/)
+    expect(source).toMatch(/text-gray-700 sm:text-gray-600/)
+    expect(source).toMatch(/border-gray-300 sm:border-gray-200/)
+    expect(source).toMatch(/border-gray-200 sm:border-gray-100/)
+    expect(source).toMatch(/divide-gray-200 sm:divide-gray-100/)
+    expect(source).toMatch(/bg-emerald-700 hover:bg-emerald-800/)
+    expect(source).toMatch(/border-emerald-500 sm:border-emerald-300/)
+    expect(source).toMatch(/accent-emerald-700/)
+  })
+
+  it('wires form controls and section chrome to shared contrast classes', () => {
+    const source = readProfileSource()
+    const memberCard = memberEditCardSlice(source)
+    const carrierCard = carrierCardSlice(source)
+    const bootstrapCard = bootstrapSetupCardSlice(source)
+    const rosterSection = teamRosterSectionSlice(source)
+
+    expect(source).toContain('className={inputClass}')
+    expect(source).toContain('className={fieldLabelClass}')
+    expect(source).toContain('className={buttonPrimaryClass}')
+    expect(source).toContain('className={buttonPrimaryCompactClass}')
+    expect(source).toContain('className={buttonSecondaryClass}')
+    expect(source).toContain('className={buttonSuccessOutlineClass}')
+    expect(source).toContain('className={cardClass}')
+    expect(source).toContain('className={sectionHeaderClass}')
+    expect(source).toContain('className={`${sectionHeaderClass}')
+    expect(source).toContain('className={listDivideClass}')
+    expect(source).toContain('className={checkboxClass}')
+    expect(source).toContain('className={radioClass}')
+    expect(bootstrapCard).toContain('className={inputClass}')
+    expect(bootstrapCard).toContain('className={fieldLabelClass}')
+    expect(bootstrapCard).toContain('softDividerBorderClass')
+    expect(bootstrapCard).toContain('checkboxClass')
+    expect(carrierCard).toContain('className={inputClass}')
+    expect(memberCard).toContain('className={inputClass}')
+    expect(memberCard).toContain('className={fieldLabelClass}')
+    expect(memberCard).toContain('className={buttonPrimaryCompactClass}')
+    expect(memberCard).toContain('className={buttonSuccessOutlineClass}')
+    // Role/permission checkboxes live in helper components (same file); bootstrap has Owner Operator checkbox
+    expect(source).toContain('className={checkboxClass}')
+    expect(source).toContain('className={radioClass}')
+    expect(rosterSection).toContain('className={buttonPrimaryCompactClass}')
+    expect(rosterSection).toContain('className={buttonSecondaryClass}')
+    expect(rosterSection).toContain('sectionHeaderClass')
+    expect(rosterSection).toContain('dividerBorderClass')
+    expect(rosterSection).toContain('className={listDivideClass}')
+    // No bare divide-y without gray tokens
+    expect(source).not.toMatch(/className="divide-y"/)
+    expect(source).not.toMatch(/className=\{`divide-y`\}/)
+
+    // Legacy low-contrast field border should not remain on inputClass
+    expect(source).not.toMatch(
+      /const inputClass =\s*'border border-gray-300 px-3 py-2/
+    )
+    // Compact primaries should not remain as hard-coded black CTA strings
+    expect(memberCard).not.toMatch(
+      /className=\{`rounded-lg bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-4 py-2/
+    )
+    // Secondary actions should use the shared token (not re-duplicated border pairs)
+    expect(source).not.toMatch(
+      /className=\{`text-sm px-3 py-1\.5 border border-gray-500 sm:border-gray-300/
+    )
+    // No bare border-b utilities without gray tokens / section header token
+    // (require end-of-class boundary so border-blue-* does not match)
+    const bareHeaderBorders =
+      source.match(
+        /className=["'`][^"'`]*\bborder-b(?=[\s"'`]|$)(?![^"'`]*(border-gray|\$\{dividerBorderClass|\$\{sectionHeaderClass|\$\{softDividerBorderClass))/g
+      ) || []
+    expect(bareHeaderBorders).toEqual([])
+    const faintUi = source.match(/className=\{?[`'"][^`'"]*text-gray-400/g) || []
+    expect(faintUi).toEqual([])
+    expect(source).not.toMatch(/border-gray-300 sm:border-gray-500/)
+    expect(source).not.toMatch(/text-gray-500 sm:text-gray-600/)
   })
 })

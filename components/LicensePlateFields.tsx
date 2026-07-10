@@ -11,7 +11,11 @@ export type LicensePlateFieldsProps = {
   idPrefix?: string
 }
 
-const inputClass = 'border p-1.5 rounded w-full mt-0.5 text-sm'
+/** Mobile-first contrast: stronger borders/text on small screens; softer from sm: up */
+const fieldControlClass =
+  'border border-gray-500 sm:border-gray-300 text-gray-900 placeholder:text-gray-500 bg-white'
+const inputClass = `${fieldControlClass} rounded p-1.5 w-full mt-0.5 text-sm`
+const fieldLabelTinyClass = 'text-[11px] text-gray-600 sm:text-gray-500'
 
 export default function LicensePlateFields({
   plate,
@@ -26,7 +30,7 @@ export default function LicensePlateFields({
   return (
     <>
       <div>
-        <label htmlFor={plateId} className="text-[11px] text-gray-600">
+        <label htmlFor={plateId} className={fieldLabelTinyClass}>
           License Plate
         </label>
         <input
@@ -41,7 +45,7 @@ export default function LicensePlateFields({
         />
       </div>
       <div>
-        <label htmlFor={stateId} className="text-[11px] text-gray-600">
+        <label htmlFor={stateId} className={fieldLabelTinyClass}>
           Plate State
         </label>
         <select

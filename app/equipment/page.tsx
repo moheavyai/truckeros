@@ -33,6 +33,32 @@ import LicensePlateFields from '@/components/LicensePlateFields'
 
 type Tab = 'tractors' | 'trailers' | 'builder' | 'saved'
 
+/** Mobile-first contrast: stronger borders/text on small screens; softer from sm: up (matches permit-test / portal-assist). */
+const fieldControlClass =
+  'border border-gray-500 sm:border-gray-300 text-gray-900 placeholder:text-gray-500 bg-white'
+const inputClass = `${fieldControlClass} rounded p-1.5 w-full text-sm`
+const inputMtClass = `${inputClass} mt-0.5`
+const selectClass = `${fieldControlClass} rounded-xl p-3 text-sm w-full`
+const textareaClass = `${fieldControlClass} rounded-xl p-2 text-sm`
+const buttonSecondaryClass =
+  'border border-gray-500 sm:border-gray-300 text-gray-900 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50'
+const buttonPrimaryClass = 'bg-black text-white rounded-lg text-sm hover:bg-gray-900'
+const buttonSuccessClass =
+  'bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-medium disabled:bg-gray-500 disabled:text-white'
+const fieldLabelTinyClass = 'text-[11px] text-gray-600 sm:text-gray-500'
+const fieldLabelSectionClass = 'block text-xs font-semibold text-gray-600 sm:text-gray-500 mb-1'
+const fieldLabelMediumClass = 'text-xs font-medium text-gray-600 sm:text-gray-500'
+const fieldHintTinyClass = 'text-[10px] text-gray-600 sm:text-gray-500'
+const mutedTextClass = 'text-gray-600 sm:text-gray-500'
+const bodyTextClass = 'text-gray-700 sm:text-gray-600'
+const dividerBorderClass = 'border-gray-300 sm:border-gray-200'
+const checkboxClass = 'h-4 w-4 rounded accent-emerald-700 border-gray-500 sm:border-gray-300'
+const editorShellClass = 'mb-6 bg-white border border-emerald-300 sm:border-emerald-200 rounded-2xl p-5'
+const cardClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-2xl p-6'
+const cardCompactClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-xl p-3 text-sm'
+const cardItemClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-xl p-4 text-sm'
+const cardPanelClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-2xl p-5'
+
 export default function EquipmentPage() {
   const [user, setUser] = useState<any>(null)
   const [ownOrganizationId, setOwnOrganizationId] = useState<string | null>(null)
@@ -430,15 +456,15 @@ export default function EquipmentPage() {
     const arr = normalizeAxleSpacings(spacings)
     return (
       <div className="md:col-span-3">
-        <label className="text-[11px] text-gray-600">Axle Spacings (inches)</label>
+        <label className={fieldLabelTinyClass}>Axle Spacings (inches)</label>
         <div className="mt-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
           {Array.from({ length: expected }).map((_, idx) => {
             const { main, desc } = getAxleSpacingLabel(isTractor, n, idx)
             const v = arr[idx]
             return (
               <div key={idx}>
-                <div className="text-[10px] text-gray-600 leading-tight">{main}</div>
-                <div className="text-[9px] text-gray-500 leading-tight mb-0.5">{desc}</div>
+                <div className={`${fieldHintTinyClass} leading-tight`}>{main}</div>
+                <div className={`${fieldHintTinyClass} leading-tight mb-0.5`}>{desc}</div>
                 <input
                   type="number"
                   value={v && v > 0 ? v : ''}
@@ -447,7 +473,7 @@ export default function EquipmentPage() {
                     onChangeSpacing(idx, val && Number.isFinite(val) && val > 0 ? val : null)
                   }}
                   placeholder={String(isTractor ? 48 : 49)}
-                  className="border p-1.5 rounded w-full text-sm"
+                  className={inputClass}
                 />
               </div>
             )
@@ -868,7 +894,7 @@ export default function EquipmentPage() {
         onClick={() => setDefaultRig(rig.id)}
         disabled={!canSetDefault || busy}
         title={canSetDefault ? 'Use this rig automatically in Permit Agent' : 'Re-save from Rig Builder to enable default'}
-        className={`px-4 py-1.5 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 ${className}`}
+        className={`px-4 py-1.5 ${buttonSecondaryClass} ${className}`}
       >
         {busy ? 'Saving…' : 'Make Default Rig'}
       </button>
@@ -917,18 +943,18 @@ export default function EquipmentPage() {
         <div className="flex items-start justify-between mb-6">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Equipment &amp; Rig Builder</h1>
-            <p className="text-gray-600 mt-1 text-[15px]">
+            <p className={`${bodyTextClass} mt-1 text-[15px]`}>
               Build and save accurate tractor + trailer profiles. Select combinations for precise OSOW calculations and graphical previews.
             </p>
           </div>
           <div className="flex gap-3">
-            <a href="/dashboard" className="px-4 py-2 text-sm border rounded-lg hover:bg-white">← Dashboard</a>
-            <a href="/permit-test" className="px-4 py-2 text-sm bg-black text-white rounded-lg hover:bg-gray-900">New Analysis →</a>
+            <a href="/dashboard" className={`px-4 py-2 ${buttonSecondaryClass}`}>← Dashboard</a>
+            <a href="/permit-test" className={`px-4 py-2 ${buttonPrimaryClass}`}>New Analysis →</a>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b mb-6">
+        <div className={`flex gap-1 border-b ${dividerBorderClass} mb-6`}>
           {([
             { k: 'saved', label: 'Saved Rigs' },
             { k: 'tractors', label: 'Tractors' },
@@ -941,7 +967,7 @@ export default function EquipmentPage() {
               className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-all ${
                 activeTab === t.k
                   ? 'border-emerald-600 text-emerald-700'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
+                  : 'border-transparent text-gray-700 sm:text-gray-600 hover:text-gray-900'
               }`}
             >
               {t.label}
@@ -952,18 +978,18 @@ export default function EquipmentPage() {
         {/* RIG BUILDER TAB */}
         {activeTab === 'builder' && (
           <div className="space-y-6">
-            <div className="bg-white border rounded-2xl p-6">
+            <div className={cardClass}>
               <h2 className="font-semibold text-xl tracking-tight mb-1">Build a Combination</h2>
-              <p className="text-sm text-gray-600 mb-4">Pick one tractor + one or more trailers. We auto-calculate overall length and axle layout from 5th-wheel / kingpin alignment.</p>
+              <p className={`text-sm ${bodyTextClass} mb-4`}>Pick one tractor + one or more trailers. We auto-calculate overall length and axle layout from 5th-wheel / kingpin alignment.</p>
 
               <div className="grid md:grid-cols-2 gap-4 mb-4">
                 {/* Tractor picker */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">TRACTOR / POWER UNIT</label>
+                  <label className={fieldLabelSectionClass}>TRACTOR / POWER UNIT</label>
                   <select
                     value={selectedTractorId}
                     onChange={(e) => setSelectedTractorId(e.target.value)}
-                    className="w-full border border-gray-300 rounded-xl p-3 text-sm"
+                    className={selectClass}
                   >
                     <option value="">— Select tractor —</option>
                     {tractors.map((t) => {
@@ -975,16 +1001,16 @@ export default function EquipmentPage() {
                       )
                     })}
                   </select>
-                  {tractors.length === 0 && <p className="text-xs text-amber-600 mt-1">No tractors yet. Add one in the Tractors tab.</p>}
+                  {tractors.length === 0 && <p className="text-xs text-amber-800 sm:text-amber-700 mt-1">No tractors yet. Add one in the Tractors tab.</p>}
                 </div>
 
                 {/* Trailer picker */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">ADD TRAILER(S)</label>
+                  <label className={fieldLabelSectionClass}>ADD TRAILER(S)</label>
                   <div className="flex gap-2">
                     <select
                       onChange={(e) => { if (e.target.value) addTrailerToBuild(e.target.value); e.target.value = '' }}
-                      className="flex-1 border border-gray-300 rounded-xl p-3 text-sm"
+                      className={`flex-1 ${selectClass}`}
                     >
                       <option value="">— Select trailer to add —</option>
                       {trailers
@@ -999,7 +1025,7 @@ export default function EquipmentPage() {
                         })}
                     </select>
                     {!isServiceModeReadOnly && (
-                      <button onClick={startNewTrailer} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium">+ New Trailer</button>
+                      <button onClick={startNewTrailer} className={`px-4 py-2 ${buttonSuccessClass} rounded-xl`}>+ New Trailer</button>
                     )}
                   </div>
                 </div>
@@ -1008,14 +1034,14 @@ export default function EquipmentPage() {
               {/* Selected trailers chips */}
               {selectedTrailerIds.length > 0 && (
                 <div className="mb-4">
-                  <div className="text-xs font-semibold text-gray-600 mb-1">CURRENT COMBINATION ({selectedTrailerIds.length} trailer{selectedTrailerIds.length > 1 ? 's' : ''})</div>
+                  <div className={fieldLabelSectionClass}>CURRENT COMBINATION ({selectedTrailerIds.length} trailer{selectedTrailerIds.length > 1 ? 's' : ''})</div>
                   <div className="flex flex-wrap gap-2">
                     {currentTrailers.map((tr, idx) => {
                       const plate = formatLicensePlateDisplay(tr.license_plate, tr.license_plate_state)
                       return (
                         <div key={idx} className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1 rounded-full text-sm">
                           {tr.profile_name}{plate ? ` • ${plate}` : ''}
-                          <button onClick={() => removeTrailerFromBuild(idx)} className="text-emerald-600 hover:text-red-600 ml-1">×</button>
+                          <button onClick={() => removeTrailerFromBuild(idx)} className="text-emerald-700 hover:text-red-600 ml-1">×</button>
                         </div>
                       )
                     })}
@@ -1024,11 +1050,11 @@ export default function EquipmentPage() {
               )}
 
               {(currentTractor || currentTrailers.length > 0) && (
-                <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-gray-600">
+                <div className={`mb-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] ${bodyTextClass}`}>
                   {currentTractor && (
-                    <div className="bg-gray-50 border rounded-lg px-3 py-2">
+                    <div className="bg-gray-50 border border-gray-300 sm:border-gray-200 rounded-lg px-3 py-2">
                       <span className="font-semibold text-gray-700">Tractor plate:</span>{' '}
-                      <span className="font-mono text-gray-800">
+                      <span className="font-mono text-gray-900">
                         {formatLicensePlateDisplay(currentTractor.license_plate, currentTractor.license_plate_state) || '—'}
                       </span>
                     </div>
@@ -1036,9 +1062,9 @@ export default function EquipmentPage() {
                   {currentTrailers.map((tr, idx) => {
                     const plate = formatLicensePlateDisplay(tr.license_plate, tr.license_plate_state)
                     return (
-                      <div key={tr.id || idx} className="bg-gray-50 border rounded-lg px-3 py-2">
+                      <div key={tr.id || idx} className="bg-gray-50 border border-gray-300 sm:border-gray-200 rounded-lg px-3 py-2">
                         <span className="font-semibold text-gray-700">Trailer {idx + 1} plate:</span>{' '}
-                        <span className="font-mono text-gray-800">{plate || '—'}</span>
+                        <span className="font-mono text-gray-900">{plate || '—'}</span>
                       </div>
                     )
                   })}
@@ -1057,7 +1083,7 @@ export default function EquipmentPage() {
                       <TractorGraphic
                         tractor={previewTractor}
                         height={110}
-                        className="w-full max-w-[520px] border border-gray-200 rounded-2xl bg-white p-1"
+                        className="w-full max-w-[520px] border border-gray-300 sm:border-gray-200 rounded-2xl bg-white p-1"
                       />
                     </div>
                   );
@@ -1074,7 +1100,7 @@ export default function EquipmentPage() {
                   );
                 }
                 return (
-                  <div className="border border-dashed rounded-2xl p-8 text-center text-gray-500 bg-white">
+                  <div className={`border border-dashed border-gray-400 sm:border-gray-300 rounded-2xl p-8 text-center ${mutedTextClass} bg-white`}>
                     Select a tractor and/or one or more trailers above to see the live graphical preview and auto-calculated dimensions.
                   </div>
                 );
@@ -1084,27 +1110,27 @@ export default function EquipmentPage() {
               {!isServiceModeReadOnly && (
               <div className="mt-5 grid md:grid-cols-[1fr,auto] gap-3 items-end">
                 <div>
-                  <label className="text-xs font-medium text-gray-600">Rig Name (saved for quick selection in analyses)</label>
+                  <label className={fieldLabelMediumClass}>Rig Name (saved for quick selection in analyses)</label>
                   <input
                     value={rigName}
                     onChange={(e) => setRigName(e.target.value)}
                     placeholder="e.g. KW T680 + 53' Flatbed"
-                    className="mt-1 w-full border p-3 rounded-xl text-sm"
+                    className={`mt-1 w-full ${fieldControlClass} p-3 rounded-xl text-sm`}
                   />
                   <textarea
                     value={builderNote}
                     onChange={(e) => setBuilderNote(e.target.value)}
                     placeholder="Notes (optional) — e.g. 'Steerable lift on trailer 2, used for bridge kits'"
-                    className="mt-2 w-full border p-2 rounded-xl text-sm h-16"
+                    className={`mt-2 w-full ${textareaClass} h-16`}
                   />
                 </div>
                 <div className="flex flex-col gap-2 items-stretch sm:items-end">
                   <div className="flex gap-2">
-                    <button onClick={clearBuilder} className="px-5 py-3 border rounded-xl text-sm">Clear</button>
+                    <button onClick={clearBuilder} className={`px-5 py-3 ${buttonSecondaryClass} rounded-xl`}>Clear</button>
                     <button
                       onClick={saveCurrentRig}
                       disabled={!selectedTractorId || selectedTrailerIds.length === 0}
-                      className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white font-semibold rounded-xl text-sm"
+                      className={`px-8 py-3 ${buttonSuccessClass} font-semibold rounded-xl`}
                     >
                       {loadedRigId && rigs.find((r) => r.id === loadedRigId)?.source === 'rig_configurations'
                         ? 'Update Rig Configuration'
@@ -1122,7 +1148,7 @@ export default function EquipmentPage() {
             </div>
 
             {/* Future placeholders */}
-            <div className="text-[11px] text-gray-500 bg-white border rounded-xl p-3">
+            <div className={`text-[11px] ${mutedTextClass} bg-white border border-gray-300 sm:border-gray-200 rounded-xl p-3`}>
               <strong>Coming soon:</strong> {FUTURE_FEATURES.vinDecoder} • {FUTURE_FEATURES.photos} • {FUTURE_FEATURES.bolImport}
             </div>
           </div>
@@ -1134,12 +1160,12 @@ export default function EquipmentPage() {
             <div className="flex justify-between items-center mb-3">
               <div className="font-semibold">My Tractors ({tractors.length})</div>
               {!isServiceModeReadOnly && (
-                <button onClick={startNewTractor} className="px-4 py-2 bg-black text-white text-sm rounded-lg">+ New Tractor Profile</button>
+                <button onClick={startNewTractor} className={`px-4 py-2 ${buttonPrimaryClass}`}>+ New Tractor Profile</button>
               )}
             </div>
 
             {editingTractor && !isServiceModeReadOnly && (
-              <div className="mb-6 bg-white border border-emerald-200 rounded-2xl p-5">
+              <div className={editorShellClass}>
                 <div className="font-semibold mb-3">Tractor Profile</div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                   {[
@@ -1156,13 +1182,13 @@ export default function EquipmentPage() {
                     ['Model', 'model', 'text'],
                   ].map(([label, key, type]) => (
                     <div key={key}>
-                      <label className="text-[11px] text-gray-600">{label}</label>
+                      <label className={fieldLabelTinyClass}>{label}</label>
                       {key === 'wheelbase_in' ? (
                         <input
                           type="number"
                           value={computeWheelbase(editingTractor.axle_spacings) ?? (editingTractor as any)[key] ?? ''}
                           readOnly
-                          className="border p-1.5 rounded w-full mt-0.5 bg-gray-100 text-gray-600 cursor-not-allowed text-sm"
+                          className={`${inputMtClass} bg-gray-100 text-gray-700 cursor-not-allowed`}
                           title="Auto-calculated from axle spacings: 1-2 + (2-3 / 2) — center of tandem drive group for 5th wheel positioning"
                         />
                       ) : (
@@ -1180,7 +1206,7 @@ export default function EquipmentPage() {
                               setEditingTractor({ ...editingTractor, [key]: v })
                             }
                           }}
-                          className="border p-1.5 rounded w-full mt-0.5 text-sm"
+                          className={inputMtClass}
                         />
                       )}
                     </div>
@@ -1219,8 +1245,8 @@ export default function EquipmentPage() {
                 </div>
 
                 {/* Compact preview in edit view */}
-                <div className="mt-3 pt-2 border-t">
-                  <div className="text-[10px] text-gray-500 mb-1">Live preview</div>
+                <div className={`mt-3 pt-2 border-t ${dividerBorderClass}`}>
+                  <div className={`${fieldHintTinyClass} mb-1`}>Live preview</div>
                   <VehicleDiagram
                     tractor={editingTractor}
                     trailers={[]}
@@ -1231,19 +1257,19 @@ export default function EquipmentPage() {
                 </div>
 
                 <div className="flex gap-2 mt-4">
-                  <button onClick={() => setEditingTractor(null)} className="px-4 py-2 border rounded">Cancel</button>
-                  <button onClick={saveTractor} className="px-5 py-2 bg-emerald-600 text-white rounded">Save Tractor</button>
+                  <button onClick={() => setEditingTractor(null)} className={`px-4 py-2 ${buttonSecondaryClass} rounded`}>Cancel</button>
+                  <button onClick={saveTractor} className={`px-5 py-2 ${buttonSuccessClass} rounded`}>Save Tractor</button>
                 </div>
               </div>
             )}
 
             <div className="grid md:grid-cols-2 gap-3">
               {tractors.map((t) => (
-                <div key={t.id} className="bg-white border rounded-xl p-3 text-sm flex flex-col">
+                <div key={t.id} className={`${cardCompactClass} flex flex-col`}>
                   <div className="font-semibold text-base">{t.profile_name}</div>
-                  <div className="text-gray-500 text-xs mb-1">{t.unit_number ? `#${t.unit_number} • ` : ''}{t.make} {t.model} {t.year || ''}</div>
+                  <div className={`${mutedTextClass} text-xs mb-1`}>{t.unit_number ? `#${t.unit_number} • ` : ''}{t.make} {t.model} {t.year || ''}</div>
 
-                  <div className="text-[11px] text-gray-600 space-y-0.5">
+                  <div className={`text-[11px] ${bodyTextClass} space-y-0.5`}>
                     <div>Length: <b>{t.overall_length_ft || '?'} ft</b> • Axles: <b>{t.num_axles || 3}</b></div>
                     <div>5th: {t.fifth_wheel_from_rear_in || '?'} in • WB: {t.wheelbase_in || '?'} in</div>
                     {formatLicensePlateDisplay(t.license_plate, t.license_plate_state) && (
@@ -1272,7 +1298,7 @@ export default function EquipmentPage() {
                   )}
                 </div>
               ))}
-              {tractors.length === 0 && <div className="text-sm text-gray-500 col-span-2">No tractors saved yet. Create your first one above.</div>}
+              {tractors.length === 0 && <div className={`text-sm ${mutedTextClass} col-span-2`}>No tractors saved yet. Create your first one above.</div>}
             </div>
           </div>
         )}
@@ -1283,12 +1309,12 @@ export default function EquipmentPage() {
             <div className="flex justify-between items-center mb-3">
               <div className="font-semibold">My Trailers ({trailers.length})</div>
               {!isServiceModeReadOnly && (
-                <button onClick={startNewTrailer} className="px-4 py-2 bg-black text-white text-sm rounded-lg">+ New Trailer Profile</button>
+                <button onClick={startNewTrailer} className={`px-4 py-2 ${buttonPrimaryClass}`}>+ New Trailer Profile</button>
               )}
             </div>
 
             {editingTrailer && !isServiceModeReadOnly && (
-              <div className="mb-6 bg-white border border-emerald-200 rounded-2xl p-5">
+              <div className={editorShellClass}>
                 <div className="font-semibold mb-3">Trailer Profile</div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                   {[
@@ -1302,7 +1328,7 @@ export default function EquipmentPage() {
                     ['Extendable Extra (ft)', 'extendable_extra_ft', 'number'],
                   ].map(([label, key, type]) => (
                     <div key={key}>
-                      <label className="text-[11px] text-gray-600">{label}</label>
+                      <label className={fieldLabelTinyClass}>{label}</label>
                       <input
                         type={type as any}
                         value={(editingTrailer as any)[key] ?? ''}
@@ -1316,7 +1342,7 @@ export default function EquipmentPage() {
                           setEditingTrailer({ ...editingTrailer, [key]: v })
                         }
                       }}
-                        className="border p-1.5 rounded w-full mt-0.5 text-sm"
+                        className={inputMtClass}
                       />
                     </div>
                   ))}
@@ -1350,15 +1376,15 @@ export default function EquipmentPage() {
                     onChange={(ft) => setEditingTrailer({ ...editingTrailer, deck_height_ft: ft })}
                   />
                   <div>
-                    <label className="text-[11px] text-gray-600">Trailer Type</label>
-                    <input value={editingTrailer.trailer_type || ''} onChange={(e) => setEditingTrailer({ ...editingTrailer, trailer_type: e.target.value })} className="border p-1.5 rounded w-full mt-0.5 text-sm" />
+                    <label className={fieldLabelTinyClass}>Trailer Type</label>
+                    <input value={editingTrailer.trailer_type || ''} onChange={(e) => setEditingTrailer({ ...editingTrailer, trailer_type: e.target.value })} className={inputMtClass} />
                   </div>
                   <div className="flex items-center gap-4 pt-5 text-sm">
                     <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" checked={!!editingTrailer.has_lift_axle} onChange={(e) => setEditingTrailer({ ...editingTrailer, has_lift_axle: e.target.checked })} /> Lift axle
+                      <input type="checkbox" checked={!!editingTrailer.has_lift_axle} onChange={(e) => setEditingTrailer({ ...editingTrailer, has_lift_axle: e.target.checked })} className={checkboxClass} /> Lift axle
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" checked={!!editingTrailer.is_extendable} onChange={(e) => setEditingTrailer({ ...editingTrailer, is_extendable: e.target.checked })} /> Extendable
+                      <input type="checkbox" checked={!!editingTrailer.is_extendable} onChange={(e) => setEditingTrailer({ ...editingTrailer, is_extendable: e.target.checked })} className={checkboxClass} /> Extendable
                     </label>
                   </div>
                   <AxleSpacingsInputs
@@ -1375,8 +1401,8 @@ export default function EquipmentPage() {
                 </div>
 
                 {/* Compact preview in edit view */}
-                <div className="mt-3 pt-2 border-t">
-                  <div className="text-[10px] text-gray-500 mb-1">Live preview</div>
+                <div className={`mt-3 pt-2 border-t ${dividerBorderClass}`}>
+                  <div className={`${fieldHintTinyClass} mb-1`}>Live preview</div>
                   <VehicleDiagram
                     tractor={null}
                     trailers={[editingTrailer]}
@@ -1387,18 +1413,18 @@ export default function EquipmentPage() {
                 </div>
 
                 <div className="flex gap-2 mt-4">
-                  <button onClick={() => setEditingTrailer(null)} className="px-4 py-2 border rounded">Cancel</button>
-                  <button onClick={saveTrailer} className="px-5 py-2 bg-emerald-600 text-white rounded">Save Trailer</button>
+                  <button onClick={() => setEditingTrailer(null)} className={`px-4 py-2 ${buttonSecondaryClass} rounded`}>Cancel</button>
+                  <button onClick={saveTrailer} className={`px-5 py-2 ${buttonSuccessClass} rounded`}>Save Trailer</button>
                 </div>
               </div>
             )}
 
             <div className="grid md:grid-cols-2 gap-3">
               {trailers.map((tr) => (
-                <div key={tr.id} className="bg-white border rounded-xl p-4 text-sm">
+                <div key={tr.id} className={cardItemClass}>
                   <div className="font-semibold">{tr.profile_name}</div>
-                  <div className="text-xs text-gray-500">{tr.trailer_type || 'Trailer'} • {tr.overall_length_ft || '?'} ft • {tr.num_axles || 2} axles</div>
-                  <div className="text-[12px] mt-1 text-gray-600 space-y-0.5">
+                  <div className={`text-xs ${mutedTextClass}`}>{tr.trailer_type || 'Trailer'} • {tr.overall_length_ft || '?'} ft • {tr.num_axles || 2} axles</div>
+                  <div className={`text-[12px] mt-1 ${bodyTextClass} space-y-0.5`}>
                     <div>
                       Kingpin from nose: {tr.kingpin_distance_from_front_in || '?'} in • KP to axle: {tr.kingpin_to_first_axle_in || '?'} in
                       {tr.has_lift_axle && ' • Lift axle'} {tr.is_extendable && ` • Extendable +${tr.extendable_extra_ft || 0} ft`}
@@ -1436,7 +1462,7 @@ export default function EquipmentPage() {
                   )}
                 </div>
               ))}
-              {trailers.length === 0 && <div className="text-sm text-gray-500">No trailers saved. Create your first one.</div>}
+              {trailers.length === 0 && <div className={`text-sm ${mutedTextClass}`}>No trailers saved. Create your first one.</div>}
             </div>
           </div>
         )}
@@ -1447,7 +1473,7 @@ export default function EquipmentPage() {
             <div className="flex justify-between mb-3 items-center">
               <div className="font-semibold">Saved Rig Configurations ({rigs.length}) — ready to use in analyses</div>
               {!isServiceModeReadOnly && (
-                <button onClick={() => setActiveTab('builder')} className="text-sm px-3 py-1.5 border rounded-lg">+ Build New Rig</button>
+                <button onClick={() => setActiveTab('builder')} className={`text-sm px-3 py-1.5 ${buttonSecondaryClass}`}>+ Build New Rig</button>
               )}
             </div>
 
@@ -1467,7 +1493,7 @@ export default function EquipmentPage() {
                   weightLbs: rigEmptyWt,
                 })
                 return (
-                  <div key={rig.id} className="bg-white border rounded-2xl p-5">
+                  <div key={rig.id} className={cardPanelClass}>
                     <div className="flex justify-between">
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
@@ -1481,24 +1507,24 @@ export default function EquipmentPage() {
                         <div className="text-xs text-emerald-700">{rig.computed_total_length_ft?.toFixed(1) || '?'} ft total • {rig.computed_total_axles || '?'} axles</div>
                       </div>
                       {!isServiceModeReadOnly && (
-                        <button onClick={() => deleteRig(rig.id)} className="text-xs text-red-500 self-start">Delete</button>
+                        <button onClick={() => deleteRig(rig.id)} className="text-xs text-red-600 self-start">Delete</button>
                       )}
                     </div>
 
-                    <div className="mt-2 text-[11px] font-mono text-gray-800 bg-gray-50 border rounded-lg px-2 py-1.5">
+                    <div className="mt-2 text-[11px] font-mono text-gray-900 bg-gray-50 border border-gray-300 sm:border-gray-200 rounded-lg px-2 py-1.5">
                       {summaryLine}
                     </div>
 
-                    <div className="mt-3 text-sm text-gray-600">
-                      Tractor: <span className="font-medium text-gray-800">{tr?.profile_name || 'Unknown'}</span><br />
+                    <div className={`mt-3 text-sm ${bodyTextClass}`}>
+                      Tractor: <span className="font-medium text-gray-900">{tr?.profile_name || 'Unknown'}</span><br />
                       Trailers: {(rig.trailer_ids || []).length}
                     </div>
 
-                    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-gray-600">
-                      <div>Tractor plate: <span className="font-mono text-gray-800">{formatLicensePlateDisplay(tr?.license_plate, tr?.license_plate_state) || '—'}</span></div>
-                      <div>Trailer plate: <span className="font-mono text-gray-800">{formatLicensePlateDisplay(primaryTrailer.licensePlate, primaryTrailer.licensePlateState) || '—'}</span></div>
-                      <div>Tractor VIN: <span className="font-mono text-gray-800">{tr?.vin || '—'}</span></div>
-                      <div>Trailer VIN: <span className="font-mono text-gray-800">{primaryTrailer.vin || '—'}</span></div>
+                    <div className={`mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] ${bodyTextClass}`}>
+                      <div>Tractor plate: <span className="font-mono text-gray-900">{formatLicensePlateDisplay(tr?.license_plate, tr?.license_plate_state) || '—'}</span></div>
+                      <div>Trailer plate: <span className="font-mono text-gray-900">{formatLicensePlateDisplay(primaryTrailer.licensePlate, primaryTrailer.licensePlateState) || '—'}</span></div>
+                      <div>Tractor VIN: <span className="font-mono text-gray-900">{tr?.vin || '—'}</span></div>
+                      <div>Trailer VIN: <span className="font-mono text-gray-900">{primaryTrailer.vin || '—'}</span></div>
                       <div>Tractor empty: <b>{tr?.empty_weight_lbs ? `${Number(tr.empty_weight_lbs).toLocaleString()} lbs` : '—'}</b></div>
                       <div>Trailer empty: <b>{primaryTrailer.emptyWeightLbs ? `${Number(primaryTrailer.emptyWeightLbs).toLocaleString()} lbs` : '—'}</b></div>
                       <div>Rig empty: <b>{rigEmptyWt ? `${rigEmptyWt.toLocaleString()} lbs` : '—'}</b></div>
@@ -1521,14 +1547,14 @@ export default function EquipmentPage() {
                     <div className="mt-4 flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => loadRigIntoPermitAgent(rig)}
-                        className="text-sm px-4 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                        className={`text-sm px-4 py-1.5 ${buttonSuccessClass} rounded-lg`}
                       >
                         Load into Permit Agent
                       </button>
                       {!isServiceModeReadOnly && (
                         <button
                           onClick={() => loadRigIntoBuilder(rig)}
-                          className="text-sm px-4 py-1.5 border rounded-lg hover:bg-gray-50"
+                          className={`text-sm px-4 py-1.5 ${buttonSecondaryClass}`}
                         >
                           Edit in Builder
                         </button>
@@ -1539,7 +1565,7 @@ export default function EquipmentPage() {
                 )
               })}
               {rigs.length === 0 && (
-                <div className="text-sm text-gray-500 col-span-2 bg-white border rounded-2xl p-6">
+                <div className={`text-sm ${mutedTextClass} col-span-2 ${cardClass}`}>
                   No saved rigs yet. You&apos;re on <b>Saved Rigs</b> — open the <b>Rig Builder</b> tab to create your first tractor + trailer combination.
                 </div>
               )}
@@ -1548,7 +1574,7 @@ export default function EquipmentPage() {
         )}
 
         {/* Footer help */}
-        <p className="mt-10 text-[11px] text-gray-500 text-center">
+        <p className={`mt-10 text-[11px] ${mutedTextClass} text-center`}>
           All measurements are stored privately for your account only. Accurate 5th-wheel / kingpin data produces better OSOW length and axle-group predictions.
         </p>
       </main>

@@ -27,6 +27,15 @@ import {
 } from '@/lib/team-permissions'
 import type { MemberProfile, UserRole } from '@/types/member-profile'
 
+/** Mobile-first contrast: stronger borders/text on small screens; softer from sm: up (matches permit-test / portal-assist). */
+const buttonSecondaryClass =
+  'inline-flex items-center gap-3 border border-gray-500 sm:border-gray-300 hover:bg-white px-6 py-4 rounded-xl text-base font-semibold transition-all text-gray-900'
+const buttonPrimaryClass =
+  'group inline-flex items-center gap-3 bg-black hover:bg-gray-900 text-white px-8 py-4 rounded-xl text-base font-semibold transition-all active:scale-[0.985]'
+const mutedTextClass = 'text-gray-600 sm:text-gray-500'
+const bodyTextClass = 'text-gray-700 sm:text-gray-600'
+const cardClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-2xl p-6'
+
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [ownOrganizationId, setOwnOrganizationId] = useState<string | null>(null)
@@ -313,7 +322,7 @@ export default function Dashboard() {
             <span className="text-white text-3xl font-bold tracking-tighter">T</span>
           </div>
           <p className="text-gray-700 font-semibold text-lg">Checking authentication...</p>
-          <p className="text-gray-500 text-sm mt-1">Please wait while we verify your session</p>
+          <p className={`${mutedTextClass} text-sm mt-1`}>Please wait while we verify your session</p>
         </div>
       </div>
     )
@@ -329,7 +338,7 @@ export default function Dashboard() {
           <h1 className="text-3xl font-semibold tracking-tight text-gray-900">
             Welcome back{user?.email ? `, ${user.email.split('@')[0]}` : ''}
           </h1>
-          <p className="text-gray-600 mt-1.5 text-[15px]">
+          <p className={`${bodyTextClass} mt-1.5 text-[15px]`}>
             Get accurate, route-specific permit intelligence in seconds.
           </p>
         </div>
@@ -338,7 +347,7 @@ export default function Dashboard() {
         {setupCtas.length > 0 && (
           <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 p-5">
             <h2 className="font-semibold text-amber-950 tracking-tight">Finish setting up</h2>
-            <p className="text-sm text-amber-900/80 mt-1">
+            <p className="text-sm text-amber-900/90 mt-1">
               Complete team invites or equipment so route analysis has accurate data.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
@@ -346,10 +355,10 @@ export default function Dashboard() {
                 <a
                   key={cta.href + cta.label}
                   href={cta.href}
-                  className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm font-semibold text-amber-950 hover:bg-amber-100 transition"
+                  className="inline-flex items-center gap-2 rounded-xl border border-amber-400 sm:border-amber-300 bg-white px-4 py-2.5 text-sm font-semibold text-amber-950 hover:bg-amber-100 transition"
                 >
                   {cta.label}
-                  <span className="text-amber-700">→</span>
+                  <span className="text-amber-800 sm:text-amber-700">→</span>
                 </a>
               ))}
             </div>
@@ -361,7 +370,7 @@ export default function Dashboard() {
           {primaryTool && (
             <a
               href={primaryTool.href}
-              className="group inline-flex items-center gap-3 bg-black hover:bg-gray-900 text-white px-8 py-4 rounded-xl text-base font-semibold transition-all active:scale-[0.985]"
+              className={buttonPrimaryClass}
             >
               <span>{primaryTool.label}</span>
               <span className="text-xl group-hover:translate-x-0.5 transition">→</span>
@@ -371,13 +380,13 @@ export default function Dashboard() {
             <a
               key={tool.id}
               href={tool.href}
-              className="inline-flex items-center gap-3 border border-gray-300 hover:bg-white px-6 py-4 rounded-xl text-base font-semibold transition-all text-gray-800"
+              className={buttonSecondaryClass}
             >
               {tool.label}
             </a>
           ))}
           {tools.length === 0 && (
-            <p className="text-sm text-gray-600">
+            <p className={`text-sm ${bodyTextClass}`}>
               No tools available for your role yet.{' '}
               <a href="/profile" className="font-medium text-black underline underline-offset-2">
                 Open Profile
@@ -385,34 +394,34 @@ export default function Dashboard() {
             </p>
           )}
           {primaryTool?.description && (
-            <p className="text-sm text-gray-500 mt-2 ml-1 basis-full">{primaryTool.description}</p>
+            <p className={`text-sm ${mutedTextClass} mt-2 ml-1 basis-full`}>{primaryTool.description}</p>
           )}
         </div>
 
         {/* Stats + Quick Cards — only when permit history is in scope */}
         {tools.some((t) => t.id === 'history' || t.id === 'permit_analysis') && (
           <div className="grid md:grid-cols-3 gap-6 mb-10">
-            <div className="bg-white border rounded-2xl p-6">
-              <div className="text-sm text-gray-500 mb-1">Recent analyses</div>
-              <div className="text-4xl font-semibold tracking-tighter">
+            <div className={cardClass}>
+              <div className={`text-sm ${mutedTextClass} mb-1`}>Recent analyses</div>
+              <div className="text-4xl font-semibold tracking-tighter text-gray-900">
                 {recentRequests.length > 0 ? recentRequests.length : '—'}
               </div>
-              <div className="text-xs text-gray-500 mt-2">Recent saved runs</div>
+              <div className={`text-xs ${mutedTextClass} mt-2`}>Recent saved runs</div>
             </div>
-            <div className="bg-white border rounded-2xl p-6">
-              <div className="text-sm text-gray-500 mb-1">Permits Required</div>
-              <div className="text-4xl font-semibold tracking-tighter">
+            <div className={cardClass}>
+              <div className={`text-sm ${mutedTextClass} mb-1`}>Permits Required</div>
+              <div className="text-4xl font-semibold tracking-tighter text-gray-900">
                 {recentRequests.reduce(
                   (sum, req) => sum + (req.permit_required_states?.length || 0),
                   0
                 ) || '—'}
               </div>
-              <div className="text-xs text-gray-500 mt-2">Across recent routes</div>
+              <div className={`text-xs ${mutedTextClass} mt-2`}>Across recent routes</div>
             </div>
-            <div className="bg-white border rounded-2xl p-6">
-              <div className="text-sm text-gray-500 mb-1">Tools for your role</div>
-              <div className="text-4xl font-semibold tracking-tighter">{tools.length}</div>
-              <div className="text-xs text-gray-500 mt-2">Based on membership permissions</div>
+            <div className={cardClass}>
+              <div className={`text-sm ${mutedTextClass} mb-1`}>Tools for your role</div>
+              <div className="text-4xl font-semibold tracking-tighter text-gray-900">{tools.length}</div>
+              <div className={`text-xs ${mutedTextClass} mt-2`}>Based on membership permissions</div>
             </div>
           </div>
         )}
@@ -421,17 +430,17 @@ export default function Dashboard() {
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Recent Activity */}
           {tools.some((t) => t.id === 'history' || t.id === 'permit_analysis') && (
-            <div className="lg:col-span-2 bg-white border rounded-2xl p-6">
+            <div className={`lg:col-span-2 ${cardClass}`}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-lg tracking-tight">Recent Analyses</h2>
+                <h2 className="font-semibold text-lg tracking-tight text-gray-900">Recent Analyses</h2>
                 {tools.some((t) => t.id === 'history') && (
-                  <a href="/history" className="text-sm text-gray-600 hover:text-black">
+                  <a href="/history" className={`text-sm ${bodyTextClass} hover:text-black`}>
                     View all →
                   </a>
                 )}
               </div>
 
-              <div className="divide-y">
+              <div className="divide-y divide-gray-200 sm:divide-gray-100">
                 {recentRequests.length > 0 ? (
                   recentRequests.map((req, index) => {
                     const permitCount = req.permit_required_states?.length || 0
@@ -444,32 +453,32 @@ export default function Dashboard() {
                             {req.origin_city}, {req.origin_state} → {req.destination_city},{' '}
                             {req.destination_state}
                           </div>
-                          <div className="text-gray-500 text-xs mt-0.5">
+                          <div className={`${mutedTextClass} text-xs mt-0.5`}>
                             {req.weight?.toLocaleString()} lbs • {req.length} ft
                           </div>
                         </div>
                         <div className="text-right">
                           <div
-                            className={`${permitCount > 0 ? 'text-orange-600' : 'text-emerald-600'} font-medium text-xs`}
+                            className={`${permitCount > 0 ? 'text-orange-700 sm:text-orange-600' : 'text-emerald-700 sm:text-emerald-600'} font-medium text-xs`}
                           >
                             {permitCount > 0
                               ? `${permitCount} State${permitCount > 1 ? 's' : ''} Require Permit`
                               : 'No Permit Required'}
                           </div>
-                          <div className="text-gray-400 text-xs">{date}</div>
+                          <div className={`${mutedTextClass} text-xs`}>{date}</div>
                         </div>
                       </div>
                     )
                   })
                 ) : (
-                  <div className="py-6 text-center text-sm text-gray-500">
+                  <div className={`py-6 text-center text-sm ${mutedTextClass}`}>
                     No analyses yet. Run your first route analysis to see history here.
                   </div>
                 )}
               </div>
 
               {recentRequests.length > 0 && (
-                <div className="pt-4 text-xs text-gray-500 border-t">
+                <div className={`pt-4 text-xs ${mutedTextClass} border-t border-gray-200 sm:border-gray-100`}>
                   Showing your last {recentRequests.length} saved analyses.
                 </div>
               )}
@@ -478,19 +487,19 @@ export default function Dashboard() {
 
           {/* Tips / Guidance */}
           <div
-            className={`bg-white border rounded-2xl p-6 ${
+            className={`${cardClass} ${
               tools.some((t) => t.id === 'history' || t.id === 'permit_analysis')
                 ? ''
                 : 'lg:col-span-3'
             }`}
           >
-            <h2 className="font-semibold text-lg tracking-tight mb-4">Pro Tips</h2>
+            <h2 className="font-semibold text-lg tracking-tight text-gray-900 mb-4">Pro Tips</h2>
             <div className="space-y-4 text-sm">
               <div className="flex gap-3">
                 <div className="text-lg">🛣️</div>
                 <div>
-                  <div className="font-medium">Use real coordinates</div>
-                  <div className="text-gray-600 text-xs">
+                  <div className="font-medium text-gray-900">Use real coordinates</div>
+                  <div className={`${bodyTextClass} text-xs`}>
                     Geocoding your origin and destination gives the most accurate corridor.
                   </div>
                 </div>
@@ -498,8 +507,8 @@ export default function Dashboard() {
               <div className="flex gap-3">
                 <div className="text-lg">❄️</div>
                 <div>
-                  <div className="font-medium">Check seasonal restrictions</div>
-                  <div className="text-gray-600 text-xs">
+                  <div className="font-medium text-gray-900">Check seasonal restrictions</div>
+                  <div className={`${bodyTextClass} text-xs`}>
                     Northern routes often have spring frost laws that reduce allowable weights.
                   </div>
                 </div>
@@ -508,8 +517,8 @@ export default function Dashboard() {
                 <div className="flex gap-3">
                   <div className="text-lg">🚛</div>
                   <div>
-                    <div className="font-medium">Use the Rig Builder first</div>
-                    <div className="text-gray-600 text-xs">
+                    <div className="font-medium text-gray-900">Use the Rig Builder first</div>
+                    <div className={`${bodyTextClass} text-xs`}>
                       Save precise tractor/trailer measurements once — then they prefill every
                       permit request with accurate overall length.
                     </div>

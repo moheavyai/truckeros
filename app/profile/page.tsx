@@ -147,8 +147,35 @@ import {
 } from '@/lib/roster-profile-link'
 
 
+/** Mobile-first contrast: stronger borders/text on small screens; softer from sm: up (matches permit-test / portal-assist). */
+const fieldControlClass =
+  'border border-gray-500 sm:border-gray-300 text-gray-900 placeholder:text-gray-500 bg-white'
 const inputClass =
-  'border border-gray-300 px-3 py-2 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-black/10'
+  `${fieldControlClass} px-3 py-2 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-black/10`
+const buttonSecondaryClass =
+  'rounded-lg border border-gray-500 sm:border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-50 transition disabled:opacity-50'
+const buttonPrimaryClass =
+  'bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.985]'
+const buttonPrimaryCompactClass =
+  'rounded-lg bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-4 py-2 text-sm font-semibold transition whitespace-nowrap'
+const buttonSuccessClass =
+  'bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-sm font-semibold transition'
+const buttonSuccessOutlineClass =
+  'text-sm px-3 py-1.5 border border-emerald-500 sm:border-emerald-300 hover:bg-emerald-50 rounded-lg text-emerald-900 sm:text-emerald-800 transition disabled:opacity-50'
+const fieldLabelClass = 'block text-xs font-medium text-gray-600 sm:text-gray-500 mb-1'
+const fieldHintClass = 'text-sm text-gray-600 sm:text-gray-500'
+const mutedTextClass = 'text-gray-600 sm:text-gray-500'
+const bodyTextClass = 'text-gray-700 sm:text-gray-600'
+const dividerBorderClass = 'border-gray-300 sm:border-gray-200'
+const softDividerBorderClass = 'border-gray-200 sm:border-gray-100'
+const listDivideClass = 'divide-y divide-gray-200 sm:divide-gray-100'
+const sectionHeaderClass = `px-6 py-5 border-b ${dividerBorderClass} bg-gray-50`
+const checkboxClass = 'h-4 w-4 rounded accent-emerald-700 border-gray-500 sm:border-gray-300'
+const radioClass = 'h-4 w-4 accent-emerald-700 border-gray-500 sm:border-gray-300'
+const cardClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-2xl p-6'
+const cardSectionClass =
+  'bg-white border border-gray-300 sm:border-gray-200 rounded-2xl shadow-sm overflow-hidden'
+const nestedPanelClass = 'rounded-xl border border-gray-300 sm:border-gray-200 bg-gray-50 px-4 py-3'
 
 type FieldConfig = {
   key: keyof MemberProfileFormData
@@ -231,14 +258,14 @@ function MemberPermissionsEditor({
   onChange,
 }: MemberPermissionsEditorProps) {
   return (
-    <div className="mt-6 pt-6 border-t border-gray-100">
+    <div className={`mt-6 pt-6 border-t ${softDividerBorderClass}`}>
       <h3 className="text-sm font-semibold text-gray-900">Permissions</h3>
-      <p className="text-sm text-gray-500 mt-1 mb-4">
+      <p className={`${fieldHintClass} mt-1 mb-4`}>
         Global inherits role defaults. Custom lets you toggle Equipment, Profiles, and Account settings.
       </p>
       <div className="flex flex-wrap gap-4 mb-4">
         {(['global', 'custom'] as const).map((mode) => (
-          <label key={mode} className="flex items-center gap-2 text-sm text-gray-800">
+          <label key={mode} className="flex items-center gap-2 text-sm text-gray-900">
             <input
               type="radio"
               name="permission-mode"
@@ -258,6 +285,7 @@ function MemberPermissionsEditor({
                 )
               }
               disabled={!canEdit || disabled}
+              className={radioClass}
             />
             {mode === 'global' ? 'Global' : 'Custom'}
           </label>
@@ -268,7 +296,7 @@ function MemberPermissionsEditor({
           {CUSTOM_PERMISSION_AREAS.map((area) => (
             <label
               key={area}
-              className="flex items-center gap-2.5 text-sm text-gray-800 rounded-lg border border-gray-200 px-3 py-2.5"
+              className="flex items-center gap-2.5 text-sm text-gray-900 rounded-lg border border-gray-300 sm:border-gray-200 px-3 py-2.5"
             >
               <input
                 type="checkbox"
@@ -285,7 +313,7 @@ function MemberPermissionsEditor({
                   })
                 }
                 disabled={!canEdit || disabled}
-                className="rounded border-gray-300"
+                className={checkboxClass}
               />
               {memberPermissionAreaLabel(area)}
             </label>
@@ -307,12 +335,12 @@ function UserRolesCheckboxGrid({
 }: UserRolesCheckboxGridProps) {
   return (
     <>
-      <p className="text-sm text-gray-500 mb-4">{helperText}</p>
+      <p className={`${fieldHintClass} mb-4`}>{helperText}</p>
       <div className="grid sm:grid-cols-2 gap-3">
         {roleOptions.map((role) => (
           <label
             key={role}
-            className={`flex items-center gap-2.5 text-sm text-gray-800 rounded-lg border border-gray-200 px-3 py-2.5 ${
+            className={`flex items-center gap-2.5 text-sm text-gray-900 rounded-lg border border-gray-300 sm:border-gray-200 px-3 py-2.5 ${
               canEditRoles && canWriteProfile ? 'cursor-pointer hover:bg-gray-50' : 'opacity-70'
             }`}
           >
@@ -321,7 +349,7 @@ function UserRolesCheckboxGrid({
               checked={userRoles.includes(role)}
               onChange={() => onToggleRole(role)}
               disabled={!canEditRoles || !canWriteProfile || disabled}
-              className="rounded border-gray-300"
+              className={checkboxClass}
             />
             {role}
           </label>
@@ -2182,7 +2210,7 @@ export default function ProfilePage() {
             <span className="text-white text-3xl font-bold tracking-tighter">T</span>
           </div>
           <p className="text-gray-700 font-semibold text-lg">Checking authentication...</p>
-          <p className="text-gray-500 text-sm mt-1">Please wait while we verify your session</p>
+          <p className={`${mutedTextClass} text-sm mt-1`}>Please wait while we verify your session</p>
         </div>
       </div>
     )
@@ -2200,11 +2228,11 @@ export default function ProfilePage() {
         {!showOwnerBootstrapSetup && (
           <div className="mb-8">
             <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Member Profile</h1>
-            <p className="text-gray-600 mt-1.5 text-[15px]">
+            <p className={`${bodyTextClass} mt-1.5 text-[15px]`}>
               Store carrier and driver details for permit applications and team coordination.
             </p>
             {showAssignedRoleBadges && (
-              <p className="mt-3 text-sm text-gray-600">
+              <p className={`mt-3 text-sm ${bodyTextClass}`}>
                 Your assigned roles:{' '}
                 {landingAssignedRoles.map((role) => (
                   <span
@@ -2255,15 +2283,15 @@ export default function ProfilePage() {
 
         {showOwnerBootstrapSetup && (
           <form onSubmit={handleSave} className="mb-6">
-            <section className="bg-white border rounded-2xl p-6 shadow-sm">
+            <section className={`${cardClass} shadow-sm`}>
               <div className="mb-6">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                <p className={`text-xs font-semibold uppercase tracking-wide ${mutedTextClass} mb-2`}>
                   {getGuidedOnboardingCopy('company').title}
                 </p>
                 <h2 className="font-semibold text-xl tracking-tight text-gray-900">
                   {bootstrapWelcomeTitle}
                 </h2>
-                <p className="text-sm text-gray-500 mt-1.5">{bootstrapWelcomeSubtitle}</p>
+                <p className={`${fieldHintClass} mt-1.5`}>{bootstrapWelcomeSubtitle}</p>
               </div>
 
               <div className="space-y-6">
@@ -2272,7 +2300,7 @@ export default function ProfilePage() {
                   <div className="grid sm:grid-cols-2 gap-4">
                     {BOOTSTRAP_CONTACT_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
                       <div key={key}>
-                        <label htmlFor={`bootstrap-${key}`} className="block text-xs font-medium text-gray-600 mb-1">
+                        <label htmlFor={`bootstrap-${key}`} className={fieldLabelClass}>
                           {label}
                         </label>
                         <input
@@ -2294,7 +2322,7 @@ export default function ProfilePage() {
                   <div className="grid sm:grid-cols-2 gap-4">
                     {BOOTSTRAP_CARRIER_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
                       <div key={key} className={key === 'carrier_address' ? 'sm:col-span-2' : ''}>
-                        <label htmlFor={`bootstrap-${key}`} className="block text-xs font-medium text-gray-600 mb-1">
+                        <label htmlFor={`bootstrap-${key}`} className={fieldLabelClass}>
                           {label}
                         </label>
                         <input
@@ -2311,23 +2339,23 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-gray-100">
-                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 transition">
+                <div className={`pt-4 border-t ${softDividerBorderClass}`}>
+                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-300 sm:border-gray-200 px-4 py-3 hover:bg-gray-50 transition">
                     <input
                       type="checkbox"
                       checked={ownerOperatorSelected}
                       onChange={(e) => toggleOwnerOperator(e.target.checked)}
                       disabled={isSaving || isLoadingMember}
-                      className="mt-0.5 rounded border-gray-300"
+                      className={`mt-0.5 ${checkboxClass}`}
                     />
                     <span>
                       <span className="block text-sm font-medium text-gray-900">Owner Operator</span>
-                      <span className="block text-sm text-gray-500 mt-0.5">
+                      <span className={`block ${fieldHintClass} mt-0.5`}>
                         I also drive — add the Driver role so you can manage equipment and operate on
                         routes.
                       </span>
                       {ownerOperatorSelected && (
-                        <span className="block text-xs text-gray-500 mt-1.5">
+                        <span className={`block text-xs ${mutedTextClass} mt-1.5`}>
                           {getOwnerBootstrapOwnerOperatorHint()}
                         </span>
                       )}
@@ -2339,7 +2367,7 @@ export default function ProfilePage() {
                   <button
                     type="submit"
                     disabled={memberSaveDisabled}
-                    className="bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.985]"
+                    className={buttonPrimaryClass}
                   >
                     {bootstrapSaveButtonLabel}
                   </button>
@@ -2351,13 +2379,13 @@ export default function ProfilePage() {
 
         {/* Full welcome while onboarding incomplete; one-time quiet banner for team roles */}
         {!showOwnerBootstrapSetup && showLandingView && showFullWelcomeBanner && (
-          <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className={`mb-6 rounded-2xl border border-gray-300 sm:border-gray-200 bg-white p-6 shadow-sm`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="font-semibold text-xl tracking-tight text-gray-900">
                   {roleWelcomeHeadline}
                 </h2>
-                <p className="text-sm text-gray-500 mt-1.5">{roleWelcomeSubtitle}</p>
+                <p className={`${fieldHintClass} mt-1.5`}>{roleWelcomeSubtitle}</p>
               </div>
               {showTeamRoleWelcome && user?.id && (
                 <button
@@ -2366,7 +2394,7 @@ export default function ProfilePage() {
                     writeRoleWelcomeSeen(user.id, true)
                     setRoleWelcomeSeen(true)
                   }}
-                  className="text-sm font-medium text-gray-600 hover:text-black"
+                  className={`text-sm font-medium ${bodyTextClass} hover:text-black`}
                 >
                   Dismiss
                 </button>
@@ -2419,16 +2447,16 @@ export default function ProfilePage() {
         )}
 
         {showCarrierCard && (
-          <section className="bg-white border rounded-2xl p-6 mb-6">
+          <section className={`${cardClass} mb-6`}>
             <form onSubmit={handleSaveCarrierInfo} className="space-y-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 className="font-semibold text-lg tracking-tight text-gray-900">Carrier Information</h2>
-                    <p className="text-sm text-gray-500 mt-1">
+                    <p className={`${fieldHintClass} mt-1`}>
                       Company details used on permits and compliance forms. Use Save Carrier Info below.
                     </p>
                     {showOwnerAdminBadge && (
-                      <p className="mt-2 text-sm text-gray-600">
+                      <p className={`mt-2 text-sm ${bodyTextClass}`}>
                         You are{' '}
                         <span
                           className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${roleBadgeClass(ownerBadgeRole)}`}
@@ -2449,7 +2477,7 @@ export default function ProfilePage() {
                       type="button"
                       onClick={() => setCarrierFormExpanded(true)}
                       disabled={carrierSaveInFlight}
-                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 transition disabled:opacity-50"
+                      className={buttonSecondaryClass}
                     >
                       Edit Carrier Info
                     </button>
@@ -2459,7 +2487,7 @@ export default function ProfilePage() {
                       type="button"
                       onClick={handleCollapseCarrier}
                       disabled={carrierSaveInFlight}
-                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 transition disabled:opacity-50"
+                      className={buttonSecondaryClass}
                     >
                       Collapse
                     </button>
@@ -2470,7 +2498,7 @@ export default function ProfilePage() {
                     <div className="grid sm:grid-cols-2 gap-4">
                       {CARRIER_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
                         <div key={key} className={key === 'carrier_address' ? 'sm:col-span-2' : ''}>
-                          <label htmlFor={key} className="block text-xs font-medium text-gray-600 mb-1">
+                          <label htmlFor={key} className={fieldLabelClass}>
                             {label}
                           </label>
                           <input
@@ -2490,7 +2518,7 @@ export default function ProfilePage() {
                         <button
                           type="submit"
                           disabled={carrierSaveInFlight}
-                          className="bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.985]"
+                          className={buttonPrimaryClass}
                         >
                           {savingCarrier ? 'Saving...' : 'Save Carrier Info'}
                         </button>
@@ -2501,7 +2529,7 @@ export default function ProfilePage() {
                   <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-4">
                     {carrierSummaryFields.map(({ label, value }) => (
                       <div key={label} className={label === 'Address' ? 'sm:col-span-2' : ''}>
-                        <dt className="text-xs font-medium text-gray-500">{label}</dt>
+                        <dt className={`text-xs font-medium ${mutedTextClass}`}>{label}</dt>
                         <dd className="mt-1 text-sm text-gray-900">{value}</dd>
                       </div>
                     ))}
@@ -2526,17 +2554,17 @@ export default function ProfilePage() {
 
         {showMemberEditCard && (
         <form onSubmit={handleSave} className="space-y-6 mb-6">
-          <section className="bg-white border rounded-2xl p-6">
+          <section className={cardClass}>
             <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
               <div>
                 <h2 className="font-semibold text-lg tracking-tight text-gray-900">{memberCardTitle}</h2>
-                <p className="text-sm text-gray-500 mt-1">{memberEditSubtitle}</p>
+                <p className={`${fieldHintClass} mt-1`}>{memberEditSubtitle}</p>
               </div>
               {showMemberSaveInHeader && (
                 <button
                   type="submit"
                   disabled={memberSaveDisabled}
-                  className="rounded-lg bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-4 py-2 text-sm font-semibold transition whitespace-nowrap"
+                  className={buttonPrimaryCompactClass}
                 >
                   {saveButtonLabel}
                 </button>
@@ -2559,15 +2587,15 @@ export default function ProfilePage() {
 
             {showMemberCardActions &&
               (allowCardReinvite || allowCardDelete || allowCardRequestRemoval) && (
-                <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-                  <p className="text-xs font-medium text-gray-500 mb-3">Member actions</p>
+                <div className={`mt-4 ${nestedPanelClass}`}>
+                  <p className={`text-xs font-medium ${mutedTextClass} mb-3`}>Member actions</p>
                   <div className="flex flex-wrap gap-2">
                     {allowCardReinvite && editingMember && (
                       <button
                         type="button"
                         onClick={() => void handleReinviteMember(editingMember)}
                         disabled={reinvitingMemberKey === editingMemberKey || isSaving}
-                        className="text-sm px-3 py-1.5 border border-emerald-200 hover:bg-emerald-50 rounded-lg text-emerald-800 transition disabled:opacity-50"
+                        className={buttonSuccessOutlineClass}
                       >
                         {reinvitingMemberKey === editingMemberKey ? 'Inviting…' : 'Re-invite'}
                       </button>
@@ -2603,17 +2631,17 @@ export default function ProfilePage() {
               )}
 
             {showTeamSectionCarrier && (
-              <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+              <div className={`mb-5 ${nestedPanelClass}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-medium text-gray-500">Carrier</p>
+                    <p className={`text-xs font-medium ${mutedTextClass}`}>Carrier</p>
                     <p className="text-sm font-medium text-gray-900 mt-0.5">{carrierNameSummary}</p>
                   </div>
                   {hasCarrierData(teamSectionCarrierSource) && (
                     <button
                       type="button"
                       onClick={() => setCarrierFormExpanded((prev) => !prev)}
-                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 transition"
+                      className={buttonSecondaryClass}
                     >
                       {carrierFormExpanded ? 'Collapse' : 'Expand'}
                     </button>
@@ -2623,13 +2651,13 @@ export default function ProfilePage() {
                   <dl className="mt-4 grid sm:grid-cols-2 gap-x-6 gap-y-4">
                     {teamSectionCarrierFields.map(({ label, value }) => (
                       <div key={`team-carrier-${label}`} className={label === 'Address' ? 'sm:col-span-2' : ''}>
-                        <dt className="text-xs font-medium text-gray-500">{label}</dt>
+                        <dt className={`text-xs font-medium ${mutedTextClass}`}>{label}</dt>
                         <dd className="mt-1 text-sm text-gray-900">{value}</dd>
                       </div>
                     ))}
                   </dl>
                 )}
-                <p className="mt-2 text-xs text-gray-500">
+                <p className={`mt-2 text-xs ${mutedTextClass}`}>
                   {getTeamSectionCarrierHelperText({
                     showExpandableSummary: teamMemberCarrierSummaryMode,
                   })}
@@ -2640,7 +2668,7 @@ export default function ProfilePage() {
             <div className="mt-5 grid sm:grid-cols-2 gap-4">
               {DRIVER_IDENTITY_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
                 <div key={key}>
-                  <label htmlFor={key} className="block text-xs font-medium text-gray-600 mb-1">
+                  <label htmlFor={key} className={fieldLabelClass}>
                     {label}
                     {isDriverRestrictedField(key) &&
                       effectiveOwnProfile &&
@@ -2664,7 +2692,7 @@ export default function ProfilePage() {
                 </div>
               ))}
               <div>
-                <label htmlFor="cdl_state" className="block text-xs font-medium text-gray-600 mb-1">
+                <label htmlFor="cdl_state" className={fieldLabelClass}>
                   CDL State
                   {effectiveOwnProfile &&
                     isDriverSelfServiceActor(effectiveOwnProfile) &&
@@ -2691,7 +2719,7 @@ export default function ProfilePage() {
                 </select>
               </div>
               <div>
-                <label htmlFor="date_of_birth" className="block text-xs font-medium text-gray-600 mb-1">
+                <label htmlFor="date_of_birth" className={fieldLabelClass}>
                   Date of Birth
                   {effectiveOwnProfile &&
                     isDriverSelfServiceActor(effectiveOwnProfile) &&
@@ -2714,7 +2742,7 @@ export default function ProfilePage() {
               </div>
               {DRIVER_CONTACT_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
                 <div key={key} className={key === 'emergency_contact' ? 'sm:col-span-2' : ''}>
-                  <label htmlFor={key} className="block text-xs font-medium text-gray-600 mb-1">
+                  <label htmlFor={key} className={fieldLabelClass}>
                     {label}
                   </label>
                   <input
@@ -2731,7 +2759,7 @@ export default function ProfilePage() {
             </div>
 
             {showUserRolesSection && (
-              <div className="mt-6 pt-6 border-t border-gray-100">
+              <div className={`mt-6 pt-6 border-t ${softDividerBorderClass}`}>
                 <UserRolesCheckboxGrid
                   userRoles={(form.user_roles as string[]) || []}
                   roleOptions={teamRoleOptions}
@@ -2754,7 +2782,7 @@ export default function ProfilePage() {
                     <button
                       type="submit"
                       disabled={memberSaveDisabled || savingAndInviting}
-                      className="rounded-lg bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-4 py-2 text-sm font-semibold transition whitespace-nowrap"
+                      className={buttonPrimaryCompactClass}
                     >
                       {saveButtonLabel}
                     </button>
@@ -2763,7 +2791,7 @@ export default function ProfilePage() {
                         type="button"
                         onClick={handleSaveAndInvite}
                         disabled={memberSaveDisabled || savingAndInviting}
-                        className="rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 text-sm font-semibold transition whitespace-nowrap"
+                        className={`${buttonSuccessClass} rounded-lg px-4 py-2 whitespace-nowrap`}
                       >
                         {savingAndInviting ? 'Saving & inviting…' : 'Save and Invite'}
                       </button>
@@ -2787,12 +2815,12 @@ export default function ProfilePage() {
           <section
             ref={teamSectionRef}
             id="saved-team-members"
-            className={`bg-white border rounded-2xl shadow-sm overflow-hidden ${showLandingView ? 'mb-6' : 'mt-6'}`}
+            className={`${cardSectionClass} ${showLandingView ? 'mb-6' : 'mt-6'}`}
           >
-            <div className="px-6 py-5 border-b bg-gray-50 flex flex-wrap items-start justify-between gap-3">
+            <div className={`${sectionHeaderClass} flex flex-wrap items-start justify-between gap-3`}>
               <div>
                 <h2 className="text-xl font-semibold tracking-tight text-gray-900">Team Roster</h2>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className={`${fieldHintClass} mt-1`}>
                   {primaryOwner
                     ? 'Manage profiles for everyone on your team.'
                     : 'Your saved profile details.'}
@@ -2804,7 +2832,7 @@ export default function ProfilePage() {
                     type="button"
                     onClick={handleEditMyProfile}
                     disabled={isLoadingMember || isSaving}
-                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50 transition whitespace-nowrap disabled:opacity-50"
+                    className={`${buttonSecondaryClass} px-4 py-2 font-semibold whitespace-nowrap`}
                   >
                     Edit my profile
                   </button>
@@ -2814,7 +2842,7 @@ export default function ProfilePage() {
                     type="button"
                     onClick={handleAddTeamMember}
                     disabled={isLoadingMember || isSaving}
-                    className="rounded-lg bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-4 py-2 text-sm font-semibold transition whitespace-nowrap"
+                    className={buttonPrimaryCompactClass}
                   >
                     + Add New Member
                   </button>
@@ -2823,13 +2851,13 @@ export default function ProfilePage() {
             </div>
 
             {teamMembers.length === 0 ? (
-              <div className="px-6 py-10 text-center text-sm text-gray-600">
+              <div className={`px-6 py-10 text-center ${fieldHintClass}`}>
                 Save your profile to see it listed here.
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b">
+                  <thead className={`bg-gray-50 border-b ${dividerBorderClass}`}>
                     <tr>
                       <th className="text-left px-6 py-4 font-semibold text-gray-700">Name</th>
                       <th className="text-left px-6 py-4 font-semibold text-gray-700">Roles</th>
@@ -2838,7 +2866,7 @@ export default function ProfilePage() {
                       <th className="text-right px-6 py-4 font-semibold text-gray-700">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y">
+                  <tbody className={listDivideClass}>
                     {teamMembers.map((member) => {
                       const allowEdit = effectiveOwnProfile
                         ? canEditMember(actingPermissionActor, member)
@@ -2857,10 +2885,10 @@ export default function ProfilePage() {
                           <td className="px-6 py-4">
                             <div className="font-medium text-gray-900">{member.display_name}</div>
                             {member.is_self && (
-                              <div className="text-xs text-gray-500 mt-0.5">You</div>
+                              <div className={`text-xs ${mutedTextClass} mt-0.5`}>You</div>
                             )}
                             {member.is_primary_owner && !member.is_self && (
-                              <div className="text-xs text-gray-500 mt-0.5">Primary owner</div>
+                              <div className={`text-xs ${mutedTextClass} mt-0.5`}>Primary owner</div>
                             )}
                           </td>
                           <td className="px-6 py-4">
@@ -2875,12 +2903,12 @@ export default function ProfilePage() {
                                   </span>
                                 ))
                               ) : (
-                                <span className="text-gray-500">—</span>
+                                <span className={mutedTextClass}>—</span>
                               )}
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-gray-700">{member.company_name?.trim() || '—'}</td>
-                          <td className="px-6 py-4 text-gray-600">{member.driver_summary}</td>
+                          <td className={`px-6 py-4 ${bodyTextClass}`}>{member.company_name?.trim() || '—'}</td>
+                          <td className={`px-6 py-4 ${mutedTextClass}`}>{member.driver_summary}</td>
                           <td className="px-6 py-4 text-right whitespace-nowrap">
                             {allowEdit && canWriteProfile && (
                               <button
@@ -2889,7 +2917,7 @@ export default function ProfilePage() {
                                   if (confirmDiscardIfDirty()) void handleEditMember(member)
                                 }}
                                 disabled={isLoadingMember || isSaving}
-                                className="text-sm px-3 py-1.5 border border-gray-300 hover:bg-gray-100 rounded-lg text-gray-700 transition disabled:opacity-50"
+                                className={buttonSecondaryClass}
                               >
                                 Edit
                               </button>
@@ -2908,23 +2936,23 @@ export default function ProfilePage() {
         {effectiveOwnProfile &&
           isDriverSelfServiceActor(effectiveOwnProfile) &&
           ownPendingChangeRequests.length > 0 && (
-            <section className="mt-10 bg-white border rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-6 py-5 border-b bg-gray-50">
+            <section className={`mt-10 ${cardSectionClass}`}>
+              <div className={sectionHeaderClass}>
                 <h2 className="text-xl font-semibold tracking-tight text-gray-900">
                   Your Pending Profile Changes
                 </h2>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className={`${fieldHintClass} mt-1`}>
                   Identity updates awaiting admin approval. Contact fields save immediately.
                 </p>
               </div>
-              <ul className="divide-y">
+              <ul className={listDivideClass}>
                 {ownPendingChangeRequests.map((request) => (
                   <li key={request.id} className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="font-medium text-gray-900">
                         {profileChangeFieldLabel(request.field_key)}
                       </div>
-                      <div className="text-sm text-gray-600 mt-0.5">
+                      <div className={`${fieldHintClass} mt-0.5`}>
                         {request.current_value?.trim() || '—'} → {request.requested_value?.trim() || '—'}
                       </div>
                       <div className="text-xs text-blue-700 mt-1 capitalize">{request.status}</div>
@@ -2933,7 +2961,7 @@ export default function ProfilePage() {
                       type="button"
                       onClick={() => withdrawOwnProfileChangeRequest(request.id)}
                       disabled={withdrawingChangeRequestId === request.id}
-                      className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      className={buttonSecondaryClass}
                     >
                       {withdrawingChangeRequestId === request.id ? 'Withdrawing…' : 'Withdraw'}
                     </button>
@@ -2944,17 +2972,17 @@ export default function ProfilePage() {
           )}
 
         {showTeamInvitesSection && (
-          <section className="mt-10 bg-white border rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b bg-gray-50">
+          <section className={`mt-10 ${cardSectionClass}`}>
+            <div className={sectionHeaderClass}>
               <h2 className="text-xl font-semibold tracking-tight text-gray-900">Team Invites</h2>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className={`${fieldHintClass} mt-1`}>
                 Invite admins, drivers, permit clerks, or viewers by email or phone.
               </p>
             </div>
-            <div className="px-6 py-5 border-b">
+            <div className={`px-6 py-5 border-b ${dividerBorderClass}`}>
               <form onSubmit={handleCreateTeamInvite} className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="invite_email" className="block text-xs font-medium text-gray-600 mb-1">
+                  <label htmlFor="invite_email" className={fieldLabelClass}>
                     Email
                   </label>
                   <input
@@ -2968,7 +2996,7 @@ export default function ProfilePage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="invite_phone" className="block text-xs font-medium text-gray-600 mb-1">
+                  <label htmlFor="invite_phone" className={fieldLabelClass}>
                     Phone (SMS stub)
                   </label>
                   <input
@@ -2982,7 +3010,7 @@ export default function ProfilePage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="invite_role" className="block text-xs font-medium text-gray-600 mb-1">
+                  <label htmlFor="invite_role" className={fieldLabelClass}>
                     Role
                   </label>
                   <select
@@ -3003,7 +3031,7 @@ export default function ProfilePage() {
                   <button
                     type="submit"
                     disabled={creatingInvite || (!inviteEmail.trim() && !invitePhone.trim())}
-                    className="rounded-lg bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-4 py-2 text-sm font-semibold transition"
+                    className={buttonPrimaryCompactClass}
                   >
                     {creatingInvite ? 'Creating…' : 'Send invite'}
                   </button>
@@ -3011,17 +3039,17 @@ export default function ProfilePage() {
               </form>
             </div>
             {teamInvites.length === 0 ? (
-              <div className="px-6 py-8 text-sm text-gray-600">No pending invites.</div>
+              <div className={`px-6 py-8 ${fieldHintClass}`}>No pending invites.</div>
             ) : (
-              <ul className="divide-y">
+              <ul className={listDivideClass}>
                 {teamInvites.map((invite) => (
                   <li key={invite.id} className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="font-medium text-gray-900">{invite.role}</div>
-                      <div className="text-sm text-gray-600 mt-0.5">
+                      <div className={`${fieldHintClass} mt-0.5`}>
                         {invite.invite_email || invite.invite_phone || 'No contact'}
                         {invite.invite_link && (
-                          <span className="block text-xs text-gray-500 mt-1 truncate max-w-md">
+                          <span className={`block text-xs ${mutedTextClass} mt-1 truncate max-w-md`}>
                             {invite.invite_link}
                           </span>
                         )}
@@ -3042,7 +3070,7 @@ export default function ProfilePage() {
                               type="button"
                               onClick={() => void acceptInviteAsCurrentUser(invite)}
                               disabled={acceptingInviteId === invite.id}
-                              className="text-sm px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                              className={`text-sm px-3 py-1.5 rounded-lg ${buttonSuccessClass}`}
                             >
                               {acceptingInviteId === invite.id
                                 ? 'Accepting…'
@@ -3055,7 +3083,7 @@ export default function ProfilePage() {
                         type="button"
                         onClick={() => revokeTeamInvite(invite.id)}
                         disabled={revokingInviteId === invite.id}
-                        className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                        className={buttonSecondaryClass}
                       >
                         {revokingInviteId === invite.id ? 'Revoking…' : 'Revoke'}
                       </button>
@@ -3068,28 +3096,28 @@ export default function ProfilePage() {
         )}
 
         {canManageMemberPermissions(actingPermissionActor) && pendingDeletionRequests.length > 0 && (
-          <section className="mt-10 bg-white border rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b bg-gray-50">
+          <section className={`mt-10 ${cardSectionClass}`}>
+            <div className={sectionHeaderClass}>
               <h2 className="text-xl font-semibold tracking-tight text-gray-900">Pending Removal Requests</h2>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className={`${fieldHintClass} mt-1`}>
                 Permit clerk deletion requests awaiting your approval.
               </p>
             </div>
-            <ul className="divide-y">
+            <ul className={listDivideClass}>
               {pendingDeletionRequests.map((request) => (
                 <li key={request.id} className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="font-medium text-gray-900">
                       {deletionResourceLabel(request.resource_type)}
                     </div>
-                    <div className="text-sm text-gray-600 mt-0.5">Resource ID: {request.resource_id}</div>
+                    <div className={`${fieldHintClass} mt-0.5`}>Resource ID: {request.resource_id}</div>
                   </div>
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => respondToDeletionRequest(request.id, 'approve')}
                       disabled={reviewingDeletionRequestId === request.id}
-                      className="text-sm px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                      className={`text-sm px-3 py-1.5 rounded-lg ${buttonSuccessClass}`}
                     >
                       {reviewingDeletionRequestId === request.id ? 'Working…' : 'Approve'}
                     </button>
@@ -3109,16 +3137,16 @@ export default function ProfilePage() {
         )}
 
         {primaryOwner && adminPendingChangeRequests.length > 0 && (
-          <section className="mt-10 bg-white border rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b bg-gray-50">
+          <section className={`mt-10 ${cardSectionClass}`}>
+            <div className={sectionHeaderClass}>
               <h2 className="text-xl font-semibold tracking-tight text-gray-900">
                 Pending Profile Changes
               </h2>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className={`${fieldHintClass} mt-1`}>
                 Driver identity updates awaiting your approval.
               </p>
             </div>
-            <ul className="divide-y">
+            <ul className={listDivideClass}>
               {adminPendingChangeRequests.map((request) => {
                 const requester = orgMemberRows.find((row) => row.user_id === request.requester_user_id)
                 const requesterName = requester ? memberDisplayName(requester) : 'Team member'
@@ -3127,7 +3155,7 @@ export default function ProfilePage() {
                   <li key={request.id} className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="font-medium text-gray-900">{requesterName}</div>
-                      <div className="text-sm text-gray-600 mt-0.5">
+                      <div className={`${fieldHintClass} mt-0.5`}>
                         <span className="font-medium">{profileChangeFieldLabel(request.field_key)}:</span>{' '}
                         {request.current_value?.trim() || '—'} → {request.requested_value?.trim() || '—'}
                       </div>
@@ -3137,7 +3165,7 @@ export default function ProfilePage() {
                         type="button"
                         onClick={() => respondToProfileChangeRequest(request.id, 'approve')}
                         disabled={reviewingChangeRequestId === request.id}
-                        className="text-sm px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                        className={`text-sm px-3 py-1.5 rounded-lg ${buttonSuccessClass}`}
                       >
                         {reviewingChangeRequestId === request.id ? 'Working…' : 'Approve'}
                       </button>
@@ -3158,21 +3186,21 @@ export default function ProfilePage() {
         )}
 
         {primaryOwner && incomingLinkRequests.length > 0 && (
-          <section className="mt-10 bg-white border rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b bg-gray-50">
+          <section className={`mt-10 ${cardSectionClass}`}>
+            <div className={sectionHeaderClass}>
               <h2 className="text-xl font-semibold tracking-tight text-gray-900">Account Link Requests</h2>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className={`${fieldHintClass} mt-1`}>
                 Permit clerks and service users requesting access to your carrier account.
               </p>
             </div>
-            <ul className="divide-y">
+            <ul className={listDivideClass}>
               {incomingLinkRequests.map((request) => (
                 <li key={request.id} className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="font-medium text-gray-900">
                       {request.requester_name || 'Account link request'}
                     </div>
-                    <div className="text-sm text-gray-600 mt-0.5">
+                    <div className={`${fieldHintClass} mt-0.5`}>
                       {request.requester_email && <span>{request.requester_email} · </span>}
                       {request.target_usdot && <span>USDOT {request.target_usdot} · </span>}
                       {request.target_email && <span>{request.target_email} · </span>}
@@ -3184,7 +3212,7 @@ export default function ProfilePage() {
                       type="button"
                       onClick={() => respondToLinkRequest(request.id, 'approve')}
                       disabled={respondingRequestId === request.id}
-                      className="text-sm px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                      className={`text-sm px-3 py-1.5 rounded-lg ${buttonSuccessClass}`}
                     >
                       {respondingRequestId === request.id ? 'Working…' : 'Approve'}
                     </button>
@@ -3209,7 +3237,7 @@ export default function ProfilePage() {
               <h3 className="text-lg font-semibold text-gray-900">
                 {deleteCandidateIsRequest ? 'Request removal?' : 'Delete team member?'}
               </h3>
-              <p className="mt-2 text-sm text-gray-600">
+              <p className={`mt-2 text-sm ${bodyTextClass}`}>
                 {deleteCandidateIsRequest ? (
                   <>
                     Submit a removal request for{' '}
@@ -3230,7 +3258,7 @@ export default function ProfilePage() {
                     setDeleteCandidate(null)
                     setDeleteCandidateIsRequest(false)
                   }}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className={`${buttonSecondaryClass} px-4 py-2`}
                 >
                   Cancel
                 </button>
