@@ -307,8 +307,17 @@ export default function Dashboard() {
     [onboardingStep, navActor]
   )
 
-  const primaryTool = tools.find((t) => t.primary) ?? tools[0]
-  const secondaryTools = tools.filter((t) => t.id !== primaryTool?.id)
+  // Welcome CTAs: route analysis (+ carriers in service mode). Never promote
+  // Equipment / History / Profile here — those live in AppHeader only.
+  // Full `tools` still drives stats / recent-activity visibility below.
+  const welcomeTools = tools.filter(
+    (t) => t.id !== 'equipment' && t.id !== 'history' && t.id !== 'profile'
+  )
+  const primaryTool =
+    welcomeTools.find((t) => t.id === 'permit_analysis') ??
+    welcomeTools.find((t) => t.primary) ??
+    welcomeTools[0]
+  const secondaryTools = welcomeTools.filter((t) => t.id !== primaryTool?.id)
 
   // === Authentication Protection ===
   // Show a clean, branded loading state while verifying the user's session.

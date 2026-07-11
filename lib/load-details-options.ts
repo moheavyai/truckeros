@@ -2,7 +2,12 @@
 
 export const LOADED_ARRANGEMENT_OPTIONS = ['side-by-side', 'end-to-end', 'stacked'] as const
 export type LoadedArrangement = (typeof LOADED_ARRANGEMENT_OPTIONS)[number]
+/** Fallback for sanitizing invalid/unknown arrangement values (not the form default). */
 export const DEFAULT_LOADED_ARRANGEMENT: LoadedArrangement = 'side-by-side'
+/** Pre-selected arrangement when number of pieces becomes greater than 1. */
+export const MULTI_PIECE_DEFAULT_LOADED_ARRANGEMENT: LoadedArrangement = 'end-to-end'
+/** Form value when pieces = 1 (no radio selected). */
+export type LoadedArrangementFormValue = LoadedArrangement | ''
 
 export const MOVE_TYPE_OPTIONS = ['hauled', 'self-propelled', 'towed'] as const
 export type MoveType = (typeof MOVE_TYPE_OPTIONS)[number]
@@ -49,10 +54,17 @@ export function formatMoveTypeLabel(value: unknown): string | null {
   return MOVE_TYPE_LABELS[value as MoveType]
 }
 
-export function sanitizeLoadedArrangement(value: unknown): LoadedArrangement {
+/**
+ * Sanitize arrangement for persistence.
+ * - Valid option → kept as-is
+ * - Empty / null / undefined (nothing selected, e.g. pieces = 1) → null (do not invent a value)
+ * - Unknown/bogus string → DEFAULT_LOADED_ARRANGEMENT for corrupt-data recovery
+ */
+export function sanitizeLoadedArrangement(value: unknown): LoadedArrangement | null {
   if (typeof value === 'string' && LOADED_ARRANGEMENT_SET.has(value)) {
     return value as LoadedArrangement
   }
+  if (value == null || value === '') return null
   return DEFAULT_LOADED_ARRANGEMENT
 }
 
@@ -88,4 +100,59 @@ export function resolvePiecesForSubmit(
     return parseAndClampPieces(draft)
   }
   return sanitizeNumberOfPieces(formData.numberOfPieces)
+}
+
+/**
+ * Sync Loaded arrangement radios with piece count.
+ * - pieces = 1 → nothing selected (empty)
+ * - pieces > 1 → keep a valid user selection; otherwise pre-select end-to-end
+ */
+export function resolveLoadedArrangementForPieces(
+  pieces: number,
+  current: string | null | undefined
+): LoadedArrangementFormValue {
+  if (clampNumberOfPieces(pieces) <= 1) return ''
+  if (typeof current === 'string' && LOADED_ARRANGEMENT_SET.has(current)) {
+    return current as LoadedArrangement
+  }
+  return MULTI_PIECE_DEFAULT_LOADED_ARRANGEMENT
+}
+
+/**
+ * Apply a committed piece-count change and sync arrangement only when the count changes.
+ * Preserves a manual single-piece selection when the field is re-committed at 1.
+ */
+export function applyNumberOfPiecesChange(
+  previousPieces: number,
+  nextPieces: number,
+  currentArrangement: string | null | undefined
+): { numberOfPieces: number; loadedArrangement: LoadedArrangementFormValue } {
+  const numberOfPieces = clampNumberOfPieces(nextPieces)
+  if (numberOfPieces === clampNumberOfPieces(previousPieces)) {
+    // Unchanged count: keep a valid selection or empty (do not force defaults).
+    if (typeof currentArrangement === 'string' && LOADED_ARRANGEMENT_SET.has(currentArrangement)) {
+      return { numberOfPieces, loadedArrangement: currentArrangement as LoadedArrangement }
+    }
+    return { numberOfPieces, loadedArrangement: '' }
+  }
+  return {
+    numberOfPieces,
+    loadedArrangement: resolveLoadedArrangementForPieces(numberOfPieces, currentArrangement),
+  }
+}
+
+/**
+ * Resolve piece count (flushing draft) and sync Loaded arrangement for submit/save.
+ * Shared by both approve/save paths on the permit-test page.
+ */
+export function resolvePiecesAndArrangementForSubmit(
+  formData: { numberOfPieces: number; loadedArrangement: string },
+  draft: string | null
+): { numberOfPieces: number; loadedArrangement: LoadedArrangementFormValue } {
+  const resolvedPieces = resolvePiecesForSubmit(formData, draft)
+  return applyNumberOfPiecesChange(
+    formData.numberOfPieces,
+    resolvedPieces,
+    formData.loadedArrangement
+  )
 }

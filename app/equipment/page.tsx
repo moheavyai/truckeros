@@ -899,7 +899,7 @@ export default function EquipmentPage() {
         title={canSetDefault ? 'Use this rig automatically in Permit Agent' : 'Re-save from Rig Builder to enable default'}
         className={`${buttonSecondaryClass} ${className}`}
       >
-        {busy ? 'Saving…' : 'Make Default Rig'}
+        {busy ? 'Saving…' : 'Make default'}
       </button>
     )
   }
@@ -942,7 +942,7 @@ export default function EquipmentPage() {
             Could not load carrier rigs: {carrierPrimaryOwnerError}. Tractor/trailer profiles may still load by organization.
           </p>
         )}
-        {/* Header — History (not Dashboard) to avoid duplicating AppHeader nav */}
+        {/* Header — New Analysis only; History lives in AppHeader when on this page */}
         <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900">Equipment &amp; Rig Builder</h1>
@@ -951,7 +951,6 @@ export default function EquipmentPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2 sm:gap-3 shrink-0">
-            <a href="/history" className={buttonSecondaryClass}>History</a>
             <a href="/permit-test" className={buttonPrimaryClass}>New Analysis →</a>
           </div>
         </div>
@@ -1552,14 +1551,14 @@ export default function EquipmentPage() {
                         onClick={() => loadRigIntoPermitAgent(rig)}
                         className={`${buttonSuccessClass} rounded-lg`}
                       >
-                        Load into Permit Agent
+                        New Permits
                       </button>
                       {!isServiceModeReadOnly && (
                         <button
                           onClick={() => loadRigIntoBuilder(rig)}
                           className={buttonSecondaryClass}
                         >
-                          Edit in Builder
+                          Edit
                         </button>
                       )}
                       {renderDefaultRigButton(rig)}

@@ -64,6 +64,20 @@ describe('buildPermitCargoSnapshot', () => {
     expect(snapshot.moveType).toBe('hauled')
   })
 
+  it('keeps empty loadedArrangement as null (pieces=1, nothing selected)', () => {
+    const snapshot = buildPermitCargoSnapshot(
+      {
+        ...baseForm,
+        numberOfPieces: 1,
+        loadedArrangement: '',
+      },
+      ''
+    )
+
+    expect(snapshot.numberOfPieces).toBe(1)
+    expect(snapshot.loadedArrangement).toBeNull()
+  })
+
   it('caps numberOfPieces at MAX_NUMBER_OF_PIECES', () => {
     const snapshot = buildPermitCargoSnapshot({ ...baseForm, numberOfPieces: 5000 }, '')
     expect(snapshot.numberOfPieces).toBe(999)

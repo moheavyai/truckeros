@@ -17,14 +17,35 @@ function rig(overrides: Partial<RigConfiguration> & Pick<RigConfiguration, 'id'>
 }
 
 describe('Default rig button labels', () => {
-  it('shows Make Default Rig only for non-default rigs (no ✓ Default button)', () => {
+  it('shows Make default only for non-default rigs (no ✓ Default button)', () => {
     const filePath = path.join(process.cwd(), 'app', 'equipment', 'page.tsx')
     const source = readFileSync(filePath, 'utf8')
 
-    expect(source).toContain('Make Default Rig')
+    expect(source).toContain('Make default')
+    expect(source).not.toContain('Make Default Rig')
     expect(source).not.toContain('✓ Default')
     expect(source).not.toContain('✓ Default Rig')
     expect(source).toContain('if (isDefault) return null')
+  })
+
+  it('saved rig cards use New Permits / Edit / Make default labels', () => {
+    const filePath = path.join(process.cwd(), 'app', 'equipment', 'page.tsx')
+    const source = readFileSync(filePath, 'utf8')
+
+    // Scope to the Saved Rig card action row (not tractor/trailer list Edit buttons)
+    const actionStart = source.indexOf('onClick={() => loadRigIntoPermitAgent(rig)}')
+    expect(actionStart).toBeGreaterThan(-1)
+    const actionEnd = source.indexOf('{renderDefaultRigButton(rig)}', actionStart)
+    expect(actionEnd).toBeGreaterThan(actionStart)
+    const cardActions = source.slice(actionStart, actionEnd + '{renderDefaultRigButton(rig)}'.length)
+
+    expect(cardActions).toContain('New Permits')
+    expect(cardActions).toContain('loadRigIntoBuilder(rig)')
+    expect(cardActions).toMatch(/>\s*Edit\s*</)
+    expect(cardActions).toContain('renderDefaultRigButton(rig)')
+    expect(source).toContain('Make default')
+    expect(source).not.toContain('Load into Permit Agent')
+    expect(source).not.toContain('Edit in Builder')
   })
 
   it('opens on Saved Rigs tab with Saved Rigs first in tab order', () => {

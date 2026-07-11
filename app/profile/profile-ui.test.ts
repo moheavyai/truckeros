@@ -896,29 +896,27 @@ describe('Profile page UI', () => {
     expect(source).toMatch(/bg-emerald-700 hover:bg-emerald-800/)
     expect(source).toMatch(/border-emerald-500 sm:border-emerald-300/)
     expect(source).toMatch(/accent-emerald-700/)
-    // Secondary CTA token includes fill + 44px touch target (no stacked padding on History)
+    // Secondary CTA token includes fill + 44px touch target (no stacked padding overrides)
     expect(source).toMatch(/buttonSecondaryClass =[\s\S]*?bg-white/)
     expect(source).toMatch(/buttonSecondaryClass =[\s\S]*?min-h-\[44px\]/)
     expect(source).toMatch(/buttonSecondaryClass =[\s\S]*?touch-manipulation/)
   })
 
-  it('page header links History (not redundant Dashboard/Profile chrome)', () => {
+  it('page header has no History/Dashboard CTAs (AppHeader owns History on profile)', () => {
     const source = readProfileSource()
     const headerStart = source.indexOf('>Member Profile</h1>')
     expect(headerStart).toBeGreaterThan(-1)
     const headerSlice = source.slice(headerStart, headerStart + 1200)
-    expect(headerSlice).toContain('href="/history"')
-    expect(headerSlice).toContain('History')
+    // AppHeader owns History when activePage=profile — no dual page-level History CTA
+    expect(headerSlice).not.toContain('href="/history"')
+    expect(headerSlice).not.toContain('History')
     expect(headerSlice).not.toContain('href="/dashboard"')
     expect(headerSlice).not.toContain('← Dashboard')
-    // Uses token only — no conflicting px-4 py-2 override stack
-    expect(headerSlice).toMatch(/className=\{buttonSecondaryClass\}/)
-    expect(headerSlice).not.toMatch(/className=\{`px-4 py-2 \$\{buttonSecondaryClass\}`\}/)
   })
 
   it('does not stack padding on secondary button token call sites', () => {
     const source = readProfileSource()
-    // Edit my profile / modal Cancel / History — secondary owns px-4 py-2
+    // Edit my profile / modal Cancel — secondary owns px-4 py-2
     expect(source).not.toMatch(/\$\{buttonSecondaryClass\}\s*px-4 py-2/)
     expect(source).not.toMatch(/buttonSecondaryClass\}\s*`\s*px-4 py-2/)
     expect(source).not.toMatch(/className=\{`\$\{buttonSecondaryClass\} px-4 py-2/)

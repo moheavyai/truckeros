@@ -68,7 +68,6 @@ import {
   sortDriverSelectOptionsWithDefault,
 } from '@/lib/permit-profile-autofill'
 import {
-  DEFAULT_LOADED_ARRANGEMENT,
   DEFAULT_MOVE_TYPE,
   DEFAULT_NUMBER_OF_PIECES,
   LOADED_ARRANGEMENT_LABELS,
@@ -76,8 +75,10 @@ import {
   MAX_NUMBER_OF_PIECES,
   MOVE_TYPE_LABELS,
   MOVE_TYPE_OPTIONS,
+  applyNumberOfPiecesChange,
   parseAndClampPieces,
-  resolvePiecesForSubmit,
+  resolveLoadedArrangementForPieces,
+  resolvePiecesAndArrangementForSubmit,
 } from '@/lib/load-details-options'
 import { buildPermitCargoSnapshot } from '@/lib/permit-cargo-snapshot'
 import { isDevEnvironment } from '@/lib/dev-mode'
@@ -313,7 +314,7 @@ export default function PermitTestPage() {
     destination: createEmptyStop(),
     weight: 80000,
     length: 60,
-    width: 9.67,
+    width: 8.5, // legal trailer/rig width when no load details override
     height: 13.5,
     originLat: undefined as number | undefined,
     originLon: undefined as number | undefined,
@@ -344,7 +345,8 @@ export default function PermitTestPage() {
     trailerLengthFt: 53,
     cargoDescription: '',
     numberOfPieces: DEFAULT_NUMBER_OF_PIECES,
-    loadedArrangement: DEFAULT_LOADED_ARRANGEMENT,
+    // Pieces default to 1 → no Loaded arrangement selected until multi-piece.
+    loadedArrangement: resolveLoadedArrangementForPieces(DEFAULT_NUMBER_OF_PIECES, ''),
     moveType: DEFAULT_MOVE_TYPE,
     cargoMakeModel: '',
     cargoSerialNumber: '',
@@ -1702,12 +1704,12 @@ export default function PermitTestPage() {
       // The server-side /api/permit-requests endpoint (via lib/permit-requests.ts)
       // always derives the correct user_id from the authenticated JWT for security.
       const syncedSave = syncDestinationFromDrops(formData)
-      const resolvedPieces = resolvePiecesForSubmit(formData, numberOfPiecesDraft)
-      if (numberOfPiecesDraft != null) {
+      const piecesPatch = resolvePiecesAndArrangementForSubmit(formData, numberOfPiecesDraft)
+      if (numberOfPiecesDraft != null || piecesPatch.loadedArrangement !== formData.loadedArrangement) {
         setNumberOfPiecesDraft(null)
-        setFormData((p) => ({ ...p, numberOfPieces: resolvedPieces }))
+        setFormData((p) => ({ ...p, ...piecesPatch }))
       }
-      const cargoFormData = { ...formData, numberOfPieces: resolvedPieces }
+      const cargoFormData = { ...formData, ...piecesPatch }
       const savePayload = {
         origin_city: syncedSave.origin.city,
         origin_state: syncedSave.origin.state,
@@ -1815,12 +1817,12 @@ export default function PermitTestPage() {
       // The server-side /api/permit-requests endpoint (via lib/permit-requests.ts)
       // always derives the correct user_id from the authenticated JWT for security.
       const syncedSave = syncDestinationFromDrops(formData)
-      const resolvedPieces = resolvePiecesForSubmit(formData, numberOfPiecesDraft)
-      if (numberOfPiecesDraft != null) {
+      const piecesPatch = resolvePiecesAndArrangementForSubmit(formData, numberOfPiecesDraft)
+      if (numberOfPiecesDraft != null || piecesPatch.loadedArrangement !== formData.loadedArrangement) {
         setNumberOfPiecesDraft(null)
-        setFormData((p) => ({ ...p, numberOfPieces: resolvedPieces }))
+        setFormData((p) => ({ ...p, ...piecesPatch }))
       }
-      const cargoFormData = { ...formData, numberOfPieces: resolvedPieces }
+      const cargoFormData = { ...formData, ...piecesPatch }
       const savePayload = {
         origin_city: syncedSave.origin.city,
         origin_state: syncedSave.origin.state,
@@ -2765,7 +2767,10 @@ export default function PermitTestPage() {
                     onChange={(e) => setNumberOfPiecesDraft(e.target.value)}
                     onBlur={(e) => {
                       const clamped = parseAndClampPieces(e.target.value)
-                      setFormData((p) => ({ ...p, numberOfPieces: clamped }))
+                      setFormData((p) => ({
+                        ...p,
+                        ...applyNumberOfPiecesChange(p.numberOfPieces, clamped, p.loadedArrangement),
+                      }))
                       setNumberOfPiecesDraft(null)
                     }}
                     className={`${fieldControlClass} rounded w-14 p-1 text-center`}
@@ -2988,7 +2993,7 @@ export default function PermitTestPage() {
               <div className={readoutClass}>
                 {formatDimensionDisplay(formData.width) || '—'}
               </div>
-              <p className={`${fieldHintTinyClass} mt-0.5`}>max(trailer width, load width)</p>
+              <p className={`${fieldHintTinyClass} mt-0.5`}>Trailer width, or max with load width when set</p>
             </div>
             <div>
               <label className="block text-sm mb-1 text-gray-800">Gross height</label>

@@ -2228,32 +2228,24 @@ export default function ProfilePage() {
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10 min-w-0">
         {!showOwnerBootstrapSetup && (
-          <div className="mb-8 flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900">Member Profile</h1>
-              <p className={`${bodyTextClass} mt-1.5 text-[15px]`}>
-                Keep carrier and driver details ready for permits and team coordination.
+          <div className="mb-8">
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900">Member Profile</h1>
+            <p className={`${bodyTextClass} mt-1.5 text-[15px]`}>
+              Keep carrier and driver details ready for permits and team coordination.
+            </p>
+            {showAssignedRoleBadges && (
+              <p className={`mt-3 text-sm ${bodyTextClass}`}>
+                Your assigned roles:{' '}
+                {landingAssignedRoles.map((role) => (
+                  <span
+                    key={role}
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border mr-1.5 ${roleBadgeClass(role as Parameters<typeof roleBadgeClass>[0])}`}
+                  >
+                    {role}
+                  </span>
+                ))}
               </p>
-              {showAssignedRoleBadges && (
-                <p className={`mt-3 text-sm ${bodyTextClass}`}>
-                  Your assigned roles:{' '}
-                  {landingAssignedRoles.map((role) => (
-                    <span
-                      key={role}
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border mr-1.5 ${roleBadgeClass(role as Parameters<typeof roleBadgeClass>[0])}`}
-                    >
-                      {role}
-                    </span>
-                  ))}
-                </p>
-              )}
-            </div>
-            {/* History instead of redundant Dashboard/Profile links already in AppHeader */}
-            <div className="flex flex-wrap gap-2 sm:gap-3 shrink-0">
-              <a href="/history" className={buttonSecondaryClass}>
-                History
-              </a>
-            </div>
+            )}
           </div>
         )}
 

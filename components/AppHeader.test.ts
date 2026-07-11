@@ -19,19 +19,74 @@ function navRegionSlice(source: string) {
 }
 
 describe('AppHeader top navigation', () => {
-  it('renders Dashboard, Equipment, Profile, and Carriers nav in service mode', () => {
+  it('renders active-page-aware Dashboard, Equipment, History, Profile, and Carriers nav', () => {
     const nav = navRegionSlice(readHeaderSource())
 
-    expect(nav).toContain('showDashboard && navLink')
+    // Dashboard slot: History when active, else Dashboard (leading app-link position)
+    expect(nav).toContain('showDashboard &&')
+    expect(nav).toContain("activePage === 'dashboard'")
+    expect(nav).toContain("navLink('/history', 'History'")
     expect(nav).toContain("navLink('/dashboard', 'Dashboard'")
-    expect(nav).toContain('showEquipment && navLink')
+
+    // Equipment self-link swapped to History when on equipment
+    expect(nav).toContain('showEquipment &&')
+    expect(nav).toContain("activePage === 'equipment'")
     expect(nav).toContain("navLink('/equipment', 'Equipment'")
-    expect(nav).toContain('showProfile && navLink')
+
+    // Profile self-link swapped to History when on profile (only when onboarding complete)
+    expect(nav).toContain('showProfile &&')
+    expect(nav).toContain("activePage === 'profile' && showDashboard")
     expect(nav).toContain("navLink('/profile', 'Profile'")
+
     expect(nav).toContain('showCarriers && navLink')
     expect(nav).toContain("navLink('/carriers', 'Carriers'")
-    expect(nav).not.toContain("navLink('/history'")
     expect(nav).not.toContain("navLink('/portal-assist'")
+  })
+
+  it('omits redundant self-links and places History in the swapped active-page slot', () => {
+    const nav = navRegionSlice(readHeaderSource())
+
+    // On dashboard: History first in the Dashboard slot (not after Equipment)
+    expect(nav).toMatch(
+      /showDashboard &&\s*\(activePage === 'dashboard'\s*\?\s*navLink\('\/history', 'History', false\)\s*:\s*navLink\('\/dashboard', 'Dashboard', activePage === 'dashboard'\)\)/
+    )
+    // Dashboard branch appears before Equipment branch in source order
+    const dashSlot = nav.indexOf("activePage === 'dashboard'")
+    const equipSlot = nav.indexOf("activePage === 'equipment'")
+    expect(dashSlot).toBeGreaterThan(-1)
+    expect(equipSlot).toBeGreaterThan(dashSlot)
+
+    // On equipment: History instead of Equipment
+    expect(nav).toMatch(
+      /activePage === 'equipment'\s*\?\s*navLink\('\/history', 'History', false\)\s*:\s*navLink\('\/equipment', 'Equipment', activePage === 'equipment'\)/
+    )
+    // On profile: History instead of Profile when showDashboard (completed onboarding)
+    expect(nav).toMatch(
+      /activePage === 'profile' && showDashboard\s*\?\s*navLink\('\/history', 'History', false\)\s*:\s*navLink\('\/profile', 'Profile', activePage === 'profile'\)/
+    )
+  })
+
+  it('does not show History as always-on nav (only swap slots; carriers/unset keep no History)', () => {
+    const nav = navRegionSlice(readHeaderSource())
+    // History only appears inside activePage === 'dashboard' | 'equipment' | profile+showDashboard ternaries
+    expect(nav).toMatch(/activePage === 'dashboard'[\s\S]*navLink\('\/history', 'History'/)
+    expect(nav).toMatch(/activePage === 'equipment'[\s\S]*navLink\('\/history', 'History'/)
+    expect(nav).toMatch(/activePage === 'profile' && showDashboard[\s\S]*navLink\('\/history', 'History'/)
+    // No unconditional History link
+    expect(nav).not.toMatch(/show\w+ &&\s*navLink\('\/history'/)
+    // Carriers path is independent of History
+    expect(nav).toMatch(/showCarriers && navLink\('\/carriers', 'Carriers', activePage === 'carriers'\)/)
+  })
+
+  it('keeps Profile (not History) when onboarding incomplete on profile', () => {
+    const nav = navRegionSlice(readHeaderSource())
+    // Incomplete onboarding: showDashboard is false → else branch renders Profile
+    expect(nav).toMatch(
+      /activePage === 'profile' && showDashboard\s*\?\s*navLink\('\/history', 'History', false\)\s*:\s*navLink\('\/profile', 'Profile', activePage === 'profile'\)/
+    )
+    // showDashboard itself requires completed onboarding
+    const source = readHeaderSource()
+    expect(source).toMatch(/showDashboard = navReady && !incompleteOnboarding/)
   })
 
   it('hides Dashboard and equipment during incomplete onboarding', () => {
@@ -42,7 +97,7 @@ describe('AppHeader top navigation', () => {
     expect(source).toMatch(/showEquipment =[\s\S]*!incompleteOnboarding/)
   })
 
-  it('limits activePage to dashboard, equipment, and profile', () => {
+  it('limits activePage to dashboard, equipment, profile, and carriers (not history)', () => {
     const source = readHeaderSource()
 
     expect(source).toMatch(/activePage\?: 'dashboard' \| 'equipment' \| 'profile' \| 'carriers'/)

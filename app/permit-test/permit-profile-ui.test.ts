@@ -323,6 +323,20 @@ describe('Permit test page — routing envelope form string→number coercion', 
       expect(slice).not.toContain('loadWeightLbs: formData.loadWeightLbs,')
     }
   })
+
+  it('defaults gross width to legal 8.5 ft (not inflated 9.67 / 9\'8") when no load details', () => {
+    const source = readPermitPageSource()
+    // Scope to formData useState initializer only
+    const formStart = source.indexOf('const [formData, setFormData] = useState({')
+    expect(formStart).toBeGreaterThan(-1)
+    const formEnd = source.indexOf('})', formStart)
+    expect(formEnd).toBeGreaterThan(formStart)
+    const formInit = source.slice(formStart, formEnd + 2)
+
+    expect(formInit).toMatch(/width:\s*8\.5/)
+    expect(formInit).not.toMatch(/width:\s*9\.67/)
+    expect(formInit).toContain("loadWidthFt: ''")
+  })
 })
 
 describe('permit-profile-autofill lib — service mode', () => {

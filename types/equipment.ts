@@ -311,7 +311,8 @@ export interface RoutingEnvelope {
 /**
  * Compute routing envelope sent to OR-Tools / permit agent.
  * - Length = rig length + front overhang + rear overhang
- * - Width = max(trailer width, load width)
+ * - Width = max(trailer width, load width). Absent/zero load width does not inflate
+ *   width — envelope uses trailer/rig width only (typically legal 8.5 ft / 8'6").
  * - Height = deck height + load height
  * - Weight = rig empty + load weight
  */
@@ -320,6 +321,7 @@ export function computeRoutingEnvelope(input: RoutingEnvelopeInput): RoutingEnve
   const frontOh = Number(input.loadOverhangFrontFt) || 0
   const rearOh = Number(input.loadOverhangRearFt) || 0
   const trailerW = Number(input.trailerWidthFt) || 0
+  // Treat missing/blank/NaN load width as absent — do not invent a default load width.
   const loadW = Number(input.loadWidthFt) || 0
   const deckH = Number(input.deckHeightFt) || 0
   const loadH = Number(input.loadHeightFt) || 0
@@ -328,7 +330,15 @@ export function computeRoutingEnvelope(input: RoutingEnvelopeInput): RoutingEnve
 
   const lengthFt =
     rigLen > 0 || frontOh > 0 || rearOh > 0 ? rigLen + frontOh + rearOh : 0
-  const widthFt = trailerW > 0 || loadW > 0 ? Math.max(trailerW, loadW) : 0
+  // Absent load details (loadW === 0): trailer/rig width only. Wider load still wins via max.
+  const widthFt =
+    trailerW > 0 && loadW > 0
+      ? Math.max(trailerW, loadW)
+      : trailerW > 0
+        ? trailerW
+        : loadW > 0
+          ? loadW
+          : 0
   const heightFt = deckH > 0 || loadH > 0 ? deckH + loadH : 0
   const weightLbs = rigEmpty > 0 || loadWt > 0 ? rigEmpty + loadWt : 0
 

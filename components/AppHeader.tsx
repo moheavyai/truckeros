@@ -174,10 +174,21 @@ export default function AppHeader({
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm flex-wrap justify-end max-w-full">
-            {showDashboard && navLink('/dashboard', 'Dashboard', activePage === 'dashboard')}
-            {showEquipment && navLink('/equipment', 'Equipment', activePage === 'equipment')}
+            {/* Omit self-link on each page; swap Dashboard/Equipment/Profile → History in that slot.
+                History stays unhighlighted (activePage excludes 'history'). */}
+            {showDashboard &&
+              (activePage === 'dashboard'
+                ? navLink('/history', 'History', false)
+                : navLink('/dashboard', 'Dashboard', activePage === 'dashboard'))}
+            {showEquipment &&
+              (activePage === 'equipment'
+                ? navLink('/history', 'History', false)
+                : navLink('/equipment', 'Equipment', activePage === 'equipment'))}
             {showCarriers && navLink('/carriers', 'Carriers', activePage === 'carriers')}
-            {showProfile && navLink('/profile', 'Profile', activePage === 'profile')}
+            {showProfile &&
+              (activePage === 'profile' && showDashboard
+                ? navLink('/history', 'History', false)
+                : navLink('/profile', 'Profile', activePage === 'profile'))}
             <div className="w-px h-4 bg-gray-300 mx-0.5 sm:mx-1" />
             {user && (
               <span className="text-gray-600 hidden md:inline text-sm">{user.email}</span>

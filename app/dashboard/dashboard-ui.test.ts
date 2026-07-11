@@ -31,6 +31,30 @@ describe('Dashboard page — onboarding + role tools', () => {
     expect(source).toMatch(/tools\.length === 0/)
   })
 
+  it('welcome CTAs keep route analysis and omit Equipment/History/Profile (header owns those)', () => {
+    const source = readDashboardSource()
+    // Welcome tools strip header destinations before primary/secondary split
+    expect(source).toMatch(
+      /welcomeTools = tools\.filter\([\s\S]*t\.id !== 'equipment'[\s\S]*t\.id !== 'history'[\s\S]*t\.id !== 'profile'/
+    )
+    expect(source).toContain("t.id !== 'equipment'")
+    expect(source).toContain("t.id !== 'history'")
+    expect(source).toContain("t.id !== 'profile'")
+    // Prefer permit_analysis as primary; never fall back to tools[0] from full list
+    expect(source).toMatch(
+      /primaryTool =\s*welcomeTools\.find\(\(t\) => t\.id === 'permit_analysis'\)/
+    )
+    expect(source).not.toMatch(/primaryTool = tools\.find/)
+    expect(source).not.toMatch(/tools\[0\]/)
+    // Secondary is remaining welcome tools (e.g. carriers in service mode)
+    expect(source).toMatch(
+      /secondaryTools = welcomeTools\.filter\(\(t\) => t\.id !== primaryTool\?\.id\)/
+    )
+    // Full tools still used for stats / recent activity
+    expect(source).toMatch(/tools\.some\(\(t\) => t\.id === 'history' \|\| t\.id === 'permit_analysis'\)/)
+    expect(source).toContain('getVisibleDashboardTools')
+  })
+
   it('honors guided dismiss and admin setup eligibility for finish-setup banner', () => {
     const source = readDashboardSource()
     expect(source).toContain('readOnboardingGuidedDismissed')

@@ -92,22 +92,21 @@ describe('Equipment page — mobile contrast classes', () => {
     expect(source).toMatch(/buttonSecondaryClass =[\s\S]*?touch-manipulation/)
   })
 
-  it('page header links History (not redundant Dashboard) and New Analysis', () => {
+  it('page header links New Analysis only (History lives in AppHeader; no Dashboard)', () => {
     const source = readEquipmentSource()
     const headerStart = source.indexOf('Equipment &amp; Rig Builder')
     expect(headerStart).toBeGreaterThan(-1)
     const headerSlice = source.slice(headerStart, headerStart + 700)
-    expect(headerSlice).toContain('href="/history"')
-    expect(headerSlice).toContain('History')
     expect(headerSlice).toContain('href="/permit-test"')
     expect(headerSlice).toContain('New Analysis')
+    // AppHeader owns History when activePage=equipment — no dual page-level History CTA
+    expect(headerSlice).not.toContain('href="/history"')
+    expect(headerSlice).not.toContain('History')
     expect(headerSlice).not.toContain('href="/dashboard"')
     expect(headerSlice).not.toContain('← Dashboard')
-    // Token-only className (padding is inside the button tokens)
-    expect(headerSlice).toMatch(/className=\{buttonSecondaryClass\}/)
     expect(headerSlice).toMatch(/className=\{buttonPrimaryClass\}/)
-    expect(source).toMatch(/const buttonSecondaryClass =[\s\S]*?min-h-\[44px\]/)
     expect(source).toMatch(/const buttonPrimaryClass =[\s\S]*?min-h-\[44px\]/)
+    expect(source).toMatch(/const buttonSecondaryClass =[\s\S]*?min-h-\[44px\]/)
   })
 
   it('wires form controls and cards to shared contrast classes', () => {
@@ -136,7 +135,7 @@ describe('Equipment page — mobile contrast classes', () => {
     expect(source).toContain('className={`mt-3 pt-2 border-t ${dividerBorderClass}`}')
     // Empty preview dashed chrome is mobile-stronger
     expect(source).toMatch(/border-dashed border-gray-500 sm:border-gray-300/)
-    // Success CTA includes 44px touch target (Load into Permit Agent, Save, etc.)
+    // Success CTA includes 44px touch target (New Permits, Save, etc.)
     expect(source).toMatch(/buttonSuccessClass =[\s\S]*?min-h-\[44px\]/)
     expect(source).toMatch(/buttonSuccessClass =[\s\S]*?touch-manipulation/)
 
