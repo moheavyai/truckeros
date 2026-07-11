@@ -46,9 +46,10 @@ describe('AppHeader top navigation', () => {
   it('omits redundant self-links and places History in the swapped active-page slot', () => {
     const nav = navRegionSlice(readHeaderSource())
 
-    // On dashboard: History first in the Dashboard slot (not after Equipment)
+    // On dashboard: History first in the Dashboard slot (not after Equipment).
+    // Else branch uses isActive=false — activePage is narrowed away from 'dashboard'/'equipment'.
     expect(nav).toMatch(
-      /showDashboard &&\s*\(activePage === 'dashboard'\s*\?\s*navLink\('\/history', 'History', false\)\s*:\s*navLink\('\/dashboard', 'Dashboard', activePage === 'dashboard'\)\)/
+      /showDashboard &&\s*\(activePage === 'dashboard'\s*\?\s*navLink\('\/history', 'History', false\)\s*:\s*navLink\('\/dashboard', 'Dashboard', false\)\)/
     )
     // Dashboard branch appears before Equipment branch in source order
     const dashSlot = nav.indexOf("activePage === 'dashboard'")
@@ -58,7 +59,7 @@ describe('AppHeader top navigation', () => {
 
     // On equipment: History instead of Equipment
     expect(nav).toMatch(
-      /activePage === 'equipment'\s*\?\s*navLink\('\/history', 'History', false\)\s*:\s*navLink\('\/equipment', 'Equipment', activePage === 'equipment'\)/
+      /activePage === 'equipment'\s*\?\s*navLink\('\/history', 'History', false\)\s*:\s*navLink\('\/equipment', 'Equipment', false\)/
     )
     // On profile: History instead of Profile when showDashboard (completed onboarding)
     expect(nav).toMatch(

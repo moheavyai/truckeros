@@ -179,11 +179,11 @@ export default function AppHeader({
             {showDashboard &&
               (activePage === 'dashboard'
                 ? navLink('/history', 'History', false)
-                : navLink('/dashboard', 'Dashboard', activePage === 'dashboard'))}
+                : navLink('/dashboard', 'Dashboard', false))}
             {showEquipment &&
               (activePage === 'equipment'
                 ? navLink('/history', 'History', false)
-                : navLink('/equipment', 'Equipment', activePage === 'equipment'))}
+                : navLink('/equipment', 'Equipment', false))}
             {showCarriers && navLink('/carriers', 'Carriers', activePage === 'carriers')}
             {showProfile &&
               (activePage === 'profile' && showDashboard
