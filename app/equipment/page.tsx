@@ -41,14 +41,17 @@ const inputMtClass = `${inputClass} mt-0.5`
 const selectClass = `${fieldControlClass} rounded-xl p-3 text-sm w-full`
 const textareaClass = `${fieldControlClass} rounded-xl p-2 text-sm`
 const buttonSecondaryClass =
-  'border border-gray-500 sm:border-gray-300 text-gray-900 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50'
-const buttonPrimaryClass = 'bg-black text-white rounded-lg text-sm hover:bg-gray-900'
+  'inline-flex items-center justify-center min-h-[44px] px-4 py-2 border border-gray-500 sm:border-gray-300 bg-white text-gray-900 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 touch-manipulation'
+const buttonPrimaryClass =
+  'inline-flex items-center justify-center min-h-[44px] px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-900 touch-manipulation'
 const buttonSuccessClass =
-  'bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-medium disabled:bg-gray-500 disabled:text-white'
+  'inline-flex items-center justify-center min-h-[44px] px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-medium disabled:bg-gray-500 disabled:text-white touch-manipulation'
 const fieldLabelTinyClass = 'text-[11px] text-gray-600 sm:text-gray-500'
 const fieldLabelSectionClass = 'block text-xs font-semibold text-gray-600 sm:text-gray-500 mb-1'
 const fieldLabelMediumClass = 'text-xs font-medium text-gray-600 sm:text-gray-500'
-const fieldHintTinyClass = 'text-[10px] text-gray-600 sm:text-gray-500'
+/** Hints softer than labels so instructional chrome does not dominate */
+const fieldHintTinyClass = 'text-[10px] text-gray-500'
+/** Body/meta data slightly stronger than pure field hints */
 const mutedTextClass = 'text-gray-600 sm:text-gray-500'
 const bodyTextClass = 'text-gray-700 sm:text-gray-600'
 const dividerBorderClass = 'border-gray-300 sm:border-gray-200'
@@ -894,7 +897,7 @@ export default function EquipmentPage() {
         onClick={() => setDefaultRig(rig.id)}
         disabled={!canSetDefault || busy}
         title={canSetDefault ? 'Use this rig automatically in Permit Agent' : 'Re-save from Rig Builder to enable default'}
-        className={`px-4 py-1.5 ${buttonSecondaryClass} ${className}`}
+        className={`${buttonSecondaryClass} ${className}`}
       >
         {busy ? 'Saving…' : 'Make Default Rig'}
       </button>
@@ -919,7 +922,7 @@ export default function EquipmentPage() {
     <div className="min-h-screen bg-gray-50">
       <AppHeader user={user} activePage="equipment" ownOrganizationId={ownOrganizationId} />
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 min-w-0">
         <ActiveCarrierBanner ownOrganizationId={ownOrganizationId} />
         {isServiceModeReadOnly && (
           <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -939,17 +942,17 @@ export default function EquipmentPage() {
             Could not load carrier rigs: {carrierPrimaryOwnerError}. Tractor/trailer profiles may still load by organization.
           </p>
         )}
-        {/* Header */}
-        <div className="flex items-start justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Equipment &amp; Rig Builder</h1>
+        {/* Header — History (not Dashboard) to avoid duplicating AppHeader nav */}
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900">Equipment &amp; Rig Builder</h1>
             <p className={`${bodyTextClass} mt-1 text-[15px]`}>
-              Build and save accurate tractor + trailer profiles. Select combinations for precise OSOW calculations and graphical previews.
+              Build and save tractor + trailer profiles, then combine them into rigs for accurate OSOW dimensions.
             </p>
           </div>
-          <div className="flex gap-3">
-            <a href="/dashboard" className={`px-4 py-2 ${buttonSecondaryClass}`}>← Dashboard</a>
-            <a href="/permit-test" className={`px-4 py-2 ${buttonPrimaryClass}`}>New Analysis →</a>
+          <div className="flex flex-wrap gap-2 sm:gap-3 shrink-0">
+            <a href="/history" className={buttonSecondaryClass}>History</a>
+            <a href="/permit-test" className={buttonPrimaryClass}>New Analysis →</a>
           </div>
         </div>
 
@@ -1025,7 +1028,7 @@ export default function EquipmentPage() {
                         })}
                     </select>
                     {!isServiceModeReadOnly && (
-                      <button onClick={startNewTrailer} className={`px-4 py-2 ${buttonSuccessClass} rounded-xl`}>+ New Trailer</button>
+                      <button onClick={startNewTrailer} className={`${buttonSuccessClass} rounded-xl`}>+ New Trailer</button>
                     )}
                   </div>
                 </div>
@@ -1100,7 +1103,7 @@ export default function EquipmentPage() {
                   );
                 }
                 return (
-                  <div className={`border border-dashed border-gray-400 sm:border-gray-300 rounded-2xl p-8 text-center ${mutedTextClass} bg-white`}>
+                  <div className={`border border-dashed border-gray-500 sm:border-gray-300 rounded-2xl p-8 text-center ${mutedTextClass} bg-white`}>
                     Select a tractor and/or one or more trailers above to see the live graphical preview and auto-calculated dimensions.
                   </div>
                 );
@@ -1126,11 +1129,11 @@ export default function EquipmentPage() {
                 </div>
                 <div className="flex flex-col gap-2 items-stretch sm:items-end">
                   <div className="flex gap-2">
-                    <button onClick={clearBuilder} className={`px-5 py-3 ${buttonSecondaryClass} rounded-xl`}>Clear</button>
+                    <button onClick={clearBuilder} className={`${buttonSecondaryClass} rounded-xl`}>Clear</button>
                     <button
                       onClick={saveCurrentRig}
                       disabled={!selectedTractorId || selectedTrailerIds.length === 0}
-                      className={`px-8 py-3 ${buttonSuccessClass} font-semibold rounded-xl`}
+                      className={`${buttonSuccessClass} font-semibold rounded-xl`}
                     >
                       {loadedRigId && rigs.find((r) => r.id === loadedRigId)?.source === 'rig_configurations'
                         ? 'Update Rig Configuration'
@@ -1160,7 +1163,7 @@ export default function EquipmentPage() {
             <div className="flex justify-between items-center mb-3">
               <div className="font-semibold">My Tractors ({tractors.length})</div>
               {!isServiceModeReadOnly && (
-                <button onClick={startNewTractor} className={`px-4 py-2 ${buttonPrimaryClass}`}>+ New Tractor Profile</button>
+                <button onClick={startNewTractor} className={buttonPrimaryClass}>+ New Tractor Profile</button>
               )}
             </div>
 
@@ -1257,8 +1260,8 @@ export default function EquipmentPage() {
                 </div>
 
                 <div className="flex gap-2 mt-4">
-                  <button onClick={() => setEditingTractor(null)} className={`px-4 py-2 ${buttonSecondaryClass} rounded`}>Cancel</button>
-                  <button onClick={saveTractor} className={`px-5 py-2 ${buttonSuccessClass} rounded`}>Save Tractor</button>
+                  <button onClick={() => setEditingTractor(null)} className={`${buttonSecondaryClass} rounded`}>Cancel</button>
+                  <button onClick={saveTractor} className={`${buttonSuccessClass} rounded`}>Save Tractor</button>
                 </div>
               </div>
             )}
@@ -1309,7 +1312,7 @@ export default function EquipmentPage() {
             <div className="flex justify-between items-center mb-3">
               <div className="font-semibold">My Trailers ({trailers.length})</div>
               {!isServiceModeReadOnly && (
-                <button onClick={startNewTrailer} className={`px-4 py-2 ${buttonPrimaryClass}`}>+ New Trailer Profile</button>
+                <button onClick={startNewTrailer} className={buttonPrimaryClass}>+ New Trailer Profile</button>
               )}
             </div>
 
@@ -1413,8 +1416,8 @@ export default function EquipmentPage() {
                 </div>
 
                 <div className="flex gap-2 mt-4">
-                  <button onClick={() => setEditingTrailer(null)} className={`px-4 py-2 ${buttonSecondaryClass} rounded`}>Cancel</button>
-                  <button onClick={saveTrailer} className={`px-5 py-2 ${buttonSuccessClass} rounded`}>Save Trailer</button>
+                  <button onClick={() => setEditingTrailer(null)} className={`${buttonSecondaryClass} rounded`}>Cancel</button>
+                  <button onClick={saveTrailer} className={`${buttonSuccessClass} rounded`}>Save Trailer</button>
                 </div>
               </div>
             )}
@@ -1473,7 +1476,7 @@ export default function EquipmentPage() {
             <div className="flex justify-between mb-3 items-center">
               <div className="font-semibold">Saved Rig Configurations ({rigs.length}) — ready to use in analyses</div>
               {!isServiceModeReadOnly && (
-                <button onClick={() => setActiveTab('builder')} className={`text-sm px-3 py-1.5 ${buttonSecondaryClass}`}>+ Build New Rig</button>
+                <button onClick={() => setActiveTab('builder')} className={buttonSecondaryClass}>+ Build New Rig</button>
               )}
             </div>
 
@@ -1547,14 +1550,14 @@ export default function EquipmentPage() {
                     <div className="mt-4 flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => loadRigIntoPermitAgent(rig)}
-                        className={`text-sm px-4 py-1.5 ${buttonSuccessClass} rounded-lg`}
+                        className={`${buttonSuccessClass} rounded-lg`}
                       >
                         Load into Permit Agent
                       </button>
                       {!isServiceModeReadOnly && (
                         <button
                           onClick={() => loadRigIntoBuilder(rig)}
-                          className={`text-sm px-4 py-1.5 ${buttonSecondaryClass}`}
+                          className={buttonSecondaryClass}
                         >
                           Edit in Builder
                         </button>

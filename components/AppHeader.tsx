@@ -150,7 +150,7 @@ export default function AppHeader({
   const navLink = (href: string, label: string, isActive: boolean) => (
     <a
       href={href}
-      className={`font-medium transition-colors ${isActive ? 'text-black' : 'text-gray-700 hover:text-black'}`}
+      className={`inline-flex items-center min-h-[40px] px-1.5 font-medium transition-colors touch-manipulation ${isActive ? 'text-black' : 'text-gray-700 hover:text-black'}`}
     >
       {label}
     </a>
@@ -160,28 +160,31 @@ export default function AppHeader({
     <>
       <DevAccountSwitcher currentEmail={user?.email} />
       <header className="border-b bg-white sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <a href={incompleteOnboarding ? ONBOARDING_PATH : '/'} className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-black rounded flex items-center justify-center">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
+            <a
+              href={incompleteOnboarding ? ONBOARDING_PATH : '/'}
+              className="flex items-center gap-2 sm:gap-2.5 min-w-0 max-w-full"
+            >
+              <div className="w-8 h-8 bg-black rounded flex items-center justify-center shrink-0">
                 <span className="text-white text-lg font-bold tracking-tighter">T</span>
               </div>
-              <span className="text-xl font-semibold tracking-tight">TruckerOS</span>
+              <span className="text-lg sm:text-xl font-semibold tracking-tight truncate min-w-0">TruckerOS</span>
             </a>
           </div>
 
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm flex-wrap justify-end max-w-full">
             {showDashboard && navLink('/dashboard', 'Dashboard', activePage === 'dashboard')}
             {showEquipment && navLink('/equipment', 'Equipment', activePage === 'equipment')}
             {showCarriers && navLink('/carriers', 'Carriers', activePage === 'carriers')}
             {showProfile && navLink('/profile', 'Profile', activePage === 'profile')}
-            <div className="w-px h-4 bg-gray-300 mx-1" />
+            <div className="w-px h-4 bg-gray-300 mx-0.5 sm:mx-1" />
             {user && (
               <span className="text-gray-600 hidden md:inline text-sm">{user.email}</span>
             )}
             <button
               onClick={handleLogout}
-              className="px-4 py-1.5 text-sm border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors"
+              className="inline-flex items-center justify-center min-h-[40px] px-3 sm:px-4 py-2 text-xs sm:text-sm border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors shrink-0 touch-manipulation"
             >
               Logout
             </button>

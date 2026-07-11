@@ -31,6 +31,13 @@ describe('History page UI cleanup', () => {
     expect(source).not.toMatch(/<AppHeader[^>]*activePage=/)
   })
 
+  it('uses responsive main shell padding consistent with Equipment/Profile', () => {
+    const source = readHistorySource()
+    expect(source).toMatch(
+      /max-w-7xl mx-auto px-4 py-6 sm:px-6 sm:py-10 min-w-0/
+    )
+  })
+
   it('shows only View in table row actions (no row-level Portal Assist)', () => {
     const rowActions = tableRowActionsSlice(readHistorySource())
 

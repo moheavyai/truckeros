@@ -113,7 +113,7 @@ describe('Permit test page — member profile autofill UI', () => {
     const section = carrierDriverSectionSlice(source)
 
     expect(section).toContain('Driver for this load')
-    expect(section).toContain('carrier details are applied automatically')
+    expect(section).toContain('Carrier details from their profile fill in for permit forms')
     expect(section).toContain('Select Driver')
     expect(section).toContain('Change Driver')
     expect(section).toContain('showDriverPicker')
@@ -152,7 +152,7 @@ describe('Permit test page — member profile autofill UI', () => {
 
     const driverIdx = source.indexOf('permit-select-driver')
     const rigIdx = source.indexOf('Change Rig')
-    const loadIdx = source.indexOf('Load Details (Cargo, Axle Weights, Overhangs)')
+    const loadIdx = source.indexOf('3. Load details')
 
     expect(driverIdx).toBeGreaterThan(-1)
     expect(rigIdx).toBeGreaterThan(driverIdx)

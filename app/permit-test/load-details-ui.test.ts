@@ -22,7 +22,7 @@ function readPermitPageSource() {
 }
 
 function loadDetailsSectionSlice(source: string) {
-  const start = source.indexOf('Load Details (Cargo, Axle Weights, Overhangs)')
+  const start = source.indexOf('3. Load details')
   const end = source.indexOf('Load Dimensions (specific cargo)', start)
   expect(start).toBeGreaterThan(-1)
   expect(end).toBeGreaterThan(start)

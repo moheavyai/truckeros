@@ -885,7 +885,10 @@ describe('Profile page UI', () => {
     expect(source).toMatch(/border-gray-500 sm:border-gray-300/)
     expect(source).toMatch(/text-gray-900/)
     expect(source).toMatch(/placeholder:text-gray-500/)
-    expect(source).toMatch(/text-gray-600 sm:text-gray-500/)
+    // Labels keep stronger mobile contrast; hints softer; muted body meta mid-strength
+    expect(source).toMatch(/fieldLabelClass = 'block text-xs font-medium text-gray-600 sm:text-gray-500 mb-1'/)
+    expect(source).toMatch(/fieldHintClass = 'text-sm text-gray-500'/)
+    expect(source).toMatch(/mutedTextClass = 'text-gray-600 sm:text-gray-500'/)
     expect(source).toMatch(/text-gray-700 sm:text-gray-600/)
     expect(source).toMatch(/border-gray-300 sm:border-gray-200/)
     expect(source).toMatch(/border-gray-200 sm:border-gray-100/)
@@ -893,6 +896,35 @@ describe('Profile page UI', () => {
     expect(source).toMatch(/bg-emerald-700 hover:bg-emerald-800/)
     expect(source).toMatch(/border-emerald-500 sm:border-emerald-300/)
     expect(source).toMatch(/accent-emerald-700/)
+    // Secondary CTA token includes fill + 44px touch target (no stacked padding on History)
+    expect(source).toMatch(/buttonSecondaryClass =[\s\S]*?bg-white/)
+    expect(source).toMatch(/buttonSecondaryClass =[\s\S]*?min-h-\[44px\]/)
+    expect(source).toMatch(/buttonSecondaryClass =[\s\S]*?touch-manipulation/)
+  })
+
+  it('page header links History (not redundant Dashboard/Profile chrome)', () => {
+    const source = readProfileSource()
+    const headerStart = source.indexOf('>Member Profile</h1>')
+    expect(headerStart).toBeGreaterThan(-1)
+    const headerSlice = source.slice(headerStart, headerStart + 1200)
+    expect(headerSlice).toContain('href="/history"')
+    expect(headerSlice).toContain('History')
+    expect(headerSlice).not.toContain('href="/dashboard"')
+    expect(headerSlice).not.toContain('← Dashboard')
+    // Uses token only — no conflicting px-4 py-2 override stack
+    expect(headerSlice).toMatch(/className=\{buttonSecondaryClass\}/)
+    expect(headerSlice).not.toMatch(/className=\{`px-4 py-2 \$\{buttonSecondaryClass\}`\}/)
+  })
+
+  it('does not stack padding on secondary button token call sites', () => {
+    const source = readProfileSource()
+    // Edit my profile / modal Cancel / History — secondary owns px-4 py-2
+    expect(source).not.toMatch(/\$\{buttonSecondaryClass\}\s*px-4 py-2/)
+    expect(source).not.toMatch(/buttonSecondaryClass\}\s*`\s*px-4 py-2/)
+    expect(source).not.toMatch(/className=\{`\$\{buttonSecondaryClass\} px-4 py-2/)
+    // Positive: non-padding modifiers only where needed
+    expect(source).toContain('className={`${buttonSecondaryClass} font-semibold whitespace-nowrap`}')
+    expect(source).toMatch(/className=\{buttonSecondaryClass\}/)
   })
 
   it('wires form controls and section chrome to shared contrast classes', () => {

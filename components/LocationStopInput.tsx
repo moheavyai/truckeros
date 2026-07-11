@@ -90,7 +90,7 @@ export default function LocationStopInput({
       )}
 
       {geocoded && (
-        <div className="text-[10px] text-gray-600 sm:text-gray-500 mt-1 font-mono">
+        <div className="text-[10px] text-gray-500 mt-1 font-mono">
           {lat.toFixed(5)}, {lon.toFixed(5)}
         </div>
       )}

@@ -75,7 +75,10 @@ describe('Equipment page — mobile contrast classes', () => {
     expect(source).toMatch(/border-gray-500 sm:border-gray-300/)
     expect(source).toMatch(/text-gray-900/)
     expect(source).toMatch(/placeholder:text-gray-500/)
-    expect(source).toMatch(/text-gray-600 sm:text-gray-500/)
+    // Labels keep stronger mobile contrast; hints softer; muted body meta mid-strength
+    expect(source).toMatch(/fieldLabelTinyClass = 'text-\[11px\] text-gray-600 sm:text-gray-500'/)
+    expect(source).toMatch(/fieldHintTinyClass = 'text-\[10px\] text-gray-500'/)
+    expect(source).toMatch(/mutedTextClass = 'text-gray-600 sm:text-gray-500'/)
     expect(source).toMatch(/text-gray-700 sm:text-gray-600/)
     expect(source).toMatch(/border-gray-300 sm:border-gray-200/)
     expect(source).toMatch(/border-emerald-300 sm:border-emerald-200/)
@@ -83,6 +86,28 @@ describe('Equipment page — mobile contrast classes', () => {
     expect(source).toContain('`${fieldControlClass}')
     expect(source).toMatch(/bg-emerald-700 hover:bg-emerald-800/)
     expect(source).toMatch(/disabled:bg-gray-500 disabled:text-white/)
+    // Secondary buttons include white fill + 44px touch target
+    expect(source).toMatch(/buttonSecondaryClass =[\s\S]*?bg-white/)
+    expect(source).toMatch(/buttonSecondaryClass =[\s\S]*?min-h-\[44px\]/)
+    expect(source).toMatch(/buttonSecondaryClass =[\s\S]*?touch-manipulation/)
+  })
+
+  it('page header links History (not redundant Dashboard) and New Analysis', () => {
+    const source = readEquipmentSource()
+    const headerStart = source.indexOf('Equipment &amp; Rig Builder')
+    expect(headerStart).toBeGreaterThan(-1)
+    const headerSlice = source.slice(headerStart, headerStart + 700)
+    expect(headerSlice).toContain('href="/history"')
+    expect(headerSlice).toContain('History')
+    expect(headerSlice).toContain('href="/permit-test"')
+    expect(headerSlice).toContain('New Analysis')
+    expect(headerSlice).not.toContain('href="/dashboard"')
+    expect(headerSlice).not.toContain('← Dashboard')
+    // Token-only className (padding is inside the button tokens)
+    expect(headerSlice).toMatch(/className=\{buttonSecondaryClass\}/)
+    expect(headerSlice).toMatch(/className=\{buttonPrimaryClass\}/)
+    expect(source).toMatch(/const buttonSecondaryClass =[\s\S]*?min-h-\[44px\]/)
+    expect(source).toMatch(/const buttonPrimaryClass =[\s\S]*?min-h-\[44px\]/)
   })
 
   it('wires form controls and cards to shared contrast classes', () => {
@@ -102,11 +127,18 @@ describe('Equipment page — mobile contrast classes', () => {
     expect(source).toContain('className={`mt-2 w-full ${textareaClass} h-16`}')
     expect(source).toContain('className={`mt-1 w-full ${fieldControlClass} p-3 rounded-xl text-sm`}')
     expect(source).toContain('className={`flex-1 ${selectClass}`}')
-    expect(source).toContain('className={`px-4 py-1.5 ${buttonSecondaryClass}')
-    expect(source).toContain('className={`px-4 py-2 ${buttonPrimaryClass}`}')
-    expect(source).toContain('className={`px-5 py-2 ${buttonSuccessClass} rounded`}')
+    // Buttons use shared tokens (padding lives in the token — no stacked px/py)
+    expect(source).toContain('className={buttonPrimaryClass}')
+    expect(source).toContain('className={buttonSecondaryClass}')
+    expect(source).toContain('className={`${buttonSuccessClass} rounded`}')
+    expect(source).toContain('className={`${buttonSecondaryClass} rounded`}')
     expect(source).toContain('className={`flex gap-1 border-b ${dividerBorderClass} mb-6`}')
     expect(source).toContain('className={`mt-3 pt-2 border-t ${dividerBorderClass}`}')
+    // Empty preview dashed chrome is mobile-stronger
+    expect(source).toMatch(/border-dashed border-gray-500 sm:border-gray-300/)
+    // Success CTA includes 44px touch target (Load into Permit Agent, Save, etc.)
+    expect(source).toMatch(/buttonSuccessClass =[\s\S]*?min-h-\[44px\]/)
+    expect(source).toMatch(/buttonSuccessClass =[\s\S]*?touch-manipulation/)
 
     // No bare faint border-only compact inputs left in editors
     expect(source).not.toMatch(/className="border p-1\.5 rounded w-full/)
@@ -127,6 +159,16 @@ describe('Equipment page — mobile contrast classes', () => {
     // Inverted sm pairs (faint first) should not appear for field chrome
     expect(source).not.toMatch(/border-gray-300 sm:border-gray-500/)
     expect(source).not.toMatch(/text-gray-500 sm:text-gray-600/)
+    // No dead padding stacks on secondary/primary/success tokens (padding lives in tokens)
+    expect(source).not.toMatch(/className=\{`px-4 py-1\.5 \$\{buttonSecondaryClass/)
+    expect(source).not.toMatch(/className=\{`text-sm px-4 py-1\.5 \$\{buttonSuccessClass/)
+    expect(source).not.toMatch(/className=\{`px-5 py-3 \$\{buttonSecondaryClass/)
+    expect(source).not.toMatch(/className=\{`px-8 py-3 \$\{buttonSuccessClass/)
+    expect(source).not.toMatch(/className=\{`text-sm px-3 py-1\.5 \$\{buttonSecondaryClass/)
+    // Clear / Save Rig / Build New Rig use tokens without padding overrides
+    expect(source).toContain('className={`${buttonSecondaryClass} rounded-xl`}')
+    expect(source).toContain('className={`${buttonSuccessClass} font-semibold rounded-xl`}')
+    expect(source).toMatch(/setActiveTab\('builder'\)[\s\S]{0,80}className=\{buttonSecondaryClass\}/)
   })
 
   it('keeps fieldControlClass token parity with LicensePlateFields', () => {

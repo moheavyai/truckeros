@@ -153,7 +153,7 @@ const fieldControlClass =
 const inputClass =
   `${fieldControlClass} px-3 py-2 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-black/10`
 const buttonSecondaryClass =
-  'rounded-lg border border-gray-500 sm:border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-50 transition disabled:opacity-50'
+  'inline-flex items-center justify-center min-h-[44px] rounded-lg border border-gray-500 sm:border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 transition disabled:opacity-50 touch-manipulation'
 const buttonPrimaryClass =
   'bg-black hover:bg-gray-900 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.985]'
 const buttonPrimaryCompactClass =
@@ -163,7 +163,9 @@ const buttonSuccessClass =
 const buttonSuccessOutlineClass =
   'text-sm px-3 py-1.5 border border-emerald-500 sm:border-emerald-300 hover:bg-emerald-50 rounded-lg text-emerald-900 sm:text-emerald-800 transition disabled:opacity-50'
 const fieldLabelClass = 'block text-xs font-medium text-gray-600 sm:text-gray-500 mb-1'
-const fieldHintClass = 'text-sm text-gray-600 sm:text-gray-500'
+/** Hints softer than labels so instructional chrome does not dominate */
+const fieldHintClass = 'text-sm text-gray-500'
+/** Body/meta data slightly stronger than pure field hints */
 const mutedTextClass = 'text-gray-600 sm:text-gray-500'
 const bodyTextClass = 'text-gray-700 sm:text-gray-600'
 const dividerBorderClass = 'border-gray-300 sm:border-gray-200'
@@ -2224,26 +2226,34 @@ export default function ProfilePage() {
         ownOrganizationId={effectiveOwnProfile?.organization_id ?? ownProfile?.organization_id}
       />
 
-      <main className="max-w-4xl mx-auto px-6 py-10">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10 min-w-0">
         {!showOwnerBootstrapSetup && (
-          <div className="mb-8">
-            <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Member Profile</h1>
-            <p className={`${bodyTextClass} mt-1.5 text-[15px]`}>
-              Store carrier and driver details for permit applications and team coordination.
-            </p>
-            {showAssignedRoleBadges && (
-              <p className={`mt-3 text-sm ${bodyTextClass}`}>
-                Your assigned roles:{' '}
-                {landingAssignedRoles.map((role) => (
-                  <span
-                    key={role}
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border mr-1.5 ${roleBadgeClass(role as Parameters<typeof roleBadgeClass>[0])}`}
-                  >
-                    {role}
-                  </span>
-                ))}
+          <div className="mb-8 flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900">Member Profile</h1>
+              <p className={`${bodyTextClass} mt-1.5 text-[15px]`}>
+                Keep carrier and driver details ready for permits and team coordination.
               </p>
-            )}
+              {showAssignedRoleBadges && (
+                <p className={`mt-3 text-sm ${bodyTextClass}`}>
+                  Your assigned roles:{' '}
+                  {landingAssignedRoles.map((role) => (
+                    <span
+                      key={role}
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border mr-1.5 ${roleBadgeClass(role as Parameters<typeof roleBadgeClass>[0])}`}
+                    >
+                      {role}
+                    </span>
+                  ))}
+                </p>
+              )}
+            </div>
+            {/* History instead of redundant Dashboard/Profile links already in AppHeader */}
+            <div className="flex flex-wrap gap-2 sm:gap-3 shrink-0">
+              <a href="/history" className={buttonSecondaryClass}>
+                History
+              </a>
+            </div>
           </div>
         )}
 
@@ -2832,7 +2842,7 @@ export default function ProfilePage() {
                     type="button"
                     onClick={handleEditMyProfile}
                     disabled={isLoadingMember || isSaving}
-                    className={`${buttonSecondaryClass} px-4 py-2 font-semibold whitespace-nowrap`}
+                    className={`${buttonSecondaryClass} font-semibold whitespace-nowrap`}
                   >
                     Edit my profile
                   </button>
@@ -3258,7 +3268,7 @@ export default function ProfilePage() {
                     setDeleteCandidate(null)
                     setDeleteCandidateIsRequest(false)
                   }}
-                  className={`${buttonSecondaryClass} px-4 py-2`}
+                  className={buttonSecondaryClass}
                 >
                   Cancel
                 </button>

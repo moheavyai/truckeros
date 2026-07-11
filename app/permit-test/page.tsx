@@ -121,8 +121,10 @@ const inputCompactClass = `${fieldControlClass} rounded w-full text-sm p-1.5`
 const selectClass = `${fieldControlClass} p-2 rounded-lg text-sm w-full`
 const textareaClass = `${fieldControlClass} rounded w-full text-sm p-3 min-h-[60px] resize-y`
 const readoutClass = `${fieldControlClass} p-2 rounded w-full text-sm font-mono`
-const fieldHintClass = 'text-xs text-gray-600 sm:text-gray-500'
-const fieldHintTinyClass = 'text-[10px] text-gray-600 sm:text-gray-500'
+/** Hints/instructions: softer than labels so chrome does not compete with content */
+const fieldHintClass = 'text-xs text-gray-500'
+const fieldHintTinyClass = 'text-[10px] text-gray-500'
+/** Field labels stay slightly stronger than hints for scannability */
 const fieldLabelTinyClass = 'block text-[10px] text-gray-600 sm:text-gray-500'
 
 export default function PermitTestPage() {
@@ -2312,31 +2314,32 @@ export default function PermitTestPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-8">
-      {/* Professional Header */}
+    /* Sticky header must not live under overflow-x-clip (breaks position:sticky). */
+    <div className="w-full min-w-0">
+      {/* Professional Header — outside clipped content shell */}
       <header className="border-b bg-white sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <a href="/" className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-black rounded flex items-center justify-center">
+        <div className="max-w-3xl mx-auto px-4 sm:px-8 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <a href="/" className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+              <div className="w-8 h-8 bg-black rounded flex items-center justify-center shrink-0">
                 <span className="text-white text-lg font-bold tracking-tighter">T</span>
               </div>
-              <span className="text-xl font-semibold tracking-tight">TruckerOS</span>
+              <span className="text-lg sm:text-xl font-semibold tracking-tight truncate">TruckerOS</span>
             </a>
           </div>
 
-          <div className="flex items-center gap-4 text-sm">
-            <a href="/dashboard" className="text-gray-700 hover:text-black font-medium">Dashboard</a>
-            <a href="/equipment" className="text-gray-700 hover:text-black font-medium">Equipment</a>
-            <a href="/history" className="text-gray-700 hover:text-black font-medium">History</a>
+          <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm flex-wrap justify-end max-w-full">
+            <a href="/dashboard" className="inline-flex items-center min-h-[40px] px-1.5 font-medium text-gray-700 hover:text-black touch-manipulation">Dashboard</a>
+            <a href="/equipment" className="inline-flex items-center min-h-[40px] px-1.5 font-medium text-gray-700 hover:text-black touch-manipulation">Equipment</a>
+            <a href="/history" className="inline-flex items-center min-h-[40px] px-1.5 font-medium text-gray-700 hover:text-black touch-manipulation">History</a>
             {workspaceMode === 'service' && (
-              <a href="/carriers" className="text-gray-700 hover:text-black font-medium">Carriers</a>
+              <a href="/carriers" className="inline-flex items-center min-h-[40px] px-1.5 font-medium text-gray-700 hover:text-black touch-manipulation">Carriers</a>
             )}
-            <div className="w-px h-4 bg-gray-300 mx-1" />
+            <div className="w-px h-4 bg-gray-300 mx-0.5 sm:mx-1" />
             {user && <span className="text-gray-600 hidden md:inline text-sm">{user.email}</span>}
             <button 
               onClick={handleLogout} 
-              className="px-4 py-1.5 text-sm border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors"
+              className="inline-flex items-center justify-center min-h-[40px] px-3 sm:px-4 py-2 text-xs sm:text-sm border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors shrink-0 touch-manipulation"
             >
               Logout
             </button>
@@ -2344,13 +2347,17 @@ export default function PermitTestPage() {
         </div>
       </header>
 
+      <div className="max-w-3xl mx-auto px-4 py-6 sm:px-8 sm:pb-8 w-full min-w-0">
       <CarrierContextBar ownOrganizationId={ownOrganizationId} />
       <ActiveCarrierBanner ownOrganizationId={ownOrganizationId} />
 
       <div className="mb-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">New Route Analysis</h1>
-          <p className="text-sm text-gray-600 sm:text-gray-500">Enter origin and destination — routing and permits calculate automatically</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">New Route Analysis</h1>
+          <p className="text-sm text-gray-700 sm:text-gray-600 mt-1.5 leading-relaxed">
+            Work top to bottom: choose driver and rig, enter load details, optional route preferences, then pickup and drops.
+            Routing and permits run automatically once addresses geocode.
+          </p>
         </div>
 
         {/* OR-Tools Service Connection Status — dev-only debug chrome (hidden in production) */}
@@ -2462,23 +2469,23 @@ export default function PermitTestPage() {
         )}
 
         {/* Quick Voice Actions */}
-        <div className="mt-3 flex items-center gap-2 text-xs">
-          <span className="text-gray-600 sm:text-gray-500">Load Pilot:</span>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-gray-500">Load Pilot:</span>
           <button
             type="button"
             onClick={confirmWithVoice}
-            className="px-3 py-1 bg-white border border-gray-300 hover:bg-gray-50 rounded-full text-gray-600 transition flex items-center gap-1"
+            className="px-3 py-1.5 min-h-[36px] bg-white border border-gray-300 hover:bg-gray-50 rounded-full text-gray-700 transition flex items-center gap-1 touch-manipulation"
             title="Have Load Pilot read back all current values using text-to-speech"
           >
             🔊 Read back values
           </button>
-          <span className="text-gray-600 sm:text-gray-500">• Use the 🎤 buttons below for voice input</span>
+          <span className="text-gray-500">• Tap 🎤 next to a field for voice input</span>
         </div>
       </div>
 
       <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
         {/* Form Card Wrapper for polished look */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-8 shadow-sm">
+        <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 space-y-8 shadow-sm min-w-0">
         {/* Validation Errors */}
         {Object.keys(errors).length > 0 && (
           <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
@@ -2492,9 +2499,9 @@ export default function PermitTestPage() {
         {/* Permit driver & carrier — picker in carrier mode and service mode (carrier from header) */}
         <section className="space-y-4">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Driver for this load</h2>
+            <h2 className="text-lg font-semibold text-gray-900">1. Driver for this load</h2>
             <p className={`${fieldHintClass} mt-0.5`}>
-              Select a saved driver — carrier details are applied automatically for permits.
+              Pick who is driving. Carrier details from their profile fill in for permit forms.
             </p>
           </div>
 
@@ -2607,6 +2614,13 @@ export default function PermitTestPage() {
         )}
 
         {/* Primary rig — auto-loaded; change only when needed */}
+        <section className="space-y-2">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">2. Rig</h2>
+            <p className={`${fieldHintClass} mt-0.5`}>
+              Default rig loads when available. Change only if this load uses different equipment.
+            </p>
+          </div>
         <div className="flex items-center justify-between text-sm text-gray-600 py-1">
           <div>
             {loadingRigs || loadingPrimaryOwner ? (
@@ -2633,7 +2647,7 @@ export default function PermitTestPage() {
           <button
             type="button"
             onClick={() => setShowRigPicker((v) => !v)}
-            className="text-xs text-emerald-700 hover:text-emerald-900 underline underline-offset-2"
+            className="text-xs text-emerald-700 hover:text-emerald-900 underline underline-offset-2 min-h-[40px] touch-manipulation"
           >
             Change Rig
           </button>
@@ -2662,7 +2676,7 @@ export default function PermitTestPage() {
                 </option>
               ))}
             </select>
-            <a href="/equipment" className="text-xs text-gray-600 sm:text-gray-500 hover:text-gray-700">Manage equipment →</a>
+            <a href="/equipment" className="text-xs text-gray-500 hover:text-gray-700">Manage equipment →</a>
           </div>
         )}
 
@@ -2674,7 +2688,7 @@ export default function PermitTestPage() {
           >
             {showRigDetails ? 'Hide Rig Details' : 'Show Rig Details'}
           </button>
-          <a href="/equipment" className="text-xs text-gray-600 sm:text-gray-500 hover:text-emerald-700">Edit in Equipment →</a>
+          <a href="/equipment" className="text-xs text-gray-500 hover:text-emerald-700">Edit in Equipment →</a>
         </div>
         {showRigDetails && (
           <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/80 space-y-3 text-sm">
@@ -2700,6 +2714,7 @@ export default function PermitTestPage() {
             </div>
           </div>
         )}
+        </section>
 
         {geocodeStatus && (
           <div className={`text-sm px-3 py-2 rounded-lg border ${geocodeStatus.includes('successfully') ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
@@ -2719,10 +2734,13 @@ export default function PermitTestPage() {
 
         {/* Load Details (Rig + Cargo + Axle weights + Overhangs) — second major decision after Rig Selector */}
         <div>
-          <h2 className="font-semibold mb-2 text-gray-800 flex items-center gap-2">
-            Load Details (Cargo, Axle Weights, Overhangs)
+          <h2 className="text-lg font-semibold mb-1 text-gray-900 flex items-center gap-2">
+            3. Load details
             <button type="button" onClick={() => startVoiceInput('cargoDescription')} disabled={isListening} className="text-base p-1 hover:bg-gray-100 rounded" title="Speak cargo description">🎤</button>
           </h2>
+          <p className={`${fieldHintClass} mb-2`}>
+            Describe the cargo, then enter pieces, arrangement, and axle weights. These drive oversize checks and the routing envelope below.
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <div className="md:col-span-2">
               <label className="block text-xs font-medium text-gray-800 mb-1">Description — what are you hauling?</label>
@@ -2945,8 +2963,8 @@ export default function PermitTestPage() {
 
         {/* Routing envelope — auto-calculated from rig + load; sent to routing/agent */}
         <div className="border border-emerald-200 bg-emerald-50/50 rounded-xl p-4">
-          <h2 className="font-semibold mb-1 text-emerald-900">Load Details (Routing Envelope)</h2>
-          <p className="text-xs text-emerald-800 mb-3">Auto-calculated from rig base length, overhangs, trailer, and load dimensions.</p>
+          <h2 className="font-semibold mb-1 text-emerald-900">Routing envelope</h2>
+          <p className="text-xs text-emerald-800 mb-3">Auto-calculated from rig, overhangs, trailer, and cargo — used for oversize routing (not the load-details form step above).</p>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm mb-1 text-gray-800">Gross weight</label>
@@ -2996,8 +3014,8 @@ export default function PermitTestPage() {
 
         {/* Special route instructions — before addresses so first auto-optimization includes instructions */}
         <div>
-          <h2 className="font-semibold mb-2 flex items-center gap-2">
-            Special route instructions (avoid AR,IL; include Corinth MS; prefer southern on I-40...)
+          <h2 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+            4. Route preferences (optional)
             <button
               type="button"
               onClick={() => startVoiceInput('preferences')}
@@ -3009,8 +3027,8 @@ export default function PermitTestPage() {
             </button>
           </h2>
           <p className={`${fieldHintClass} mb-2`}>
-            Enter any route preferences here before entering addresses — they will be used in the first optimization.
-            {' '}With multiple drops, &quot;include&quot; / via preferences are not applied — only avoid-state rules are enforced.
+            Add avoid/prefer rules before addresses so the first optimization uses them
+            (e.g. avoid AR, prefer I-40 south). With multiple drops, only avoid-state rules apply—via/include waypoints are ignored.
           </p>
           <textarea
             placeholder="E.g. avoid AR, avoid IL, include Corinth MS, prefer I-40 southern, stay on interstates..."
@@ -3018,12 +3036,12 @@ export default function PermitTestPage() {
             onChange={(e) => setManualRoute(e.target.value)}
             className={textareaClass}
           />
-          <p className={`${fieldHintTinyClass} mt-1`}>Hard-enforced in OR-Tools routing. Voice or type.</p>
+          <p className={`${fieldHintTinyClass} mt-1`}>Enforced in OR-Tools routing. Type or use 🎤.</p>
         </div>
 
         {/* Pickup */}
         <LocationStopInput
-          label="Pickup"
+          label="5. Pickup"
           stop={formData.origin}
           lat={formData.originLat}
           lon={formData.originLon}
@@ -3057,26 +3075,26 @@ export default function PermitTestPage() {
 
         {/* Drops */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Drops</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold text-gray-900">6. Drops (deliveries)</h2>
             <button
               type="button"
               onClick={addDrop}
               disabled={formData.drops.length >= MAX_DROPS}
-              className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
+              className="shrink-0 inline-flex items-center justify-center min-h-[44px] px-4 py-2 text-sm font-semibold rounded-lg border border-gray-500 sm:border-gray-300 bg-white text-gray-900 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation shadow-sm"
             >
-              + Add drop {formData.drops.length >= MAX_DROPS ? `(max ${MAX_DROPS})` : ''}
+              + Add drop{formData.drops.length >= MAX_DROPS ? ` (max ${MAX_DROPS})` : ''}
             </button>
           </div>
-          <p className={`${fieldHintClass} -mt-2`}>
-            Enter each delivery stop in order. Business names and full street addresses work.
+          <p className={`${fieldHintClass} -mt-1`}>
+            Add each stop in delivery order. The last drop is the final destination. Business names or full street addresses both work.
           </p>
           {formData.drops.map((drop, idx) => {
             const key = dropStopKey(drop)
             return (
-            <div key={drop.id} className="border border-gray-300 sm:border-gray-200 rounded-xl p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1">
+            <div key={drop.id} className="border border-gray-300 sm:border-gray-200 rounded-xl p-3 min-w-0">
+              <div className="flex flex-wrap items-start justify-between gap-2 min-w-0">
+                <div className="flex-1 min-w-0">
                   <LocationStopInput
                     label={`Drop ${idx + 1}${idx === formData.drops.length - 1 ? ' (final)' : ''}`}
                     stop={drop}
@@ -3116,7 +3134,7 @@ export default function PermitTestPage() {
                   <button
                     type="button"
                     onClick={() => removeDrop(drop.id)}
-                    className="text-xs text-red-600 hover:underline mt-1 shrink-0"
+                    className="shrink-0 inline-flex items-center justify-center min-h-[44px] px-3 py-2 text-sm font-medium rounded-lg border border-red-300 text-red-700 bg-white hover:bg-red-50 touch-manipulation"
                   >
                     Remove
                   </button>
@@ -3818,6 +3836,7 @@ export default function PermitTestPage() {
           Covers permit route metadata, equipment license plates, and default rig selection for the Permit Agent.
         </p>
       </div>
+      </div>{/* max-w-3xl content shell */}
     </div>
   )
 }

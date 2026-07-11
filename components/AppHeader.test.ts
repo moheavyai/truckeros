@@ -9,8 +9,10 @@ function readHeaderSource() {
 }
 
 function navRegionSlice(source: string) {
-  const start = source.indexOf('<div className="flex items-center gap-4 text-sm">')
-  const end = source.indexOf('<div className="w-px h-4 bg-gray-300 mx-1" />')
+  const start = source.indexOf(
+    '<div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm flex-wrap justify-end max-w-full">'
+  )
+  const end = source.indexOf('w-px h-4 bg-gray-300')
   expect(start).toBeGreaterThan(-1)
   expect(end).toBeGreaterThan(start)
   return source.slice(start, end)
@@ -129,5 +131,25 @@ describe('AppHeader legacy chrome removal', () => {
     expect(source).not.toMatch(/href="\/permit-test"/)
     expect(source).not.toContain('New Analysis')
     expect(source).not.toContain('new-analysis')
+  })
+})
+
+describe('AppHeader mobile touch targets', () => {
+  it('gives nav links and logout a practical mobile touch height', () => {
+    const source = readHeaderSource()
+    expect(source).toMatch(
+      /navLink[\s\S]*?min-h-\[40px\][\s\S]*?touch-manipulation/
+    )
+    expect(source).toMatch(
+      /handleLogout[\s\S]*?min-h-\[40px\][\s\S]*?touch-manipulation|min-h-\[40px\][\s\S]*?Logout/
+    )
+    expect(source).toContain('touch-manipulation')
+  })
+
+  it('constrains brand so truncate can shrink on narrow screens', () => {
+    const source = readHeaderSource()
+    expect(source).toMatch(/flex items-center gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-initial/)
+    expect(source).toMatch(/min-w-0 max-w-full/)
+    expect(source).toMatch(/truncate min-w-0/)
   })
 })
