@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   STATE_PORTAL_CONFIGS,
+  formatBorderPoint,
   generatePortalPrefill,
   getPortalStatesForAnalysis,
   openStatePortals,
   resolveInitialPortalState,
+  resolveStateBorderFields,
 } from './portal-assistant'
 
 const ALL_US_STATES = [
@@ -193,7 +195,227 @@ describe('resolveInitialPortalState', () => {
   })
 })
 
+const OK_KS_NE_CROSSINGS = [
+  {
+    fromState: 'OK',
+    toState: 'KS',
+    entry: { lat: 36.99, lon: -94.62, highway: 'US-69' },
+    exit: { lat: 39.8, lon: -95.0, highway: 'US-75' },
+  },
+  {
+    fromState: 'KS',
+    toState: 'NE',
+    entry: { lat: 40.0, lon: -95.9, highway: 'US-75' },
+    exit: { lat: 41.2, lon: -96.0, highway: 'US-75' },
+  },
+]
+
+describe('formatBorderPoint / resolveStateBorderFields', () => {
+  it('formats lat,lon with optional highway', () => {
+    expect(formatBorderPoint({ lat: 36.99, lon: -94.61 })).toBe('36.99,-94.61')
+    expect(formatBorderPoint({ lat: 36.99, lon: -94.61, highway: 'I-44' })).toBe(
+      '36.99,-94.61 (I-44)'
+    )
+    expect(formatBorderPoint(null)).toBe('')
+    expect(formatBorderPoint(undefined)).toBe('')
+    expect(formatBorderPoint({ lat: Number.NaN, lon: -94.61 })).toBe('')
+    expect(formatBorderPoint({ lat: 36.99, lon: Number.POSITIVE_INFINITY })).toBe('')
+  })
+
+  it('single-state corridor => role single, empty points', () => {
+    const fields = resolveStateBorderFields('KS', ['KS'], [])
+    expect(fields.role).toBe('single')
+    expect(fields.entryPoint).toBe('')
+    expect(fields.exitPoint).toBe('')
+    expect(fields.borderEntry).toBe('')
+    expect(fields.borderExit).toBe('')
+    expect(fields.borderSummary).toMatch(/single-state/i)
+  })
+
+  it('through-state KS on OK-KS-NE gets entry + exit from sample crossings', () => {
+    const fields = resolveStateBorderFields('KS', ['OK', 'KS', 'NE'], OK_KS_NE_CROSSINGS)
+    expect(fields.role).toBe('through')
+    expect(fields.entryPoint).toBe('36.99,-94.62 (US-69)')
+    expect(fields.exitPoint).toBe('40,-95.9 (US-75)')
+    expect(fields.borderEntry).toBe(fields.entryPoint)
+    expect(fields.borderExit).toBe(fields.exitPoint)
+    expect(fields.borderSummary).toContain('Entry:')
+    expect(fields.borderSummary).toContain('Exit:')
+  })
+
+  it('origin OK gets exit only (leaveCrossing.entry)', () => {
+    const fields = resolveStateBorderFields('OK', ['OK', 'KS', 'NE'], OK_KS_NE_CROSSINGS)
+    expect(fields.role).toBe('origin')
+    expect(fields.entryPoint).toBe('')
+    expect(fields.exitPoint).toBe('36.99,-94.62 (US-69)')
+  })
+
+  it('destination NE gets entry only', () => {
+    const fields = resolveStateBorderFields('NE', ['OK', 'KS', 'NE'], OK_KS_NE_CROSSINGS)
+    expect(fields.role).toBe('destination')
+    expect(fields.entryPoint).toBe('40,-95.9 (US-75)')
+    expect(fields.exitPoint).toBe('')
+  })
+
+  it('through-state falls back to enterCrossing.exit when leave crossing missing', () => {
+    // Only the inbound crossing is available — exit uses enter.exit
+    const partial = [
+      {
+        fromState: 'OK',
+        toState: 'KS',
+        entry: { lat: 36.99, lon: -94.62, highway: 'US-69' },
+        exit: { lat: 39.8, lon: -95.0, highway: 'US-75' },
+      },
+    ]
+    const fields = resolveStateBorderFields('KS', ['OK', 'KS', 'NE'], partial)
+    expect(fields.role).toBe('through')
+    expect(fields.entryPoint).toBe('36.99,-94.62 (US-69)')
+    expect(fields.exitPoint).toBe('39.8,-95 (US-75)')
+  })
+
+  it('origin exit stays empty when only leaveCrossing.exit is present (not entry)', () => {
+    const onlyExit = [
+      {
+        fromState: 'OK',
+        toState: 'KS',
+        // no valid entry — origin must not use deep-in-next-state exit
+        entry: { lat: Number.NaN, lon: Number.NaN },
+        exit: { lat: 37.5, lon: -95.5, highway: 'deep-KS' },
+      },
+    ]
+    const fields = resolveStateBorderFields('OK', ['OK', 'KS', 'NE'], onlyExit)
+    expect(fields.role).toBe('origin')
+    expect(fields.exitPoint).toBe('')
+  })
+
+  it('prefers adjacency match over first-match for re-entry corridors', () => {
+    // First find would pick TX->OK; adjacency for second OK (idx of first OK is 0 origin)
+    // Use corridor OK-KS-OK with crossings at both transitions
+    const reentry = [
+      {
+        fromState: 'OK',
+        toState: 'KS',
+        entry: { lat: 36.9, lon: -94.6, highway: 'first-enter-KS' },
+        exit: { lat: 38.0, lon: -95.0 },
+      },
+      {
+        fromState: 'KS',
+        toState: 'OK',
+        entry: { lat: 36.5, lon: -94.5, highway: 'reenter-OK' },
+        exit: { lat: 35.0, lon: -97.0 },
+      },
+    ]
+    // First OK is origin: leave should be OK->KS
+    const originOk = resolveStateBorderFields('OK', ['OK', 'KS', 'OK'], reentry)
+    expect(originOk.role).toBe('origin')
+    expect(originOk.exitPoint).toContain('first-enter-KS')
+
+    // KS through: enter OK->KS, leave KS->OK
+    const throughKs = resolveStateBorderFields('KS', ['OK', 'KS', 'OK'], reentry)
+    expect(throughKs.role).toBe('through')
+    expect(throughKs.entryPoint).toContain('first-enter-KS')
+    expect(throughKs.exitPoint).toContain('reenter-OK')
+  })
+
+  it('unknown role for empty state, empty corridor, or off-corridor state', () => {
+    expect(resolveStateBorderFields('', ['OK', 'KS'], OK_KS_NE_CROSSINGS).role).toBe('unknown')
+    expect(resolveStateBorderFields('KS', [], OK_KS_NE_CROSSINGS).role).toBe('unknown')
+    const off = resolveStateBorderFields('TX', ['OK', 'KS', 'NE'], OK_KS_NE_CROSSINGS)
+    expect(off.role).toBe('unknown')
+    expect(off.entryPoint).toBe('')
+    expect(off.exitPoint).toBe('')
+    expect(off.borderSummary).toMatch(/No matching border crossings for this state/i)
+  })
+
+  it('notes missing geometry when multi-state but crossings array empty', () => {
+    const fields = resolveStateBorderFields('KS', ['OK', 'KS', 'NE'], [])
+    expect(fields.role).toBe('through')
+    expect(fields.entryPoint).toBe('')
+    expect(fields.exitPoint).toBe('')
+    expect(fields.borderSummary).toMatch(/No geometry border crossings available/i)
+  })
+})
+
 describe('generatePortalPrefill', () => {
+  it('includes border fields when border_crossings present', () => {
+    const prefill = generatePortalPrefill(
+      {
+        origin_city: 'Tulsa',
+        origin_state: 'OK',
+        destination_city: 'Omaha',
+        destination_state: 'NE',
+        weight: 90000,
+        length: 70,
+        width: 10,
+        height: 13.5,
+        route_corridor: ['OK', 'KS', 'NE'],
+        permit_required_states: ['OK', 'KS', 'NE'],
+        border_crossings: OK_KS_NE_CROSSINGS,
+        equipment: {},
+        cargo: {},
+      },
+      'KS'
+    )
+
+    expect(prefill.generatedFields.border_role).toBe('through')
+    expect(prefill.generatedFields.entry_point).toBe('36.99,-94.62 (US-69)')
+    expect(prefill.generatedFields.exit_point).toBe('40,-95.9 (US-75)')
+    expect(prefill.generatedFields.border_entry).toBe('36.99,-94.62 (US-69)')
+    expect(prefill.generatedFields.border_exit).toBe('40,-95.9 (US-75)')
+    expect(prefill.generatedFields.border_summary).toContain('Entry:')
+    expect(prefill.generatedFields.border_summary).toContain('Exit:')
+  })
+
+  it('accepts camelCase borderCrossings on the request', () => {
+    const prefill = generatePortalPrefill(
+      {
+        origin_city: 'Tulsa',
+        origin_state: 'OK',
+        destination_city: 'Omaha',
+        destination_state: 'NE',
+        weight: 90000,
+        length: 70,
+        width: 10,
+        height: 13.5,
+        route_corridor: ['OK', 'KS', 'NE'],
+        permit_required_states: ['OK', 'KS', 'NE'],
+        borderCrossings: OK_KS_NE_CROSSINGS,
+        equipment: {},
+        cargo: {},
+      },
+      'OK'
+    )
+    expect(prefill.generatedFields.border_role).toBe('origin')
+    expect(prefill.generatedFields.exit_point).toBe('36.99,-94.62 (US-69)')
+    expect(prefill.generatedFields.entry_point).toBe('')
+  })
+
+  it('always includes border field keys even when crossings absent', () => {
+    const prefill = generatePortalPrefill(
+      {
+        origin_city: 'Tulsa',
+        origin_state: 'OK',
+        destination_city: 'Omaha',
+        destination_state: 'NE',
+        weight: 90000,
+        length: 70,
+        width: 10,
+        height: 13.5,
+        route_corridor: ['OK', 'KS', 'NE'],
+        permit_required_states: ['OK'],
+        equipment: {},
+        cargo: {},
+      },
+      'KS'
+    )
+    expect(prefill.generatedFields).toHaveProperty('border_role', 'through')
+    expect(prefill.generatedFields).toHaveProperty('entry_point', '')
+    expect(prefill.generatedFields).toHaveProperty('exit_point', '')
+    expect(prefill.generatedFields).toHaveProperty('border_entry', '')
+    expect(prefill.generatedFields).toHaveProperty('border_exit', '')
+    expect(prefill.generatedFields.border_summary).toMatch(/No geometry border crossings available/i)
+  })
+
   it('formats dimensions as clean X\' Y" strings, not long decimals', () => {
     const prefill = generatePortalPrefill(
       {

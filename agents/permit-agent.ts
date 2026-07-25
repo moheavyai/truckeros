@@ -110,7 +110,7 @@ export interface LoadDetails {
 export interface AnalyzedRouteOption {
   routeCorridor: string[]
   highways?: string[]
-  /** Geometry-aligned state border entry/exit points for portal forms (empty for single-state). */
+  /** Geometry-aligned state border entry/exit points for portal prefill. */
   borderCrossings?: BorderCrossing[]
 
   // Core permit decision
@@ -151,4 +151,669 @@ export interface AnalyzedRouteOption {
   corridorScaleFailedStates?: string[]
   /** True when the rig cannot scale the proposed load under simple group limits. */
   unableToScale?: boolean
+}
+
+// Canadian province/territory codes for terminology and logic
+const CANADIAN_CODES = new Set([
+  'AB', 'BC', 'SK', 'MB', 'ON', 'QC', 'NB', 'NS', 'PE', 'NL', 'NT', 'NU', 'YT'
+])
+
+function isCanadian(code: string): boolean {
+  return CANADIAN_CODES.has(code.toUpperCase())
+}
+
+function getJurisdictionLabel(code: string): string {
+  return isCanadian(code) ? 'Province' : 'State'
+}
+
+export interface PermitAgentResult {
+  status: 'valid' | 'invalid' | 'pending_review'
+  message: string
+  loadDetails: LoadDetails
+  options: AnalyzedRouteOption[]
+  missingFields: string[]
+}
+
+/**
+ * Layer 1: Input Validation
+ */
+function validateLoadDetails(details: LoadDetails): string[] {
+  const missing: string[] = []
+  if (!details.origin?.city) missing.push('origin.city')
+  if (!details.origin?.state) missing.push('origin.state')
+  if (!details.destination?.city) missing.push('destination.city')
+  if (!details.destination?.state) missing.push('destination.state')
+  if (!Number.isFinite(details.weight) || details.weight <= 0) missing.push('weight')
+  if (!Number.isFinite(details.length) || details.length <= 0) missing.push('length')
+  if (!Number.isFinite(details.width) || details.width <= 0) missing.push('width')
+  if (!Number.isFinite(details.height) || details.height <= 0) missing.push('height')
+  return missing
+}
+
+type RoutedStop = { lat: number; lon: number; state?: string }
+
+function getOrderedStops(load: LoadDetails): RoutedStop[] {
+  const stops: RoutedStop[] = []
+  if (hasValidCoords(load.originLat, load.originLon)) {
+    stops.push({
+      lat: load.originLat!,
+      lon: load.originLon!,
+      state: load.origin?.state,
+    })
+  }
+  if (load.drops && load.drops.length > 0) {
+    for (const d of load.drops) {
+      if (hasValidCoords(d.lat, d.lon)) {
+        stops.push({ lat: d.lat!, lon: d.lon!, state: d.state })
+      }
+    }
+  } else if (hasValidCoords(load.destinationLat, load.destinationLon)) {
+    stops.push({
+      lat: load.destinationLat!,
+      lon: load.destinationLon!,
+      state: load.destination?.state,
+    })
+  }
+  return stops
+}
+
+function mergeCorridorLegs(legs: CorridorResult[]): CorridorResult {
+  const merged: CorridorResult = {
+    routeCorridor: [],
+    highways: [],
+    borderCrossings: [],
+    distanceMeters: 0,
+    durationSeconds: 0,
+    engine: legs[0]?.engine,
+    engineNote: legs.map((l) => l.engineNote).filter(Boolean).join('; ') || undefined,
+    userPreferenceNote: legs.map((l) => l.userPreferenceNote).filter(Boolean).join('; ') || undefined,
+  }
+
+  for (const leg of legs) {
+    for (const st of leg.routeCorridor) {
+      const last = merged.routeCorridor[merged.routeCorridor.length - 1]
+      if (last !== st) merged.routeCorridor.push(st)
+    }
+    if (leg.highways?.length) {
+      merged.highways = [...(merged.highways || []), ...leg.highways]
+    }
+    if (leg.borderCrossings?.length) {
+      merged.borderCrossings = [...(merged.borderCrossings || []), ...leg.borderCrossings]
+    }
+    merged.distanceMeters = (merged.distanceMeters || 0) + (leg.distanceMeters || 0)
+    merged.durationSeconds = (merged.durationSeconds || 0) + (leg.durationSeconds || 0)
+    if (leg.permitReady) merged.permitReady = true
+    if (leg.permitWarnings?.length) {
+      merged.permitWarnings = [...(merged.permitWarnings || []), ...leg.permitWarnings]
+    }
+  }
+
+  return merged
+}
+
+async function buildMultiLegCorridor(load: LoadDetails): Promise<CorridorResult[]> {
+  const stops = getOrderedStops(load)
+  if (stops.length < 2) return []
+
+  const routingEngine: RoutingEngine = load.routingEngine || 'osrm'
+  const legs: CorridorResult[] = []
+
+  for (let i = 0; i < stops.length - 1; i++) {
+    const from = stops[i]
+    const to = stops[i + 1]
+    const oSnap = await snapToStateHighway(from.lat, from.lon)
+    const dSnap = await snapToStateHighway(to.lat, to.lon)
+    const corridors = await buildIntelligentCorridor(
+      oSnap.lat,
+      oSnap.lon,
+      dSnap.lat,
+      dSnap.lon,
+      from.state,
+      to.state,
+      routingEngine,
+      {
+        length: load.length,
+        width: load.width,
+        height: load.height,
+        weight: load.weight,
+      },
+      load.specialInstructions
+    )
+    if (corridors.length === 0) return []
+    legs.push(corridors[0])
+  }
+
+  return [mergeCorridorLegs(legs)]
+}
+
+/**
+ * Layer 2: Intelligent Corridor (permanent default) + Data-Driven Flagging
+ *
+ * Intelligent routing via OSRM/GraphHopper + Nominatim is the ONLY way corridors
+ * are built. There is no naive state-pair fallback. Manual route override is the
+ * sole exception (for the "Change Route" feature).
+ * specialInstructions on LoadDetails (if present) is passed through to enable preference-biased corridor selection.
+ */
+async function buildRouteCorridor(load: LoadDetails): Promise<Array<{
+  routeCorridor: string[]
+  highways?: string[]
+  borderCrossings?: BorderCrossing[]
+  permitRequiredStates: string[]
+  escortRequiredStates?: string[]
+  escortWarnings?: string[]
+  escortDetails?: StateEscortDetail[]
+  curfewNotes?: string[]
+  specialNotes?: string[]
+  seasonalWeightRestrictions?: string[]
+  stateRules?: StatePermitRule[]
+  dotRestrictions?: string[]
+  reasons: string[]
+  notes: string[]
+  distanceMiles?: number
+  durationHours?: number
+  routingEngine?: RoutingEngine
+  routingEngineNote?: string
+  axleGroupSummary?: string
+  axleGroups?: AxleGroupSummary
+  scaleFindings?: ScaleFinding[]
+  corridorScaleFailedStates?: string[]
+  unableToScale?: boolean
+}>> {
+  const analyzedOptions: Array<any> = []
+
+  // Support manual route override (for "Change Route" feature)
+  if (load.manualRoute && Array.isArray(load.manualRoute) && load.manualRoute.length > 0) {
+    const routeCorridor = load.manualRoute.map((s: string) => s.toUpperCase().trim()).filter(Boolean)
+    const notes = [`Manual route used: ${routeCorridor.join(' → ')}`]
+
+    const option = await analyzeCorridor(load, { routeCorridor, highways: [], distanceMeters: undefined, durationSeconds: undefined }, notes)
+    analyzedOptions.push(option)
+
+    return analyzedOptions
+  }
+
+  // Multi-stop: build sequential legs when explicit drops are present
+  if (load.drops && load.drops.length > 0) {
+    const multiCorridors = await buildMultiLegCorridor(load)
+    if (multiCorridors.length === 0) return analyzedOptions
+
+    for (const corridor of multiCorridors) {
+      const notes: string[] = []
+      if (corridor.distanceMeters) {
+        const miles = (corridor.distanceMeters / 1609.34).toFixed(1)
+        const engineLabel = corridor.engine === 'graphhopper' ? 'GraphHopper (truck profile)' : 'OSRM'
+        notes.push(`Used multi-stop intelligent routing (${engineLabel}). Distance: ${miles} miles across ${load.drops.length + 1} stops`)
+      }
+      if (corridor.engineNote) notes.push(corridor.engineNote)
+      if (corridor.userPreferenceNote) notes.push(corridor.userPreferenceNote)
+
+      const option = await analyzeCorridor(load, corridor, notes)
+      ;(option as any).routingEngine = corridor.engine
+      ;(option as any).routingEngineNote = corridor.engineNote
+      analyzedOptions.push(option)
+    }
+    return analyzedOptions
+  }
+
+  // Determine routing engine (defaults to OSRM for full backward compatibility)
+  const routingEngine: RoutingEngine = load.routingEngine || 'osrm'
+
+  // Snap origin/destination to nearest state highway (avoids local/county permits by default)
+  const oSnap = await snapToStateHighway(load.originLat!, load.originLon!)
+  const dSnap = await snapToStateHighway(load.destinationLat!, load.destinationLon!)
+
+  // Get multiple route options from selected engine (OSRM or GraphHopper truck profile)
+  const corridors: CorridorResult[] = await buildIntelligentCorridor(
+    oSnap.lat,
+    oSnap.lon,
+    dSnap.lat,
+    dSnap.lon,
+    load.origin?.state,
+    load.destination?.state,
+    routingEngine,
+    // Pass load dimensions so GraphHopper can apply real truck profile constraints
+    {
+      length: load.length,
+      width: load.width,
+      height: load.height,
+      weight: load.weight,
+    },
+    load.specialInstructions
+  )
+
+  if (corridors.length === 0) {
+    // Intelligent routing (OSRM or GraphHopper + Nominatim reverse geocoding) is the
+    // permanent and only default. There is no naive origin/destination state-pair fallback.
+    // If we cannot build a real corridor, we return empty so the UI surfaces a clear error.
+    return analyzedOptions
+  }
+
+  // Analyze each corridor option
+  for (const corridor of corridors) {
+    const notes: string[] = []
+    if (corridor.distanceMeters) {
+      const miles = (corridor.distanceMeters / 1609.34).toFixed(1)
+      const engineLabel = corridor.engine === 'graphhopper' ? 'GraphHopper (truck profile)' : 'OSRM'
+      notes.push(`Used intelligent routing (${engineLabel}). Distance: ${miles} miles`)
+    }
+    if (corridor.engineNote) {
+      notes.push(corridor.engineNote)
+    }
+    // Surface any user pref note (typed via imported CorridorResult; no any cast needed for new field)
+    if (corridor.userPreferenceNote) {
+      notes.push(corridor.userPreferenceNote)
+    }
+
+    const option = await analyzeCorridor(load, corridor, notes)
+    // Attach engine metadata to the final option for UI display (pre-existing casts on local anonymous shape from analyzeCorridor return; our new field no longer requires any)
+    ;(option as any).routingEngine = corridor.engine
+    ;(option as any).routingEngineNote = corridor.engineNote
+    analyzedOptions.push(option)
+  }
+
+  return analyzedOptions
+}
+
+/**
+ * Build axle groups from equipment snapshot or synthetic layout aligned with permit-test UI.
+ * Prefer live recompute from rich tractor+trailers; fall back to precomputed axleGroups
+ * (keeps jeep/flip roles when only partial equipment was sent).
+ */
+function resolveAxleGroupsForLoad(load: LoadDetails): AxleGroupSummary {
+  const precomputed = load.equipment?.axleGroups ?? null
+  const live = resolveAxleGroupsFromConfig({
+    tractor: load.equipment?.tractor,
+    trailers: load.equipment?.trailers,
+    axles: load.axles,
+  })
+
+  if (live.totalAxles > 0) {
+    // Live equipment wins when present; if precomputed matches, either is fine.
+    if (
+      precomputed &&
+      precomputed.totalAxles > 0 &&
+      precomputed.totalAxles !== live.totalAxles
+    ) {
+      // Mismatch: prefer the larger role-aware precomputed only when live looks incomplete
+      // (e.g. tractor-only vs full combination snapshot).
+      const liveHasTrailerGroup = live.groups.some(
+        (g) => g.source === 'trailer' || ['jeep', 'trailer', 'flip', 'stinger'].includes(g.type)
+      )
+      const preHasTrailerGroup = precomputed.groups.some(
+        (g) => g.source === 'trailer' || ['jeep', 'trailer', 'flip', 'stinger'].includes(g.type)
+      )
+      if (!liveHasTrailerGroup && preHasTrailerGroup) return precomputed
+    }
+    return live
+  }
+
+  if (precomputed && precomputed.totalAxles > 0) return precomputed
+  return live
+}
+
+// Helper to analyze a single corridor against state permit rules + real DOT corridor restrictions
+async function analyzeCorridor(
+  load: LoadDetails,
+  corridor: {
+    routeCorridor: string[]
+    highways?: string[]
+    borderCrossings?: BorderCrossing[]
+    distanceMeters?: number
+    durationSeconds?: number
+    engine?: RoutingEngine
+    engineNote?: string
+  },
+  baseNotes: string[]
+) {
+  const permitRequiredStates = new Set<string>()
+  const curfewNotes: string[] = []
+  const specialNotes: string[] = []
+  const seasonalNotes: string[] = []
+  const reasons: string[] = []
+  const notes = [...baseNotes]
+  const axleGroupSummary = resolveAxleGroupsForLoad(load)
+  let scaleFindings: ScaleFinding[] = []
+  let corridorScaleFailedStates: string[] = []
+  let unableToScale = false
+
+  let distanceMiles: number | undefined
+  let durationHours: number | undefined
+
+  if (corridor.distanceMeters) {
+    distanceMiles = parseFloat((corridor.distanceMeters / 1609.34).toFixed(1))
+  }
+  if (corridor.durationSeconds) {
+    durationHours = parseFloat((corridor.durationSeconds / 3600).toFixed(1))
+  }
+
+  const routeCorridor = corridor.routeCorridor
+  let rules: StatePermitRule[] | null = null
+  let escortAnalysis: {
+    escortRequiredStates: string[]
+    escortWarnings: string[]
+    escortDetails: StateEscortDetail[]
+  } = {
+    escortRequiredStates: [],
+    escortWarnings: [],
+    escortDetails: [],
+  }
+
+  // Declare at function scope so the return statement can always reference it
+  let dotNotes: string[] = []
+
+  if (routeCorridor.length > 0) {
+    const { data: fetchedRules, error: rulesError } = await supabase
+      .from('state_permit_rules')
+      .select('*')
+      .in('state_code', routeCorridor) as { data: StatePermitRule[] | null; error: any }
+
+    rules = fetchedRules
+
+    if (rulesError) {
+      notes.push(`Warning: Could not load state permit rules (${rulesError.message}). Using conservative defaults for missing states.`)
+      console.warn('state_permit_rules query failed:', rulesError)
+    }
+
+    const ruleMap = new Map(rules?.map(r => [r.state_code, r]) || [])
+
+    escortAnalysis = analyzeEscortRequirements({
+      routeCorridor,
+      load: {
+        width: load.width,
+        length: load.length,
+        height: load.height,
+        weight: load.weight,
+      },
+      ruleMap,
+      highways: corridor.highways || [],
+    })
+    const escortStateSet = new Set(escortAnalysis.escortRequiredStates)
+
+    // Per-state evaluation (much more accurate than global checks)
+    routeCorridor.forEach(state => {
+      const rule = ruleMap.get(state)
+
+      if (!rule) {
+        // No rule in state_permit_rules table — apply conservative default (require permit)
+        permitRequiredStates.add(state)
+        const label = getJurisdictionLabel(state)
+        // Prefer `${state}:` prefix so permit-test per-state cards match (not `${state} (State):`).
+        reasons.push(`${state}: Requires permit (no rule in database — conservative default)`)
+        return
+      }
+
+      const needsEscort = escortStateSet.has(state)
+
+      // Determine effective thresholds (fall back to legal_*)
+      let permitWidth  = rule.permit_threshold_width_ft  ?? rule.legal_width_ft
+      let permitHeight = rule.permit_threshold_height_ft ?? rule.legal_height_ft
+      let permitLengthRaw = rule.permit_threshold_length_ft ?? rule.legal_length_ft
+      let permitWeight = rule.permit_threshold_weight_lbs ?? rule.legal_weight_lbs
+
+      // Fallback to standard US oversize thresholds when the DB effective value
+      // (after ??) is null/undefined/<=0 (or NaN). This handles seeded state_permit_rules
+      // rows that only populate curfews/notes/pricing but leave dimension columns
+      // NULL or 0 (causing 11.5 > null === false etc.). Respects explicit positive
+      // per-state DB values when present.
+      if (permitWidth  == null || permitWidth  <= 0 || (typeof permitWidth === 'number' && Number.isNaN(permitWidth))) permitWidth  = 8.5
+      if (permitHeight == null || permitHeight <= 0 || (typeof permitHeight === 'number' && Number.isNaN(permitHeight))) permitHeight = 13.5
+      if (permitWeight == null || permitWeight <= 0 || (typeof permitWeight === 'number' && Number.isNaN(permitWeight))) permitWeight = 80000
+
+      const permitLengthRawForCheck =
+        permitLengthRaw == null || permitLengthRaw <= 0 || Number.isNaN(permitLengthRaw)
+          ? null
+          : permitLengthRaw
+      const needsLength = needsLengthPermit(
+        load.length,
+        load.trailerLengthFt,
+        permitLengthRawForCheck
+      )
+      const permitLengthThreshold = effectiveEnvelopeLengthThreshold(permitLengthRawForCheck)
+
+      // === Permit Required? ===
+      const needsPermit =
+        load.width  > permitWidth ||
+        load.height > permitHeight ||
+        needsLength ||
+        load.weight > permitWeight
+
+      if (needsPermit) {
+        permitRequiredStates.add(state)
+
+        // Build a specific, useful reason
+        const exceeded: string[] = []
+        if (load.width  > permitWidth)  exceeded.push(`width ${load.width} > ${permitWidth}`)
+        if (load.height > permitHeight) exceeded.push(`height ${load.height} > ${permitHeight}`)
+        if (needsLength) {
+          exceeded.push(`envelope length ${load.length} > ${permitLengthThreshold}`)
+        }
+        if (load.weight > permitWeight) exceeded.push(`weight ${load.weight} > ${permitWeight}`)
+
+        reasons.push(`${state}: Permit required — exceeds ${exceeded.join(', ')}`)
+      }
+
+      // === Collect rich contextual notes ===
+      if (needsPermit || needsEscort) {
+        if (rule.curfew_restrictions) {
+          curfewNotes.push(`${state}: ${rule.curfew_restrictions}`)
+        }
+        if (rule.special_notes) {
+          specialNotes.push(`${state}: ${rule.special_notes}`)
+        }
+        if (rule.seasonal_weight_restrictions) {
+          seasonalNotes.push(`${state}: ${rule.seasonal_weight_restrictions}`)
+        }
+      } else if (rule.seasonal_weight_restrictions) {
+        // Still surface seasonal info even if no permit is triggered (useful for planning)
+        seasonalNotes.push(`${state}: ${rule.seasonal_weight_restrictions}`)
+      }
+    })
+
+    // Summary notes (Canadian-aware)
+    const permitCount = permitRequiredStates.size
+    const escortCount = escortAnalysis.escortRequiredStates.length
+
+    if (permitCount > 0) {
+      const hasCanadian = Array.from(permitRequiredStates).some(isCanadian)
+      const term = hasCanadian ? 'jurisdiction(s)' : 'state(s)'
+      notes.push(`Permit required in ${permitCount} ${term} along this route.`)
+    }
+    if (escortCount > 0) {
+      notes.push(`Escort(s) likely required in ${escortCount} jurisdiction(s).`)
+    }
+
+    // ============================================================
+    // Layer real State DOT corridor restrictions (data-driven flagging)
+    // ============================================================
+    // This is the core enhancement: we now use actual posted restrictions
+    // (low bridges, weight postings, curfews, etc.) to drive permit decisions
+    // and produce far more accurate, corridor-specific reasons.
+    const dotRestrictionsRaw = getRestrictionsForCorridor(routeCorridor, corridor.highways || [])
+    dotNotes = dotRestrictionsRaw.map(formatRestrictionNote)
+
+    // Merge DOT notes into specialNotes (for the "Route Restrictions" UI section)
+    for (const dn of dotNotes) {
+      if (!specialNotes.includes(dn)) {
+        specialNotes.push(dn)
+      }
+    }
+
+    // === Corridor-specific intelligent flagging (the real value) ===
+    // For any height/weight/width/bridge/tunnel restriction on a highway in this corridor,
+    // if the load actually exceeds the posted value, we force a permit requirement
+    // and generate a much more precise reason than the generic state threshold.
+    for (const r of dotRestrictionsRaw) {
+      if (exceedsCorridorRestriction(load, r)) {
+        permitRequiredStates.add(r.state)
+
+        const restrictionDesc = `${r.highway}${r.mileMarker ? ' ' + r.mileMarker : ''} (${r.value}${r.unit || ''})`
+
+        reasons.push(
+          `${r.state}: Permit required — load exceeds specific DOT-posted restriction on ${restrictionDesc}. ${r.description.slice(0, 120)}${r.description.length > 120 ? '...' : ''}`
+        )
+      }
+    }
+
+    if (dotRestrictionsRaw.length > 0) {
+      notes.push(`Loaded ${dotRestrictionsRaw.length} real-world restriction(s) from State DOT open data for this corridor.`)
+    }
+
+    // ============================================================
+    // Axle-group scale + corridor weight failure detection
+    // ============================================================
+    const ruleMapForScale = new Map(
+      (rules || []).map((r) => [String(r.state_code).toUpperCase().trim(), r])
+    )
+    const scaled = attachScaleFieldsToOption(
+      { notes, reasons, routeCorridor, permitRequiredStates: Array.from(permitRequiredStates) },
+      {
+        groups: axleGroupSummary.groups,
+        axleWeights: load.axleWeights,
+        totalWeightLbs: load.weight,
+        routeCorridor,
+        ruleMap: ruleMapForScale,
+        summary: axleGroupSummary,
+      }
+    )
+    scaleFindings = scaled.scaleFindings
+    corridorScaleFailedStates = scaled.corridorScaleFailedStates
+    unableToScale = scaled.unableToScale
+    for (const r of scaled.reasons as string[]) {
+      if (!reasons.includes(r)) reasons.push(r)
+    }
+    for (const n of scaled.notes as string[]) {
+      if (!notes.includes(n)) notes.push(n)
+    }
+    for (const st of corridorScaleFailedStates) {
+      permitRequiredStates.add(st)
+    }
+  } else if (axleGroupSummary.totalAxles > 0 || (load.axleWeights && load.axleWeights.length > 0)) {
+    // No corridor states but still report global scale ability
+    const scaled = attachScaleFieldsToOption(
+      { notes, reasons, routeCorridor: [] },
+      {
+        groups: axleGroupSummary.groups,
+        axleWeights: load.axleWeights,
+        totalWeightLbs: load.weight,
+        routeCorridor: [],
+        ruleMap: new Map(),
+        summary: axleGroupSummary,
+      }
+    )
+    scaleFindings = scaled.scaleFindings
+    unableToScale = scaled.unableToScale
+    for (const r of scaled.reasons as string[]) {
+      if (!reasons.includes(r)) reasons.push(r)
+    }
+    for (const n of scaled.notes as string[]) {
+      if (!notes.includes(n)) notes.push(n)
+    }
+  }
+
+  return {
+    routeCorridor,
+    highways: corridor.highways || [],
+    borderCrossings: corridor.borderCrossings || [],
+    permitRequiredStates: Array.from(permitRequiredStates).sort(),
+    escortRequiredStates: escortAnalysis.escortRequiredStates,
+    escortWarnings: escortAnalysis.escortWarnings,
+    escortDetails: escortAnalysis.escortDetails,
+    curfewNotes: Array.from(new Set(curfewNotes)),
+    specialNotes: Array.from(new Set(specialNotes)),
+    seasonalWeightRestrictions: Array.from(new Set(seasonalNotes)),
+    stateRules: (rules as StatePermitRule[]) || [],
+    // NEW: Pass through the actual DOT restriction objects (or formatted strings) for rich UI
+    dotRestrictions: Array.from(new Set(dotNotes)),
+    reasons,
+    notes,
+    distanceMiles,
+    durationHours,
+    routingEngine: corridor.engine,
+    routingEngineNote: corridor.engineNote,
+    axleGroupSummary: formatAxleGroupSummaryLine(axleGroupSummary),
+    axleGroups: axleGroupSummary,
+    scaleFindings,
+    corridorScaleFailedStates,
+    unableToScale,
+  }
+}
+
+/**
+ * Main Permit Agent Function
+ *
+ * Intelligent routing is permanent. Expanded State DOT data (all 50 states,
+ * heavily seeded on 12 high-traffic corridors) is used for accurate flagging.
+ */
+export async function processPermitRequest(loadDetails: LoadDetails): Promise<PermitAgentResult> {
+  const missingFields = validateLoadDetails(loadDetails)
+
+  if (missingFields.length > 0) {
+    return {
+      status: 'invalid',
+      message: `Missing required fields: ${missingFields.join(', ')}`,
+      loadDetails,
+      options: [],
+      missingFields,
+    }
+  }
+
+  const analyzedOptions = await buildRouteCorridor(loadDetails)
+
+  // If intelligent routing failed to produce any corridors, return a clear error
+  if (analyzedOptions.length === 0) {
+    return {
+      status: 'invalid',
+      message: 'Could not generate an intelligent route. Please ensure both origin and destination have valid coordinates (geocoding succeeded).',
+      loadDetails,
+      options: [],
+      missingFields: [],
+    }
+  }
+
+  // Convert analyzed corridors into the new option format (now with richer data)
+  const options: AnalyzedRouteOption[] = analyzedOptions.map(option => {
+    const cost = calculateEstimatedCost(option.permitRequiredStates, loadDetails, option.stateRules || [], option.notes)
+    return {
+      routeCorridor: option.routeCorridor,
+      highways: option.highways,
+      borderCrossings: option.borderCrossings || [],
+      permitRequiredStates: option.permitRequiredStates,
+      escortRequiredStates: option.escortRequiredStates || [],
+      escortWarnings: option.escortWarnings || [],
+      escortDetails: option.escortDetails || [],
+      curfewNotes: option.curfewNotes || [],
+      specialNotes: option.specialNotes || [],
+      seasonalWeightRestrictions: option.seasonalWeightRestrictions || [],
+      stateRules: option.stateRules || [],
+      // DOT real-world restrictions (new data layer)
+      dotRestrictions: option.dotRestrictions || [],
+      reasons: option.reasons,
+      notes: cost.notes,
+      distanceMiles: option.distanceMiles,
+      durationHours: option.durationHours,
+      estimatedCost: cost.total,
+      costBreakdown: cost,
+      // Engine provenance
+      routingEngine: option.routingEngine,
+      routingEngineNote: option.routingEngineNote,
+      // Axle groups + scale / corridor failure signals
+      axleGroupSummary: option.axleGroupSummary,
+      axleGroups: option.axleGroups,
+      scaleFindings: option.scaleFindings || [],
+      corridorScaleFailedStates: option.corridorScaleFailedStates || [],
+      unableToScale: !!option.unableToScale,
+    }
+  })
+
+  const requiresPermit = options.some(o => o.permitRequiredStates.length > 0)
+
+  return {
+    status: 'pending_review',
+    message: requiresPermit
+      ? `Permit requirements detected across multiple route options.`
+      : 'No permit requirements flagged on the current route options.',
+    loadDetails,
+    options,
+    missingFields: [],
+  }
 }
