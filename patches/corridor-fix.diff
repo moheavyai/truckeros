@@ -90,7 +90,7 @@ index ae10db4..94d5685 100644
    // 2. Process each route returned by the chosen engine (OSRM or GraphHopper)
    for (const route of response.routes) {
      // Robust corridor extraction:
-@@ -201,10 +256,18 @@ export async function buildIntelligentCorridor(
+@@ -146,9 +201,17 @@ export async function buildIntelligentCorridor(
      // Strengthen corridor using existing heuristic (unchanged behavior)
      states = completeCorridorWithHighways(states, highways)
  
@@ -108,7 +108,7 @@ index ae10db4..94d5685 100644
        distanceMeters: route.distance,
        durationSeconds: route.duration,
        engine: usedEngine,
-@@ -355,6 +418,18 @@ function calculateRouteQualityScore(
+@@ -292,6 +355,18 @@ function calculateRouteQualityScore(
    return score
  }
  
@@ -127,7 +127,7 @@ index ae10db4..94d5685 100644
  /**
   * Simple helper to convert full state name to abbreviation
   * (We can improve this later with a proper map)
-@@ -583,6 +658,83 @@ function getPrimaryStateForStep(step: any): string | null {
+@@ -508,6 +583,83 @@ function getPrimaryStateForStep(step: any): string | null {
    return candidates.length > 0 ? candidates[candidates.length - 1] : null
  }
  
