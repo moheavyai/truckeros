@@ -1,6 +1,6 @@
 // agents/permit-agent.ts
 
-import { buildIntelligentCorridor, type CorridorResult } from '@/lib/build-corridor'
+import { buildIntelligentCorridor, type BorderCrossing, type CorridorResult } from '@/lib/build-corridor'
 import { hasValidCoords } from '@/lib/location-stop'
 import { snapToStateHighway } from '@/lib/snap-highway'
 import type { RoutingEngine } from '@/lib/routing'
@@ -110,6 +110,8 @@ export interface LoadDetails {
 export interface AnalyzedRouteOption {
   routeCorridor: string[]
   highways?: string[]
+  /** Geometry-aligned state border entry/exit points for portal prefill. */
+  borderCrossings?: BorderCrossing[]
 
   // Core permit decision
   permitRequiredStates: string[]
@@ -219,6 +221,7 @@ function mergeCorridorLegs(legs: CorridorResult[]): CorridorResult {
   const merged: CorridorResult = {
     routeCorridor: [],
     highways: [],
+    borderCrossings: [],
     distanceMeters: 0,
     durationSeconds: 0,
     engine: legs[0]?.engine,
@@ -233,6 +236,9 @@ function mergeCorridorLegs(legs: CorridorResult[]): CorridorResult {
     }
     if (leg.highways?.length) {
       merged.highways = [...(merged.highways || []), ...leg.highways]
+    }
+    if (leg.borderCrossings?.length) {
+      merged.borderCrossings = [...(merged.borderCrossings || []), ...leg.borderCrossings]
     }
     merged.distanceMeters = (merged.distanceMeters || 0) + (leg.distanceMeters || 0)
     merged.durationSeconds = (merged.durationSeconds || 0) + (leg.durationSeconds || 0)
@@ -291,6 +297,7 @@ async function buildMultiLegCorridor(load: LoadDetails): Promise<CorridorResult[
 async function buildRouteCorridor(load: LoadDetails): Promise<Array<{
   routeCorridor: string[]
   highways?: string[]
+  borderCrossings?: BorderCrossing[]
   permitRequiredStates: string[]
   escortRequiredStates?: string[]
   escortWarnings?: string[]
@@ -450,6 +457,7 @@ async function analyzeCorridor(
   corridor: {
     routeCorridor: string[]
     highways?: string[]
+    borderCrossings?: BorderCrossing[]
     distanceMeters?: number
     durationSeconds?: number
     engine?: RoutingEngine
@@ -705,6 +713,7 @@ async function analyzeCorridor(
   return {
     routeCorridor,
     highways: corridor.highways || [],
+    borderCrossings: corridor.borderCrossings || [],
     permitRequiredStates: Array.from(permitRequiredStates).sort(),
     escortRequiredStates: escortAnalysis.escortRequiredStates,
     escortWarnings: escortAnalysis.escortWarnings,
@@ -767,6 +776,7 @@ export async function processPermitRequest(loadDetails: LoadDetails): Promise<Pe
     return {
       routeCorridor: option.routeCorridor,
       highways: option.highways,
+      borderCrossings: option.borderCrossings || [],
       permitRequiredStates: option.permitRequiredStates,
       escortRequiredStates: option.escortRequiredStates || [],
       escortWarnings: option.escortWarnings || [],

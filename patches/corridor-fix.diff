@@ -1,0 +1,213 @@
+diff --git a/lib/build-corridor.ts b/lib/build-corridor.ts
+index ae10db4..94d5685 100644
+--- a/lib/build-corridor.ts
++++ b/lib/build-corridor.ts
+@@ -4,9 +4,33 @@ import { getRoute, type RoutingEngine } from './routing'
+ import { sampleRoutePoints } from './route-utils'
+ import { reverseGeocode } from './geocoding'
+ 
++/** Point on the route used for portal border entry/exit fields. */
++export interface BorderPoint {
++  lat: number
++  lon: number
++  highway?: string
++}
++
++/**
++ * Structured state-border crossing for permit portal forms.
++ * Derived from the same OSRM/GraphHopper geometry that produced routeCorridor
++ * so alternate corridors always carry consistent entry/exit points.
++ * Single-state corridors correctly produce an empty array.
++ */
++export interface BorderCrossing {
++  fromState: string
++  toState: string
++  /** First geometry point of the step that enters toState */
++  entry: BorderPoint
++  /** Last geometry point of the segment while still in toState (or the next transition) */
++  exit: BorderPoint
++}
++
+ export interface CorridorResult {
+   routeCorridor: string[]          // List of states (e.g. ["AL", "TN", "AR"])
+   highways?: string[]              // List of major highways with realistic entry/exit points from OSRM step geometry (e.g. ["I-40 (entry 34.85,-86.62 exit 35.12,-90.05)", "US 64"])
++  /** Structured border crossings aligned with this corridor's geometry (empty for single-state). */
++  borderCrossings?: BorderCrossing[]
+   distanceMeters?: number
+   durationSeconds?: number
+   /** Which routing engine produced this corridor (for UI labeling + debugging) */
+@@ -57,15 +81,46 @@ export async function buildIntelligentCorridor(
+     }
+   )
+ 
+-  if (!response || response.routes.length === 0) {
+-    return []
+-  }
+-
+-  const usedEngine = response.engine
+-  const engineNote = response.note
+-
++  const usedEngine = response?.engine ?? routingEngine
++  const engineNote = response?.note
++
+   let corridors: CorridorResult[] = []
+ 
++  // Hard guarantee for pure intra-state (e.g. KS->KS): never return empty when
++  // both origin and destination are valid numbers inside the same known state.
++  // This prevents the agent from failing with "no route" on single-state permits.
++  const sameState =
++    originState &&
++    destState &&
++    originState.toUpperCase().trim() === destState.toUpperCase().trim() &&
++    Number.isFinite(originLat) &&
++    Number.isFinite(originLon) &&
++    Number.isFinite(destLat) &&
++    Number.isFinite(destLon)
++
++  if ((!response || response.routes.length === 0) && sameState) {
++    const o = originState!.toUpperCase().trim()
++    const dist = haversineMeters(originLat, originLon, destLat, destLon)
++    corridors.push({
++      routeCorridor: [o],
++      highways: [],
++      borderCrossings: [],
++      distanceMeters: dist,
++      durationSeconds: Math.round(dist / 22.35), // ~50 mph rough
++      engine: usedEngine,
++      engineNote: 'Same-state fallback (routing engine returned no usable path)',
++      permitReady: true,
++      permitWarnings: [
++        'Used same-state fallback corridor; verify the local highway network for this pair before filing',
++      ],
++    })
++    return corridors
++  }
++
++  if (!response || response.routes.length === 0) {
++    return []
++  }
++
+   // 2. Process each route returned by the chosen engine (OSRM or GraphHopper)
+   for (const route of response.routes) {
+     // Robust corridor extraction:
+@@ -146,9 +201,17 @@ export async function buildIntelligentCorridor(
+     // Strengthen corridor using existing heuristic (unchanged behavior)
+     states = completeCorridorWithHighways(states, highways)
+ 
++    // Structured border crossings derived from the same steps/geometry that produced this corridor.
++    // Single-state correctly yields []. Multi-state yields one entry per state transition.
++    const borderCrossings =
++      steps && steps.length > 0 && states.length >= 2
++        ? extractBorderCrossingsFromSteps(steps)
++        : []
++
+     corridors.push({
+       routeCorridor: states,
+       highways,
++      borderCrossings,
+       distanceMeters: route.distance,
+       durationSeconds: route.duration,
+       engine: usedEngine,
+@@ -292,6 +355,18 @@ function calculateRouteQualityScore(
+   return score
+ }
+ 
++/** Great-circle distance in meters (used for same-state fallback). */
++function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
++  const R = 6371000
++  const toRad = (d: number) => (d * Math.PI) / 180
++  const dLat = toRad(lat2 - lat1)
++  const dLon = toRad(lon2 - lon1)
++  const a =
++    Math.sin(dLat / 2) ** 2 +
++    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
++  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)))
++}
++
+ /**
+  * Simple helper to convert full state name to abbreviation
+  * (We can improve this later with a proper map)
+@@ -508,6 +583,83 @@ function getPrimaryStateForStep(step: any): string | null {
+   return candidates.length > 0 ? candidates[candidates.length - 1] : null
+ }
+ 
++/**
++ * Extract structured state-border crossings from the same OSRM steps used for routeCorridor.
++ * One BorderCrossing per actual state change. Entry = first geometry of the entering step;
++ * exit is refined to the last geometry of the segment still attributed to the new state
++ * (or the next transition if the state is only a single step).
++ * Single-state or empty steps -> []. Keeps portal forms aligned with the chosen geometry.
++ */
++export function extractBorderCrossingsFromSteps(steps: any[]): BorderCrossing[] {
++  if (!steps || steps.length === 0) return []
++
++  const crossings: BorderCrossing[] = []
++  let prevState: string | null = null
++  let open: {
++    fromState: string
++    toState: string
++    entry: BorderPoint
++    lastPoint: BorderPoint
++  } | null = null
++
++  for (const step of steps) {
++    const curr = getPrimaryStateForStep(step)
++    if (!curr) continue
++
++    const highway = getPrimaryHighwayForStep(step) || undefined
++    const samples = stepCoordinateSamples(step)
++    const first = samples[0]
++    const last = samples[samples.length - 1] || first
++
++    if (prevState !== null && curr !== prevState) {
++      // Close any open crossing for the previous state
++      if (open) {
++        crossings.push({
++          fromState: open.fromState,
++          toState: open.toState,
++          entry: open.entry,
++          exit: open.lastPoint,
++        })
++        open = null
++      }
++
++      // Open a new crossing into the current state
++      if (first) {
++        const entry: BorderPoint = {
++          lat: first[0],
++          lon: first[1],
++          highway,
++        }
++        open = {
++          fromState: prevState,
++          toState: curr,
++          entry,
++          lastPoint: last
++            ? { lat: last[0], lon: last[1], highway }
++            : entry,
++        }
++      }
++    } else if (open && last) {
++      // Still in the same state - keep extending the exit point
++      open.lastPoint = { lat: last[0], lon: last[1], highway: highway || open.lastPoint.highway }
++    }
++
++    prevState = curr
++  }
++
++  // Flush the final open crossing
++  if (open) {
++    crossings.push({
++      fromState: open.fromState,
++      toState: open.toState,
++      entry: open.entry,
++      exit: open.lastPoint,
++    })
++  }
++
++  return crossings
++}
++
+ /**
+  * Walk every OSRM step and build ordered state corridor from geometry attribution.
+  * Ports or-tools build_corridor_from_steps for accurate traversal (captures TN on I-24, MO on I-44, etc.).

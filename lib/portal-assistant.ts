@@ -953,6 +953,143 @@ export interface PrefillPackage {
   approvalNotes: string[]
 }
 
+/** Geometry point used for portal border entry/exit copy-paste fields. */
+export interface PortalBorderPoint {
+  lat: number
+  lon: number
+  highway?: string
+}
+
+/** Minimal border-crossing shape accepted by portal prefill (matches Corridor BorderCrossing). */
+export interface PortalBorderCrossing {
+  fromState: string
+  toState: string
+  entry: PortalBorderPoint
+  exit: PortalBorderPoint
+}
+
+export type StateBorderRole = 'origin' | 'destination' | 'through' | 'single' | 'unknown'
+
+export interface StateBorderFields {
+  role: StateBorderRole
+  entryPoint: string
+  exitPoint: string
+  borderEntry: string
+  borderExit: string
+  borderSummary: string
+}
+
+/**
+ * Formats a border geometry point for portal form fields.
+ * Example: "36.99412,-94.61780 (I-44)"
+ */
+export function formatBorderPoint(point?: PortalBorderPoint | null): string {
+  if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lon)) return ''
+  const coords = `${point.lat},${point.lon}`
+  return point.highway ? `${coords} (${point.highway})` : coords
+}
+
+/**
+ * Resolves entry/exit border fields for a single state within a multi-state corridor.
+ * - single-state corridors: role `single`, empty points
+ * - through states: entry (into state) + exit (leaving state)
+ * - origin/destination: only the relevant side when crossings are available
+ */
+export function resolveStateBorderFields(
+  stateCode: string,
+  routeCorridor: string[],
+  borderCrossings?: PortalBorderCrossing[] | null
+): StateBorderFields {
+  const state = (stateCode || '').trim().toUpperCase()
+  const corridor = (routeCorridor || [])
+    .map((s) => String(s || '').trim().toUpperCase())
+    .filter(Boolean)
+  const crossings = borderCrossings || []
+
+  const empty = (role: StateBorderRole, summary: string): StateBorderFields => ({
+    role,
+    entryPoint: '',
+    exitPoint: '',
+    borderEntry: '',
+    borderExit: '',
+    borderSummary: summary,
+  })
+
+  if (!state) {
+    return empty('unknown', 'No state selected')
+  }
+
+  if (corridor.length <= 1) {
+    const isSingle = corridor.length === 1 && corridor[0] === state
+    return empty(
+      isSingle ? 'single' : 'unknown',
+      isSingle ? 'Single-state corridor (no border crossings)' : 'No multi-state corridor for border points'
+    )
+  }
+
+  const idx = corridor.indexOf(state)
+  let role: StateBorderRole = 'unknown'
+  if (idx === 0) role = 'origin'
+  else if (idx === corridor.length - 1) role = 'destination'
+  else if (idx > 0) role = 'through'
+
+  // Prefer adjacency-relative crossings (handles re-entry better than first-match alone)
+  const prevState = idx > 0 ? corridor[idx - 1] : undefined
+  const nextState = idx >= 0 && idx < corridor.length - 1 ? corridor[idx + 1] : undefined
+  const adjEnter = prevState
+    ? crossings.find(
+        (c) =>
+          String(c.fromState || '').toUpperCase() === prevState &&
+          String(c.toState || '').toUpperCase() === state
+      )
+    : undefined
+  const adjLeave = nextState
+    ? crossings.find(
+        (c) =>
+          String(c.fromState || '').toUpperCase() === state &&
+          String(c.toState || '').toUpperCase() === nextState
+      )
+    : undefined
+  const enterCrossing =
+    adjEnter || crossings.find((c) => String(c.toState || '').toUpperCase() === state)
+  const leaveCrossing =
+    adjLeave || crossings.find((c) => String(c.fromState || '').toUpperCase() === state)
+
+  let entryPoint = ''
+  let exitPoint = ''
+
+  if (role === 'origin') {
+    // Starts in-state — exit is the outbound border into the next state only
+    exitPoint = formatBorderPoint(leaveCrossing?.entry)
+  } else if (role === 'destination') {
+    entryPoint = formatBorderPoint(enterCrossing?.entry)
+  } else if (role === 'through') {
+    entryPoint = formatBorderPoint(enterCrossing?.entry)
+    // Prefer the actual outbound border (enter next state); fall back to last point still in-state
+    exitPoint = formatBorderPoint(leaveCrossing?.entry || enterCrossing?.exit)
+  }
+
+  const parts: string[] = [`Role: ${role}`]
+  if (entryPoint) parts.push(`Entry: ${entryPoint}`)
+  if (exitPoint) parts.push(`Exit: ${exitPoint}`)
+  if (!entryPoint && !exitPoint) {
+    if (crossings.length === 0) {
+      parts.push('No geometry border crossings available')
+    } else {
+      parts.push('No matching border crossings for this state')
+    }
+  }
+
+  return {
+    role,
+    entryPoint,
+    exitPoint,
+    borderEntry: entryPoint,
+    borderExit: exitPoint,
+    borderSummary: parts.join(' · '),
+  }
+}
+
 /** Minimal shape from permit analysis (primary or route option). */
 export interface PortalAnalysisSource {
   routeCorridor?: string[] | null
@@ -1108,6 +1245,21 @@ export function generatePortalPrefill(
   if (request.route_corridor) {
     generated.route = request.route_corridor.join(' → ')
   }
+
+  // Geometry-aligned border entry/exit for this state's portal form
+  const borderCrossings =
+    request.border_crossings || request.borderCrossings || []
+  const borderFields = resolveStateBorderFields(
+    stateCode,
+    request.route_corridor || [],
+    borderCrossings
+  )
+  generated.border_role = borderFields.role
+  generated.entry_point = borderFields.entryPoint
+  generated.exit_point = borderFields.exitPoint
+  generated.border_entry = borderFields.borderEntry
+  generated.border_exit = borderFields.borderExit
+  generated.border_summary = borderFields.borderSummary
 
   // Pull rich equipment/cargo snapshots from saved permit_request for accurate vehicle prefill
   const equip = request.equipment || {}

@@ -93,6 +93,44 @@ describe('buildPermitRequestInsertRecord', () => {
       description: 'Load',
     })
   })
+
+  it('maps border_crossings and highways onto the insert record (migration 043)', () => {
+    const crossings = [
+      {
+        fromState: 'NE',
+        toState: 'SD',
+        entry: { lat: 42.99, lon: -98.52, highway: 'US-281' },
+        exit: { lat: 45.91, lon: -100.05, highway: 'US-83' },
+      },
+      {
+        fromState: 'SD',
+        toState: 'ND',
+        entry: { lat: 45.93, lon: -100.05, highway: 'US-83' },
+        exit: { lat: 46.89, lon: -102.79, highway: 'I-94' },
+      },
+    ]
+    const highways = ['US-281', 'US-83', 'I-94']
+
+    const record = buildPermitRequestInsertRecord(
+      {
+        ...basePayload,
+        border_crossings: crossings,
+        highways,
+      },
+      'user-abc'
+    )
+
+    expect(record.border_crossings).toEqual(crossings)
+    expect(record.highways).toEqual(highways)
+    // Keep alignment with corridor for portal prefill consumers
+    expect(record.route_corridor).toEqual(['NE', 'SD', 'ND'])
+  })
+
+  it('defaults border_crossings and highways to [] when omitted (backward compatible)', () => {
+    const record = buildPermitRequestInsertRecord(basePayload, 'user-abc')
+    expect(record.border_crossings).toEqual([])
+    expect(record.highways).toEqual([])
+  })
 })
 
 describe('validateCargoOrganizationId', () => {

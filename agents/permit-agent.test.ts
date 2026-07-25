@@ -221,6 +221,142 @@ describe('permit-agent scale findings', () => {
   })
 })
 
+describe('permit-agent borderCrossings pass-through', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSnapToStateHighway.mockImplementation(async (lat: number, lon: number) => ({
+      lat,
+      lon,
+      snapped: false,
+    }))
+  })
+
+  it('includes borderCrossings from a single corridor mock on options', async () => {
+    const crossings = [
+      {
+        fromState: 'OK',
+        toState: 'KS',
+        entry: { lat: 36.99, lon: -94.62, highway: 'US-69' },
+        exit: { lat: 39.8, lon: -95.0, highway: 'US-75' },
+      },
+    ]
+    mockBuildIntelligentCorridor.mockResolvedValueOnce([
+      {
+        routeCorridor: ['OK', 'KS'],
+        highways: ['US-69'],
+        borderCrossings: crossings,
+        distanceMeters: 200_000,
+        durationSeconds: 7200,
+        engine: 'osrm',
+      },
+    ])
+
+    const result = await processPermitRequest({
+      origin: { city: 'Tulsa', state: 'OK' },
+      destination: { city: 'Wichita', state: 'KS' },
+      weight: 80000,
+      length: 74,
+      width: 8.5,
+      height: 13.5,
+      originLat: 36.15,
+      originLon: -95.99,
+      destinationLat: 37.69,
+      destinationLon: -97.34,
+    })
+
+    expect(result.status).toBe('pending_review')
+    expect(result.options[0].borderCrossings).toEqual(crossings)
+  })
+
+  it('merges multi-leg borderCrossings in order', async () => {
+    const leg1 = [
+      {
+        fromState: 'NE',
+        toState: 'SD',
+        entry: { lat: 42.9, lon: -97.4, highway: 'I-29' },
+        exit: { lat: 43.5, lon: -96.7, highway: 'I-29' },
+      },
+    ]
+    const leg2 = [
+      {
+        fromState: 'SD',
+        toState: 'ND',
+        entry: { lat: 45.9, lon: -96.6, highway: 'I-29' },
+        exit: { lat: 46.8, lon: -96.8, highway: 'I-29' },
+      },
+    ]
+    mockBuildIntelligentCorridor
+      .mockResolvedValueOnce([
+        {
+          routeCorridor: ['NE', 'SD'],
+          highways: ['I-29'],
+          borderCrossings: leg1,
+          distanceMeters: 100_000,
+          durationSeconds: 3600,
+          engine: 'osrm',
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          routeCorridor: ['SD', 'ND'],
+          highways: ['I-29'],
+          borderCrossings: leg2,
+          distanceMeters: 120_000,
+          durationSeconds: 4000,
+          engine: 'osrm',
+        },
+      ])
+
+    const result = await processPermitRequest({
+      origin: { city: 'Grand Island', state: 'NE' },
+      destination: { city: 'Dickinson', state: 'ND' },
+      drops: [
+        { query: 'Sioux Falls', city: 'Sioux Falls', state: 'SD', lat: 43.54, lon: -96.73 },
+        { query: 'Dickinson', city: 'Dickinson', state: 'ND', lat: 46.879, lon: -102.789 },
+      ],
+      weight: 80000,
+      length: 74,
+      width: 8.5,
+      height: 13.5,
+      originLat: 40.926,
+      originLon: -98.342,
+      destinationLat: 46.879,
+      destinationLon: -102.789,
+    })
+
+    expect(result.status).toBe('pending_review')
+    expect(mockBuildIntelligentCorridor).toHaveBeenCalledTimes(2)
+    expect(result.options[0].borderCrossings).toEqual([...leg1, ...leg2])
+  })
+
+  it('defaults borderCrossings to [] when corridor omits them', async () => {
+    mockBuildIntelligentCorridor.mockResolvedValueOnce([
+      {
+        routeCorridor: ['NE', 'SD'],
+        highways: [],
+        distanceMeters: 50_000,
+        durationSeconds: 1800,
+        engine: 'osrm',
+      },
+    ])
+
+    const result = await processPermitRequest({
+      origin: { city: 'Omaha', state: 'NE' },
+      destination: { city: 'Sioux Falls', state: 'SD' },
+      weight: 80000,
+      length: 74,
+      width: 8.5,
+      height: 13.5,
+      originLat: 41.25,
+      originLon: -96.0,
+      destinationLat: 43.54,
+      destinationLon: -96.73,
+    })
+
+    expect(result.options[0].borderCrossings).toEqual([])
+  })
+})
+
 describe('permit-agent escort integration', () => {
   it('12\'7" width manual corridor surfaces escortWarnings via analyzeCorridor', async () => {
     const widthFt = parseDimensionInput("12'7")!.feetDecimal

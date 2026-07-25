@@ -79,3 +79,7 @@ or-tools-service/*.pyo
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Agent / IDE / session artifacts (do not ship)
+agent-tools/
+terminals/

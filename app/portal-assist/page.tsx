@@ -42,6 +42,19 @@ interface PermitRequest {
   height: number
   route_corridor: string[] | null
   permit_required_states: string[] | null
+  /** Geometry-aligned border crossings (snake_case DB-style or camelCase agent-style). */
+  border_crossings?: Array<{
+    fromState: string
+    toState: string
+    entry: { lat: number; lon: number; highway?: string }
+    exit: { lat: number; lon: number; highway?: string }
+  }> | null
+  borderCrossings?: Array<{
+    fromState: string
+    toState: string
+    entry: { lat: number; lon: number; highway?: string }
+    exit: { lat: number; lon: number; highway?: string }
+  }> | null
   equipment?: Record<string, any> | null
   cargo?: Record<string, any> | null
   highways?: string[] | null
@@ -323,6 +336,27 @@ export default function PortalAssistPage() {
       height: 14.2,
       route_corridor: ['TX', 'OK', 'MO', 'IL'],
       permit_required_states: ['TX', 'IL'],
+      // Sample geometry-aligned crossings so demo portal prefill shows entry/exit
+      border_crossings: [
+        {
+          fromState: 'TX',
+          toState: 'OK',
+          entry: { lat: 33.84, lon: -96.66, highway: 'US-75' },
+          exit: { lat: 36.75, lon: -96.0, highway: 'US-75' },
+        },
+        {
+          fromState: 'OK',
+          toState: 'MO',
+          entry: { lat: 36.99, lon: -94.62, highway: 'I-44' },
+          exit: { lat: 38.5, lon: -90.5, highway: 'I-44' },
+        },
+        {
+          fromState: 'MO',
+          toState: 'IL',
+          entry: { lat: 38.63, lon: -90.18, highway: 'I-55' },
+          exit: { lat: 41.8, lon: -87.7, highway: 'I-55' },
+        },
+      ],
       equipment: {
         unit_number: 'PETE-4721',
         vin: '1XPBDP9X5HD123456',
@@ -1064,6 +1098,26 @@ export default function PortalAssistPage() {
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
                       <div className={`${fieldLabelTinyClass} mb-0.5`}>Vehicle / VIN (from equip)</div>
                       <div className="font-mono text-gray-900">{(prefill.generatedFields as any).vehicle_id}</div>
+                    </div>
+                  )}
+                  {(prefill.generatedFields as any).entry_point && (
+                    <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
+                      <div className={`${fieldLabelTinyClass} mb-0.5`}>Border Entry Point</div>
+                      <div className="font-mono break-words text-gray-900">{(prefill.generatedFields as any).entry_point}</div>
+                    </div>
+                  )}
+                  {(prefill.generatedFields as any).exit_point && (
+                    <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
+                      <div className={`${fieldLabelTinyClass} mb-0.5`}>Border Exit Point</div>
+                      <div className="font-mono break-words text-gray-900">{(prefill.generatedFields as any).exit_point}</div>
+                    </div>
+                  )}
+                  {((prefill.generatedFields as any).entry_point ||
+                    (prefill.generatedFields as any).exit_point) &&
+                    (prefill.generatedFields as any).border_summary && (
+                    <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3 sm:col-span-2">
+                      <div className={`${fieldLabelTinyClass} mb-0.5`}>Border Summary</div>
+                      <div className="font-mono break-words text-gray-900">{(prefill.generatedFields as any).border_summary}</div>
                     </div>
                   )}
                 </div>
