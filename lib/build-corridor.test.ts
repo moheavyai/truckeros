@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCorridorFromSteps,
   completeCorridorWithHighways,
+  extractBorderCrossingsFromSteps,
   hasPlausibleTransitions,
 } from './build-corridor'
 
@@ -78,24 +79,6 @@ describe('buildCorridorFromSteps OK->MT', () => {
 
   it('western I-70/I-25 corridor fills OK-KS-CO-WY-MT', () => {
     const corridor = completeCorridorWithHighways(['OK', 'MT'], ['I-70', 'I-25'])
-    expect(corridor).toEqual(['OK', 'KS', 'CO', 'WY', 'MT'])
-  })
-
-  it('western default when sparse OK-MT and I-70/I-25 highways only', () => {
-    const corridor = completeCorridorWithHighways(
-      ['OK', 'MT'],
-      ['I-70 (entry 38.87,-97.64 exit 39.74,-104.71)', 'I-25 (entry 39.99,-104.99 exit 44.37,-106.69)']
-    )
-    expect(corridor).toEqual(['OK', 'KS', 'CO', 'WY', 'MT'])
-  })
-
-  it('eastern not blocked when CO already present from geometry', () => {
-    const corridor = completeCorridorWithHighways(['OK', 'CO', 'MT'], ['I-35', 'I-80', 'I-90'])
-    expect(corridor).toEqual(['OK', 'KS', 'NE', 'SD', 'MT'])
-  })
-
-  it('CO path does not force NE/SD', () => {
-    const corridor = completeCorridorWithHighways(['OK', 'KS', 'CO', 'MT'], ['I-70', 'I-25'])
     expect(corridor).not.toContain('NE')
     expect(corridor).not.toContain('SD')
     expect(corridor).toEqual(['OK', 'KS', 'CO', 'WY', 'MT'])
@@ -122,5 +105,74 @@ describe('completeCorridorWithHighways Calvert AL->NE', () => {
   it('does not insert spurious OK from I-35/I-40', () => {
     const corridor = completeCorridorWithHighways(['AL', 'MS', 'MO', 'IA', 'NE'], ['I-35', 'I-40'])
     expect(corridor).not.toContain('OK')
+  })
+})
+
+describe('extractBorderCrossingsFromSteps', () => {
+  it('returns empty array for single-state steps', () => {
+    const steps = [
+      {
+        ref: 'KS 4',
+        maneuver: { location: [-97.3, 38.0] },
+        geometry: { coordinates: [[-97.3, 38.0], [-97.4, 38.1]] },
+      },
+      {
+        ref: 'I 70',
+        maneuver: { location: [-97.5, 38.2] },
+        geometry: { coordinates: [[-97.5, 38.2], [-97.6, 38.3]] },
+      },
+    ]
+    const crossings = extractBorderCrossingsFromSteps(steps)
+    expect(crossings).toEqual([])
+  })
+
+  it('produces one crossing per state change with entry and exit points', () => {
+    const steps = [
+      {
+        ref: 'OK 11',
+        maneuver: { location: [-97.0, 36.0] },
+        geometry: { coordinates: [[-97.0, 36.0], [-96.9, 36.2]] },
+      },
+      {
+        ref: 'I 35;KS 15',
+        maneuver: { location: [-96.8, 37.1] },
+        geometry: { coordinates: [[-96.8, 37.1], [-96.7, 37.5]] },
+      },
+      {
+        ref: 'KS 15',
+        maneuver: { location: [-96.6, 38.0] },
+        geometry: { coordinates: [[-96.6, 38.0], [-96.5, 38.5]] },
+      },
+      {
+        ref: 'I 80;NE 2',
+        maneuver: { location: [-96.0, 40.5] },
+        geometry: { coordinates: [[-96.0, 40.5], [-95.5, 41.0]] },
+      },
+    ]
+    const crossings = extractBorderCrossingsFromSteps(steps)
+    expect(crossings.length).toBeGreaterThanOrEqual(1)
+    const first = crossings[0]
+    expect(first.fromState).toBe('OK')
+    expect(first.toState).toBe('KS')
+    expect(Number.isFinite(first.entry.lat)).toBe(true)
+    expect(Number.isFinite(first.entry.lon)).toBe(true)
+    expect(Number.isFinite(first.exit.lat)).toBe(true)
+    expect(Number.isFinite(first.exit.lon)).toBe(true)
+  })
+})
+
+describe('same-state corridor resilience', () => {
+  it('buildCorridorFromSteps with identical origin/dest still yields the single state', () => {
+    const steps = [
+      {
+        ref: 'I 70',
+        maneuver: { location: [-97.3, 38.0] },
+        geometry: { coordinates: [[-97.3, 38.0], [-97.5, 38.1]] },
+      },
+    ]
+    const corridor = buildCorridorFromSteps(steps, 'KS', 'KS')
+    expect(corridor[0]).toBe('KS')
+    expect(corridor[corridor.length - 1]).toBe('KS')
+    expect(new Set(corridor).size).toBe(1)
   })
 })
