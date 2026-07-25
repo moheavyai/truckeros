@@ -1,0 +1,43 @@
+diff --git a/app/permit-test/page.tsx b/app/permit-test/page.tsx
+index de488fc..ffe350b 100644
+--- a/app/permit-test/page.tsx
++++ b/app/permit-test/page.tsx
+@@ -28,7 +28,7 @@ import {
+   type LocationStop,
+ } from '@/lib/location-stop'
+ import { formatHighwayForDisplay, formatHighwaysForDisplay } from '@/lib/format-highway-display'
+-import { getPortalStatesForAnalysis, openStatePortals } from '@/lib/portal-assistant'
++// portal launch moved to Portal Assist page
+ import { formatDimensionDisplay, formatRigSummaryLine as buildRigSummaryLine } from '@/lib/parse-dimension'
+ import { getGrossHeightDisplay } from '@/lib/routing-envelope-display'
+ import { formatLicensePlateDisplay } from '@/lib/license-plate'
+@@ -1970,8 +1970,8 @@ export default function PermitTestPage() {
+     // Always derive the primary option correctly (supports both single and multi-option shapes)
+     const primary = getPrimary(agentResult, null)
+ 
+-    // Open portals synchronously in the click gesture (before await) to reduce popup blocking
+-    openStatePortals(getPortalStatesForAnalysis(primary), { staggerMs: 0 })
++    // Do not auto-launch state portals here — navigate to Portal Assist for prefill review first.
++    // Final portal launch happens on the Portal Assist page after the user verifies data.
+ 
+     setLoading(true)
+ 
+@@ -2093,8 +2093,7 @@ export default function PermitTestPage() {
+   const handleApproveSpecificOption = async (option: any) => {
+     if (!option || !agentResult) return;
+ 
+-    // Open portals synchronously in the click gesture (before await) to reduce popup blocking
+-    openStatePortals(getPortalStatesForAnalysis(option), { staggerMs: 0 })
++    // Do not auto-launch state portals here — navigate to Portal Assist for prefill review first.
+ 
+     setLoading(true)
+ 
+@@ -3898,7 +3897,7 @@ export default function PermitTestPage() {
+                         disabled={loading}
+                         className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-8 py-3 rounded-lg text-lg disabled:bg-gray-400"
+                       >
+-                        {loading ? 'Opening portals…' : 'Approve and Launch Portals'}
++                        {loading ? 'Saving…' : 'Approve & Continue to Portal Assist'}
+                       </button>
+                       <button
+                         onClick={() => setShowChangeRouteInput(!showChangeRouteInput)}
