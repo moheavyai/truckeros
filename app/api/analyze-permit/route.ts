@@ -103,6 +103,8 @@ export async function POST(request: NextRequest) {
             width: loadDetails.width,
             height: loadDetails.height,
             route_corridor: primary.routeCorridor || [],
+            border_crossings: primary.borderCrossings || [],
+            highways: primary.highways || [],
             permit_required_states: primary.permitRequiredStates || [],
             requires_permit: (primary.permitRequiredStates?.length || 0) > 0,
             reasons: primary.reasons || [],

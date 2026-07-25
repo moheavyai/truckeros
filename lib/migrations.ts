@@ -129,6 +129,10 @@ export function getMigration042Sql(): string {
   return getMigrationSql('042_axle_configs.sql')
 }
 
+export function getMigration043Sql(): string {
+  return getMigrationSql('043_permit_request_border_crossings.sql')
+}
+
 export function getFullMigrationSql(): string {
   return MIGRATION_FILES.map(readMigrationFile).join('\n\n')
 }

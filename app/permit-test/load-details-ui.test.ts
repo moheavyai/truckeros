@@ -150,6 +150,22 @@ describe('Permit test page — load details cargo fields', () => {
     }
   })
 
+  it('persists border_crossings and highways in both approve/save handlers', () => {
+    const source = readPermitPageSource()
+    const approveSave = approveAndSaveHandlerSlice(source)
+    const approveSpecific = approveSpecificHandlerSlice(source)
+
+    // Primary approve path: geometry from primary option
+    expect(approveSave).toContain('route_corridor: primary.routeCorridor || []')
+    expect(approveSave).toContain('border_crossings: primary.borderCrossings || []')
+    expect(approveSave).toContain('highways: primary.highways || []')
+
+    // Specific-option approve path: geometry from selected option
+    expect(approveSpecific).toContain('route_corridor: option.routeCorridor || []')
+    expect(approveSpecific).toContain('border_crossings: option.borderCrossings || []')
+    expect(approveSpecific).toContain('highways: option.highways || []')
+  })
+
   it('uses buildPermitCargoSnapshot in both save handlers only', () => {
     const source = readPermitPageSource()
     const approveSave = approveAndSaveHandlerSlice(source)

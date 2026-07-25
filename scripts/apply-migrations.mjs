@@ -92,7 +92,7 @@ async function checkSchema(admin) {
   const checks = [
     ['equipment_profiles', ['license_plate', 'license_plate_state']],
     ['rig_configurations', ['is_default']],
-    ['permit_requests', ['origin_query', 'destination_query', 'drops']],
+    ['permit_requests', ['origin_query', 'destination_query', 'drops', 'border_crossings', 'highways']],
     ['member_profiles', ['company_name', 'user_roles', 'organization_id', 'is_primary_owner']],
     ['team_member_profiles', ['organization_id', 'driver_full_name', 'user_roles', 'permissions']],
     ['organizations', ['name', 'usdot_number', 'created_by_user_id']],

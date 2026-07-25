@@ -18,6 +18,7 @@
 // - This code adds defense-in-depth by forcing the correct user_id server-side.
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { BorderCrossing } from '@/lib/build-corridor'
 import {
   sanitizeLoadedArrangement,
   sanitizeMoveType,
@@ -56,6 +57,10 @@ export interface SavePermitRequestInput {
   cargo?: Record<string, any>
 
   route_corridor?: string[]
+  // Portal-critical geometry from corridor builder — must stay aligned with route_corridor
+  // so History → Portal Assist can prefill real entry/exit coords (migration 043).
+  border_crossings?: BorderCrossing[]
+  highways?: string[]
   permit_required_states?: string[]
   requires_permit?: boolean
   reasons?: string[]
@@ -76,7 +81,7 @@ export interface SavedPermitRequest {
   [key: string]: any
 }
 
-/** Columns on permit_requests that SavePermitRequestInput may populate (migrations 002, 009, 014). */
+/** Columns on permit_requests that SavePermitRequestInput may populate (migrations 002, 009, 014, 043). */
 export type PermitRequestInsertRecord = {
   user_id: string
   origin_city: string
@@ -93,6 +98,9 @@ export type PermitRequestInsertRecord = {
   equipment?: Record<string, unknown> | null
   cargo?: Record<string, unknown> | null
   route_corridor?: string[]
+  /** Portal-critical geometry; keep aligned with route_corridor (migration 043). */
+  border_crossings?: BorderCrossing[]
+  highways?: string[]
   permit_required_states?: string[]
   requires_permit?: boolean
   reasons?: string[]
@@ -217,6 +225,10 @@ export function buildPermitRequestInsertRecord(
     equipment: payload.equipment ?? null,
     cargo: cargoOverride !== undefined ? cargoOverride : sanitizeCargoSnapshot(payload.cargo),
     route_corridor: payload.route_corridor ?? [],
+    // Always emit these keys (default []). Deploy migration 043 before/with this app code —
+    // PostgREST will reject inserts for unknown columns if schema is not yet applied.
+    border_crossings: payload.border_crossings ?? [],
+    highways: payload.highways ?? [],
     permit_required_states: payload.permit_required_states ?? [],
     requires_permit: payload.requires_permit ?? false,
     reasons: payload.reasons ?? [],

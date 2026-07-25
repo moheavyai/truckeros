@@ -79,6 +79,8 @@ const SCHEMA_CHECKS: SchemaCheck[] = [
       'origin_query',
       'destination_query',
       'drops',
+      'border_crossings',
+      'highways',
     ],
   },
   {

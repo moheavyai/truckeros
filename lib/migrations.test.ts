@@ -36,6 +36,7 @@ import {
   getMigration040Sql,
   getMigration041Sql,
   getMigration042Sql,
+  getMigration043Sql,
   getScriptMigrationSql,
 } from './migrations'
 
@@ -75,6 +76,7 @@ describe('migration manifest', () => {
       '040_phase1_team_invite_self_clerk_update.sql',
       '041_phase1_team_invite_self_clerk_session_match.sql',
       '042_axle_configs.sql',
+      '043_permit_request_border_crossings.sql',
     ])
   })
 
@@ -776,6 +778,36 @@ describe('migration manifest', () => {
     )
     expect(adminMigrate).toContain("table: 'axle_configs'")
     expect(adminMigrate).toMatch(/axle_configs[\s\S]*user_id[\s\S]*state_rules/)
+  })
+
+  it('migration 043 adds border_crossings and highways to permit_requests', () => {
+    const sql = getMigration043Sql()
+    expect(sql).toContain('ALTER TABLE IF EXISTS permit_requests')
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS border_crossings jsonb DEFAULT')
+    expect(sql).toContain("DEFAULT '[]'::jsonb")
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS highways jsonb DEFAULT')
+    expect(sql).toContain('border_crossings')
+    expect(sql).toContain('highways')
+    expect(sql).toContain("NOTIFY pgrst, 'reload schema'")
+    expect(MIGRATION_FILES).toContain('043_permit_request_border_crossings.sql')
+
+    const scriptPath = path.join(process.cwd(), 'scripts', 'apply-migration-043.mjs')
+    expect(fs.existsSync(scriptPath)).toBe(true)
+    expect(fs.readFileSync(scriptPath, 'utf8')).toContain('043_permit_request_border_crossings.sql')
+
+    // Bulk apply-migrations schema verify includes new permit_requests columns
+    const applyAll = fs.readFileSync(
+      path.join(process.cwd(), 'scripts', 'apply-migrations.mjs'),
+      'utf8'
+    )
+    expect(applyAll).toMatch(/permit_requests[\s\S]*border_crossings[\s\S]*highways/)
+
+    // Admin migrate SCHEMA_CHECKS includes border_crossings + highways on permit_requests
+    const adminMigrate = fs.readFileSync(
+      path.join(process.cwd(), 'app', 'api', 'admin', 'migrate', 'route.ts'),
+      'utf8'
+    )
+    expect(adminMigrate).toMatch(/table:\s*'permit_requests'[\s\S]*border_crossings[\s\S]*highways/)
   })
 
   it('splits Owner / Admin into Owner and Admin roles in migration 026', () => {
