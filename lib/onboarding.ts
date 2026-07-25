@@ -46,6 +46,7 @@ export type DashboardToolId =
   | 'profile'
   | 'history'
   | 'carriers'
+  | 'axle_optimizer'
 
 export type DashboardTool = {
   id: DashboardToolId
@@ -410,6 +411,16 @@ export function getVisibleDashboardTools(
       label: 'View Analysis History',
       href: '/history',
       description: 'Review recent permit analyses and corridors.',
+    })
+  }
+
+  // Spacing-based federal/state group planner (not equipment role groups).
+  if (canAccessArea('permit_agent', permissions) || shouldShowEquipmentNav(actor)) {
+    tools.push({
+      id: 'axle_optimizer',
+      label: 'Axle Group Optimizer',
+      href: '/axle-optimizer',
+      description: 'Tune axle spacing for tandem/spread/tridem legal weights.',
     })
   }
 

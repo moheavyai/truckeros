@@ -89,4 +89,35 @@ describe('buildPermitCargoSnapshot', () => {
     })
     expect(snapshot.organizationId).toBe('org-carrier-123')
   })
+
+  it('includes axle group summary when provided for portal/history prefill', () => {
+    const axleGroups = {
+      groups: [
+        {
+          type: 'steer' as const,
+          axleIndexes: [0],
+          axleCount: 1,
+          label: 'Steer',
+          source: 'tractor' as const,
+        },
+        {
+          type: 'drives' as const,
+          axleIndexes: [1, 2],
+          axleCount: 2,
+          label: 'Drives',
+          source: 'tractor' as const,
+        },
+      ],
+      totalAxles: 3,
+      capped: false,
+      axleTypes: ['steer' as const, 'drives' as const, 'drives' as const],
+    }
+    const snapshot = buildPermitCargoSnapshot(baseForm, '', {
+      axleGroups,
+      axleGroupSummary: '3 axles: Steer×1 · Drives×2',
+    })
+    expect(snapshot.axleGroups).toEqual(axleGroups)
+    expect(snapshot.axleGroupSummary).toBe('3 axles: Steer×1 · Drives×2')
+    expect(snapshot.axleWeights).toEqual([16000, 16000])
+  })
 })

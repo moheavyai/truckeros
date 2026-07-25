@@ -35,7 +35,15 @@ export default function DimensionInput({
   }, [value])
 
   const commit = (raw: string) => {
-    const parsed = parseDimensionInput(raw)
+    const trimmed = raw.trim()
+    // Empty field clears the dimension (0) instead of leaving a stale parent value.
+    if (!trimmed) {
+      setText('')
+      lastCommittedRef.current = 0
+      onChange(0, '')
+      return
+    }
+    const parsed = parseDimensionInput(trimmed)
     if (parsed) {
       const display = formatDimensionDisplay(parsed.feetDecimal)
       setText(display)
@@ -43,13 +51,20 @@ export default function DimensionInput({
       onChange(parsed.feetDecimal, display)
       return
     }
-    const num = parseFloat(raw)
+    const num = parseFloat(trimmed)
     if (!Number.isNaN(num) && num > 0) {
       const display = formatDimensionDisplay(num)
       setText(display)
       lastCommittedRef.current = num
       onChange(num, display)
+      return
     }
+    // Unparseable non-empty: revert display to last good value (or blank).
+    setText(
+      lastCommittedRef.current > 0
+        ? formatDimensionDisplay(lastCommittedRef.current)
+        : ''
+    )
   }
 
   return (

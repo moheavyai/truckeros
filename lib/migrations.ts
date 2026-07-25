@@ -125,6 +125,10 @@ export function getMigration041Sql(): string {
   return getMigrationSql('041_phase1_team_invite_self_clerk_session_match.sql')
 }
 
+export function getMigration042Sql(): string {
+  return getMigrationSql('042_axle_configs.sql')
+}
+
 export function getFullMigrationSql(): string {
   return MIGRATION_FILES.map(readMigrationFile).join('\n\n')
 }

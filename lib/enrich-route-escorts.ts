@@ -36,7 +36,9 @@ export async function loadStatePermitRuleMap(
     return new Map()
   }
 
-  return new Map((data || []).map((r) => [r.state_code, r]))
+  return new Map(
+    (data || []).map((r) => [String(r.state_code).toUpperCase().trim(), r])
+  )
 }
 
 export function enrichRouteOptionWithEscorts<T extends RouteOptionEscortFields>(

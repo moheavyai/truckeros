@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { processPermitRequest, type LoadDetails } from '@/agents/permit-agent'
 import { normalizeDrops } from '@/lib/location-stop'
 import { savePermitRequestForUser } from '@/lib/permit-requests'
+import { extractAxleEquipmentFields } from '@/lib/build-load-details'
 
 /**
  * POST /api/analyze-permit
@@ -52,7 +53,10 @@ export async function POST(request: NextRequest) {
         state: body.destination?.state || '',
         zip: body.destination?.zip || '',
       },
-      weight: Number(body.weight),
+      weight:
+        body.grossLoadedWeight != null && Number(body.grossLoadedWeight) > 0
+          ? Number(body.grossLoadedWeight)
+          : Number(body.weight),
       length: Number(body.length),
       width: Number(body.width),
       height: Number(body.height),
@@ -73,6 +77,8 @@ export async function POST(request: NextRequest) {
       routingEngine: body.routingEngine === 'graphhopper' ? 'graphhopper' : 'osrm',
       trailerLengthFt:
         body.trailerLengthFt != null ? Number(body.trailerLengthFt) : undefined,
+      // Axle groups + scale checks
+      ...extractAxleEquipmentFields(body as Record<string, unknown>),
     }
 
     const result = await processPermitRequest(loadDetails)

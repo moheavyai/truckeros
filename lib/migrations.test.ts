@@ -35,6 +35,7 @@ import {
   getMigration039Sql,
   getMigration040Sql,
   getMigration041Sql,
+  getMigration042Sql,
   getScriptMigrationSql,
 } from './migrations'
 
@@ -73,6 +74,7 @@ describe('migration manifest', () => {
       '039_phase1_self_clerk_insert_block.sql',
       '040_phase1_team_invite_self_clerk_update.sql',
       '041_phase1_team_invite_self_clerk_session_match.sql',
+      '042_axle_configs.sql',
     ])
   })
 
@@ -738,6 +740,42 @@ describe('migration manifest', () => {
     expect(fs.readFileSync(scriptPath, 'utf8')).toContain(
       '041_phase1_team_invite_self_clerk_session_match.sql'
     )
+  })
+
+  it('migration 042 creates axle_configs with owner-only RLS', () => {
+    const sql = getMigration042Sql()
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS axle_configs')
+    expect(sql).toContain('user_id uuid NOT NULL REFERENCES auth.users')
+    expect(sql).toContain('organization_id uuid REFERENCES organizations')
+    expect(sql).toContain('axles jsonb')
+    expect(sql).toContain('state_rules jsonb')
+    expect(sql).toContain('ENABLE ROW LEVEL SECURITY')
+    expect(sql).toContain('Users can view their own axle configs')
+    expect(sql).toContain('Users can insert their own axle configs')
+    expect(sql).toContain('Users can update their own axle configs')
+    expect(sql).toContain('Users can delete their own axle configs')
+    expect(sql).toContain('auth.uid() = user_id')
+    expect(MIGRATION_FILES).toContain('042_axle_configs.sql')
+
+    const scriptPath = path.join(process.cwd(), 'scripts', 'apply-migration-042.mjs')
+    expect(fs.existsSync(scriptPath)).toBe(true)
+    expect(fs.readFileSync(scriptPath, 'utf8')).toContain('042_axle_configs.sql')
+
+    // Bulk apply-migrations schema verify includes axle_configs
+    const applyAll = fs.readFileSync(
+      path.join(process.cwd(), 'scripts', 'apply-migrations.mjs'),
+      'utf8'
+    )
+    expect(applyAll).toContain("'axle_configs'")
+    expect(applyAll).toMatch(/axle_configs[\s\S]*user_id[\s\S]*axles[\s\S]*state_rules/)
+
+    // Admin migrate SCHEMA_CHECKS includes axle_configs
+    const adminMigrate = fs.readFileSync(
+      path.join(process.cwd(), 'app', 'api', 'admin', 'migrate', 'route.ts'),
+      'utf8'
+    )
+    expect(adminMigrate).toContain("table: 'axle_configs'")
+    expect(adminMigrate).toMatch(/axle_configs[\s\S]*user_id[\s\S]*state_rules/)
   })
 
   it('splits Owner / Admin into Owner and Admin roles in migration 026', () => {

@@ -5,6 +5,7 @@ import { POST } from './route'
 
 const mockProcessPermitRequest = vi.fn()
 const mockEnrichOrToolsResponseWithEscorts = vi.fn()
+const mockEnrichOrToolsResponseWithScale = vi.fn(async (data: unknown) => data)
 
 vi.mock('@/agents/permit-agent', () => ({
   processPermitRequest: (...args: unknown[]) => mockProcessPermitRequest(...args),
@@ -13,6 +14,11 @@ vi.mock('@/agents/permit-agent', () => ({
 vi.mock('@/lib/enrich-route-escorts', () => ({
   enrichOrToolsResponseWithEscorts: (...args: unknown[]) =>
     mockEnrichOrToolsResponseWithEscorts(...args),
+}))
+
+vi.mock('@/lib/enrich-route-scale', () => ({
+  enrichOrToolsResponseWithScale: (...args: unknown[]) =>
+    mockEnrichOrToolsResponseWithScale(...args),
 }))
 
 describe('buildLoadDetails', () => {
@@ -36,6 +42,28 @@ describe('buildLoadDetails', () => {
     expect(load.drops).toHaveLength(1)
     expect(load.drops?.[0].lat).toBe(48.232)
     expect(load.drops?.[0].lon).toBe(-101.296)
+  })
+
+  it('prefers grossLoadedWeight over weight for scale alignment', () => {
+    const load = buildLoadDetails({
+      origin: { city: 'A', state: 'NE' },
+      destination: { city: 'B', state: 'ND' },
+      weight: 70_000,
+      grossLoadedWeight: 92_000,
+      length: 74,
+      width: 8.5,
+      height: 13.5,
+      axles: 5,
+      axleWeights: [12_000, 20_000, 20_000, 20_000, 20_000],
+      equipment: {
+        tractor: { num_axles: 3 },
+        trailers: [{ num_axles: 2, trailer_type: 'Flatbed' }],
+      },
+    })
+    expect(load.weight).toBe(92_000)
+    expect(load.axles).toBe(5)
+    expect(load.axleWeights).toHaveLength(5)
+    expect(load.equipment?.tractor?.num_axles).toBe(3)
   })
 
   it('throws when drops lack coordinates', () => {
@@ -181,6 +209,7 @@ describe('POST /api/optimize-route', () => {
 
     expect(res.status).toBe(200)
     expect(mockEnrichOrToolsResponseWithEscorts).toHaveBeenCalledTimes(1)
+    expect(mockEnrichOrToolsResponseWithScale).toHaveBeenCalledTimes(1)
     expect(body.primary.escortRequiredStates).toEqual(['NE'])
     expect(body.primary.escortWarnings).toContain('NE: 1 escort recommended')
     expect(mockProcessPermitRequest).not.toHaveBeenCalled()

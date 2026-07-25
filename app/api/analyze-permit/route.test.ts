@@ -45,6 +45,40 @@ describe('POST /api/analyze-permit', () => {
     expect(loadArg.drops[0].lon).toBe(-101.296)
   })
 
+  it('passes axle, equipment, and grossLoadedWeight through to the agent', async () => {
+    const req = new NextRequest('http://localhost/api/analyze-permit', {
+      method: 'POST',
+      body: JSON.stringify({
+        origin: { city: 'Grand Island', state: 'NE' },
+        destination: { city: 'Dickinson', state: 'ND' },
+        weight: 70_000,
+        grossLoadedWeight: 95_000,
+        length: 74,
+        width: 8.5,
+        height: 13.5,
+        axles: 5,
+        axleWeights: [12_000, 20_000, 20_000, 21_500, 21_500],
+        equipment: {
+          tractor: { num_axles: 3 },
+          trailers: [{ num_axles: 2, trailer_type: 'RGN' }],
+        },
+        originLat: 40.9,
+        originLon: -98.3,
+        destinationLat: 46.9,
+        destinationLon: -102.8,
+      }),
+    })
+
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+    const loadArg = mockProcessPermitRequest.mock.calls[0][0]
+    expect(loadArg.weight).toBe(95_000)
+    expect(loadArg.axles).toBe(5)
+    expect(loadArg.axleWeights).toEqual([12_000, 20_000, 20_000, 21_500, 21_500])
+    expect(loadArg.equipment?.tractor?.num_axles).toBe(3)
+    expect(loadArg.equipment?.trailers?.[0]?.trailer_type).toBe('RGN')
+  })
+
   it('returns 400 when drops lack coordinates', async () => {
     const req = new NextRequest('http://localhost/api/analyze-permit', {
       method: 'POST',

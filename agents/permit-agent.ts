@@ -15,6 +15,14 @@ import {
   analyzeEscortRequirements,
   type StateEscortDetail,
 } from '@/lib/escort-analysis'
+import {
+  attachScaleFieldsToOption,
+  formatAxleGroupSummaryLine,
+  resolveAxleGroupsFromConfig,
+  type AxleGroupSummary,
+  type ScaleFinding,
+} from '@/lib/axle-groups'
+import type { Tractor, Trailer } from '@/types/equipment'
 
 // NEW: Open State DOT corridor restrictions (priority 12 states)
 import {
@@ -81,6 +89,22 @@ export interface LoadDetails {
 
   // Trailer/rig length (ft), separate from routing envelope `length`.
   trailerLengthFt?: number
+
+  /** Total axles on the combination (for scale / axle-group checks). */
+  axles?: number
+  /** Per-axle weights (lbs), front → rear. */
+  axleWeights?: number[]
+  /**
+   * Optional equipment snapshot for axle-group assignment
+   * (tractor + trailers with trailer_type / num_axles).
+   * When axleGroups is provided and consistent with equipment, agent uses it
+   * so jeep/flip/stinger roles survive incomplete recompute.
+   */
+  equipment?: {
+    tractor?: Partial<Tractor> | null
+    trailers?: (Partial<Trailer> | null)[]
+    axleGroups?: AxleGroupSummary | null
+  } | null
 }
 
 export interface AnalyzedRouteOption {
@@ -115,6 +139,16 @@ export interface AnalyzedRouteOption {
   // NEW: Which engine + any fallback note (for UI labeling)
   routingEngine?: RoutingEngine
   routingEngineNote?: string
+
+  /** Axle group summary for overweight / scale guidance (steer/drives/jeep/trailer/flip/stinger). */
+  axleGroupSummary?: string
+  axleGroups?: AxleGroupSummary
+  /** Structured scale + corridor findings (also mirrored into reasons/notes). */
+  scaleFindings?: ScaleFinding[]
+  /** States where the combination fails weight/scale under state laws. */
+  corridorScaleFailedStates?: string[]
+  /** True when the rig cannot scale the proposed load under simple group limits. */
+  unableToScale?: boolean
 }
 
 // Canadian province/territory codes for terminology and logic
@@ -272,6 +306,11 @@ async function buildRouteCorridor(load: LoadDetails): Promise<Array<{
   durationHours?: number
   routingEngine?: RoutingEngine
   routingEngineNote?: string
+  axleGroupSummary?: string
+  axleGroups?: AxleGroupSummary
+  scaleFindings?: ScaleFinding[]
+  corridorScaleFailedStates?: string[]
+  unableToScale?: boolean
 }>> {
   const analyzedOptions: Array<any> = []
 
@@ -368,6 +407,43 @@ async function buildRouteCorridor(load: LoadDetails): Promise<Array<{
   return analyzedOptions
 }
 
+/**
+ * Build axle groups from equipment snapshot or synthetic layout aligned with permit-test UI.
+ * Prefer live recompute from rich tractor+trailers; fall back to precomputed axleGroups
+ * (keeps jeep/flip roles when only partial equipment was sent).
+ */
+function resolveAxleGroupsForLoad(load: LoadDetails): AxleGroupSummary {
+  const precomputed = load.equipment?.axleGroups ?? null
+  const live = resolveAxleGroupsFromConfig({
+    tractor: load.equipment?.tractor,
+    trailers: load.equipment?.trailers,
+    axles: load.axles,
+  })
+
+  if (live.totalAxles > 0) {
+    // Live equipment wins when present; if precomputed matches, either is fine.
+    if (
+      precomputed &&
+      precomputed.totalAxles > 0 &&
+      precomputed.totalAxles !== live.totalAxles
+    ) {
+      // Mismatch: prefer the larger role-aware precomputed only when live looks incomplete
+      // (e.g. tractor-only vs full combination snapshot).
+      const liveHasTrailerGroup = live.groups.some(
+        (g) => g.source === 'trailer' || ['jeep', 'trailer', 'flip', 'stinger'].includes(g.type)
+      )
+      const preHasTrailerGroup = precomputed.groups.some(
+        (g) => g.source === 'trailer' || ['jeep', 'trailer', 'flip', 'stinger'].includes(g.type)
+      )
+      if (!liveHasTrailerGroup && preHasTrailerGroup) return precomputed
+    }
+    return live
+  }
+
+  if (precomputed && precomputed.totalAxles > 0) return precomputed
+  return live
+}
+
 // Helper to analyze a single corridor against state permit rules + real DOT corridor restrictions
 async function analyzeCorridor(
   load: LoadDetails,
@@ -387,6 +463,10 @@ async function analyzeCorridor(
   const seasonalNotes: string[] = []
   const reasons: string[] = []
   const notes = [...baseNotes]
+  const axleGroupSummary = resolveAxleGroupsForLoad(load)
+  let scaleFindings: ScaleFinding[] = []
+  let corridorScaleFailedStates: string[] = []
+  let unableToScale = false
 
   let distanceMiles: number | undefined
   let durationHours: number | undefined
@@ -449,7 +529,8 @@ async function analyzeCorridor(
         // No rule in state_permit_rules table — apply conservative default (require permit)
         permitRequiredStates.add(state)
         const label = getJurisdictionLabel(state)
-        reasons.push(`${state} (${label}): Requires permit (no rule in database — conservative default)`)
+        // Prefer `${state}:` prefix so permit-test per-state cards match (not `${state} (State):`).
+        reasons.push(`${state}: Requires permit (no rule in database — conservative default)`)
         return
       }
 
@@ -500,8 +581,7 @@ async function analyzeCorridor(
         }
         if (load.weight > permitWeight) exceeded.push(`weight ${load.weight} > ${permitWeight}`)
 
-        const label = getJurisdictionLabel(state)
-        reasons.push(`${state} (${label}): Permit required — exceeds ${exceeded.join(', ')}`)
+        reasons.push(`${state}: Permit required — exceeds ${exceeded.join(', ')}`)
       }
 
       // === Collect rich contextual notes ===
@@ -558,17 +638,67 @@ async function analyzeCorridor(
       if (exceedsCorridorRestriction(load, r)) {
         permitRequiredStates.add(r.state)
 
-        const label = getJurisdictionLabel(r.state)
         const restrictionDesc = `${r.highway}${r.mileMarker ? ' ' + r.mileMarker : ''} (${r.value}${r.unit || ''})`
 
         reasons.push(
-          `${r.state} (${label}): Permit required — load exceeds specific DOT-posted restriction on ${restrictionDesc}. ${r.description.slice(0, 120)}${r.description.length > 120 ? '...' : ''}`
+          `${r.state}: Permit required — load exceeds specific DOT-posted restriction on ${restrictionDesc}. ${r.description.slice(0, 120)}${r.description.length > 120 ? '...' : ''}`
         )
       }
     }
 
     if (dotRestrictionsRaw.length > 0) {
       notes.push(`Loaded ${dotRestrictionsRaw.length} real-world restriction(s) from State DOT open data for this corridor.`)
+    }
+
+    // ============================================================
+    // Axle-group scale + corridor weight failure detection
+    // ============================================================
+    const ruleMapForScale = new Map(
+      (rules || []).map((r) => [String(r.state_code).toUpperCase().trim(), r])
+    )
+    const scaled = attachScaleFieldsToOption(
+      { notes, reasons, routeCorridor, permitRequiredStates: Array.from(permitRequiredStates) },
+      {
+        groups: axleGroupSummary.groups,
+        axleWeights: load.axleWeights,
+        totalWeightLbs: load.weight,
+        routeCorridor,
+        ruleMap: ruleMapForScale,
+        summary: axleGroupSummary,
+      }
+    )
+    scaleFindings = scaled.scaleFindings
+    corridorScaleFailedStates = scaled.corridorScaleFailedStates
+    unableToScale = scaled.unableToScale
+    for (const r of scaled.reasons as string[]) {
+      if (!reasons.includes(r)) reasons.push(r)
+    }
+    for (const n of scaled.notes as string[]) {
+      if (!notes.includes(n)) notes.push(n)
+    }
+    for (const st of corridorScaleFailedStates) {
+      permitRequiredStates.add(st)
+    }
+  } else if (axleGroupSummary.totalAxles > 0 || (load.axleWeights && load.axleWeights.length > 0)) {
+    // No corridor states but still report global scale ability
+    const scaled = attachScaleFieldsToOption(
+      { notes, reasons, routeCorridor: [] },
+      {
+        groups: axleGroupSummary.groups,
+        axleWeights: load.axleWeights,
+        totalWeightLbs: load.weight,
+        routeCorridor: [],
+        ruleMap: new Map(),
+        summary: axleGroupSummary,
+      }
+    )
+    scaleFindings = scaled.scaleFindings
+    unableToScale = scaled.unableToScale
+    for (const r of scaled.reasons as string[]) {
+      if (!reasons.includes(r)) reasons.push(r)
+    }
+    for (const n of scaled.notes as string[]) {
+      if (!notes.includes(n)) notes.push(n)
     }
   }
 
@@ -591,6 +721,11 @@ async function analyzeCorridor(
     durationHours,
     routingEngine: corridor.engine,
     routingEngineNote: corridor.engineNote,
+    axleGroupSummary: formatAxleGroupSummaryLine(axleGroupSummary),
+    axleGroups: axleGroupSummary,
+    scaleFindings,
+    corridorScaleFailedStates,
+    unableToScale,
   }
 }
 
@@ -651,6 +786,12 @@ export async function processPermitRequest(loadDetails: LoadDetails): Promise<Pe
       // Engine provenance
       routingEngine: option.routingEngine,
       routingEngineNote: option.routingEngineNote,
+      // Axle groups + scale / corridor failure signals
+      axleGroupSummary: option.axleGroupSummary,
+      axleGroups: option.axleGroups,
+      scaleFindings: option.scaleFindings || [],
+      corridorScaleFailedStates: option.corridorScaleFailedStates || [],
+      unableToScale: !!option.unableToScale,
     }
   })
 

@@ -107,6 +107,10 @@ async function checkSchema(admin) {
       'carrier_connection_invites',
       ['invite_token', 'status', 'company_name', 'organization_id', 'invite_email'],
     ],
+    [
+      'axle_configs',
+      ['id', 'user_id', 'name', 'axles', 'state_rules', 'organization_id'],
+    ],
   ]
   const results = {}
   for (const [table, cols] of checks) {

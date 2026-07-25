@@ -310,6 +310,7 @@ export default function Dashboard() {
   // Welcome CTAs: route analysis (+ carriers in service mode). Never promote
   // Equipment / History / Profile here — those live in AppHeader only.
   // Full `tools` still drives stats / recent-activity visibility below.
+  // Welcome CTAs: route analysis, axle optimizer, carriers (service). Header owns Equipment/History/Profile.
   const welcomeTools = tools.filter(
     (t) => t.id !== 'equipment' && t.id !== 'history' && t.id !== 'profile'
   )

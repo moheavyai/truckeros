@@ -11,6 +11,76 @@ function readEquipmentSource() {
   return readFileSync(equipmentPagePath, 'utf8')
 }
 
+describe('Equipment page — smart trailer types + axle groups', () => {
+  it('wires trailer-types module and smart datalist dropdown', () => {
+    const source = readEquipmentSource()
+    expect(source).toContain("from '@/lib/trailer-types'")
+    expect(source).toContain('getTrailerTypeOptions')
+    expect(source).toContain('saveCustomTrailerType')
+    expect(source).toContain('TRAILER_TYPE_COUPLING_HINT')
+    expect(source).toContain('TRAILER_TYPE_MAIN_HINT')
+    expect(source).toContain('list="trailer-type-options"')
+    expect(source).toContain('datalist id="trailer-type-options"')
+  })
+
+  it('persists custom trailer types on save only (not blur)', () => {
+    const source = readEquipmentSource()
+    // Save path persists customs
+    expect(source).toMatch(/saveTrailer[\s\S]*saveCustomTrailerType/)
+    // Blur formats label only — no saveCustomTrailerType on onBlur of trailer-type input
+    const typeInputSlice = source.slice(
+      source.indexOf('id="trailer-type-input"'),
+      source.indexOf('id="trailer-type-input"') + 900
+    )
+    expect(typeInputSlice).toContain('formatTrailerTypeLabel')
+    expect(typeInputSlice).not.toContain('saveCustomTrailerType')
+  })
+
+  it('soft-relabels kingpin fields for flip/stinger rear-pin types', () => {
+    const source = readEquipmentSource()
+    expect(source).toContain('isRearPinTrailerType')
+    expect(source).toContain('Nose setback (in, optional — rear pin)')
+    expect(source).toContain('Pin → 1st Axle (in)')
+  })
+
+  it('wires axle-groups labels into spacing chrome', () => {
+    const source = readEquipmentSource()
+    expect(source).toContain("from '@/lib/axle-groups'")
+    expect(source).toContain('assignAxleGroups')
+    expect(source).toContain('formatAxleGroupSummaryLine')
+    expect(source).toContain('trailerType={editingTrailer.trailer_type}')
+    // Tractor 1-2 / 2-3… and trailer kingpin→first + inter-axle labels
+    expect(source).toContain('Tractor axle spacings (inches)')
+    expect(source).toContain('Trailer axle geometry (inches)')
+    expect(source).toContain('kingpinToFirstAxleIn')
+    expect(source).toContain('onChangeKingpinToFirst')
+    expect(source).toContain('hasLiftAxle')
+    expect(source).toContain('Axle groups:')
+  })
+
+  it('uses DimensionInput for overall length on tractor and trailer', () => {
+    const source = readEquipmentSource()
+    expect(source).toContain('label="Overall Length"')
+    expect(source).toContain('overall_length_ft: ft')
+    // Lift axle toggle remains on trailers (schema has_lift_axle)
+    expect(source).toContain('has_lift_axle')
+    expect(source).toContain('Lift axle')
+  })
+
+  it('preserves spacing slot indices and seeds tractor 1-2 at 220', () => {
+    const source = readEquipmentSource()
+    expect(source).toContain('normalizeAxleSpacingSlots')
+    expect(source).toContain('never compact')
+    // New slots only (not zero-pad then seed — that left the seed path dead)
+    expect(source).toContain('NEW slot only')
+    expect(source).toContain('out.push(220)')
+    expect(source).toContain('idx === 0 ? 220 : 48')
+    // Fixed-length UI arrays on change
+    expect(source).toContain('normalizeAxleSpacings(editingTractor.axle_spacings, expected)')
+    expect(source).toContain('normalizeAxleSpacings(editingTrailer.axle_spacings, expected)')
+  })
+})
+
 describe('Equipment page — service mode scoping', () => {
   it('skips equipment loads without a selected carrier in service mode', () => {
     const source = readEquipmentSource()

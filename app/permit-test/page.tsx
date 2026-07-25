@@ -82,6 +82,23 @@ import {
 } from '@/lib/load-details-options'
 import { buildPermitCargoSnapshot } from '@/lib/permit-cargo-snapshot'
 import { isDevEnvironment } from '@/lib/dev-mode'
+import {
+  AXLE_GROUP_LABELS,
+  MAX_TOTAL_AXLES,
+  assignAxleGroups,
+  buildCombinationAdjacentSpacingsIn,
+  buildRigAxleSnapshot,
+  classifyGroupAxleConfig,
+  displayGroupWeightLimitLbs,
+  distributeWeightSteerFirst,
+  distributeWeightToGroup,
+  formatAxleGroupSummaryLine,
+  resolveAxleGroupsFromConfig,
+  resolveDeclaredAxleCount,
+  sumGroupWeightLbs,
+  withinGroupSpacingsFromCombination,
+  type AxleGroupSummary,
+} from '@/lib/axle-groups'
 import type { MemberProfile, TeamMemberListItem, TeamMemberProfile } from '@/types/member-profile'
 
 type DropStop = LocationStop & { lat?: number; lon?: number }
@@ -127,6 +144,210 @@ const fieldHintClass = 'text-xs text-gray-500'
 const fieldHintTinyClass = 'text-[10px] text-gray-500'
 /** Field labels stay slightly stronger than hints for scannability */
 const fieldLabelTinyClass = 'block text-[10px] text-gray-600 sm:text-gray-500'
+
+/** True when a trailer object has enough fields to group (not an id-only stub). */
+function isRichTrailerUnit(tr: unknown): boolean {
+  if (!tr || typeof tr !== 'object') return false
+  const t = tr as Record<string, unknown>
+  return (
+    t.num_axles != null ||
+    t.trailer_type != null ||
+    t.profile_name != null ||
+    t.overall_length_ft != null ||
+    t.axle_spacings != null
+  )
+}
+
+/** True when tractor has geometry/axle fields (not id-only). */
+function isRichTractorUnit(tr: unknown): boolean {
+  if (!tr || typeof tr !== 'object') return false
+  const t = tr as Record<string, unknown>
+  return (
+    t.num_axles != null ||
+    t.profile_name != null ||
+    t.overall_length_ft != null ||
+    t.axle_spacings != null
+  )
+}
+
+/**
+ * Resolve axle count + groups.
+ * Prefer live recompute from rich tractor+trailers; only trust precomputed groups
+ * when live equipment is incomplete or missing. Never mix tractor-only groups with
+ * full rig.computed_total_axles.
+ */
+function resolvePermitAxleLayout(
+  axles: number | string | null | undefined,
+  rigSnapshot: {
+    tractor?: unknown
+    trailers?: unknown[] | null
+    axleGroups?: AxleGroupSummary | null
+    totalAxles?: number | null
+    incompleteEquipment?: boolean
+  } | null | undefined
+) {
+  const formAxles = Math.max(1, Math.min(MAX_TOTAL_AXLES, Number(axles) || 5))
+  const precomputed = rigSnapshot?.axleGroups ?? null
+  const tractor = rigSnapshot?.tractor
+  const allTrailers = Array.isArray(rigSnapshot?.trailers) ? rigSnapshot!.trailers! : []
+  const richTractor = isRichTractorUnit(tractor) ? tractor : null
+  const richTrailers = allTrailers.filter(isRichTrailerUnit)
+
+  const liveSummary =
+    richTractor || richTrailers.length > 0
+      ? assignAxleGroups(
+          richTractor as Parameters<typeof assignAxleGroups>[0],
+          richTrailers as Parameters<typeof assignAxleGroups>[1]
+        )
+      : null
+
+  let summary: AxleGroupSummary
+  if (liveSummary && liveSummary.totalAxles > 0) {
+    // Prefer live recompute when equipment is present.
+    // If precomputed exists and disagrees, live wins (avoids stale partial groups).
+    if (
+      precomputed &&
+      precomputed.totalAxles > 0 &&
+      precomputed.totalAxles !== liveSummary.totalAxles &&
+      rigSnapshot?.incompleteEquipment
+    ) {
+      // Incomplete hydration: keep larger of live vs precomputed only when precomputed
+      // matches declared totalAxles (full-rig cache from save time).
+      const declared = Number(rigSnapshot.totalAxles) || 0
+      if (declared > 0 && precomputed.totalAxles === declared && liveSummary.totalAxles < declared) {
+        summary = precomputed
+      } else {
+        summary = liveSummary
+      }
+    } else {
+      summary = liveSummary
+    }
+  } else if (precomputed && precomputed.totalAxles > 0) {
+    summary = precomputed
+  } else {
+    summary = resolveAxleGroupsFromConfig({ axles: formAxles })
+  }
+
+  const n =
+    summary.totalAxles > 0
+      ? Math.min(MAX_TOTAL_AXLES, summary.totalAxles)
+      : formAxles
+  return { n, groups: summary.groups, summary }
+}
+
+/** Live overall length from equipment geometry when possible; else cached/fallback. */
+function resolveRigBaseLengthFt(
+  snap: {
+    tractor?: unknown
+    trailers?: unknown[] | null
+    overallLengthFt?: number | null
+  } | null | undefined,
+  trailerLengthFt?: number | string | null
+): number {
+  if (snap && (isRichTractorUnit(snap.tractor) || (snap.trailers || []).some(isRichTrailerUnit))) {
+    const dims = computeRigDimensions(
+      isRichTractorUnit(snap.tractor)
+        ? (snap.tractor as Parameters<typeof computeRigDimensions>[0])
+        : null,
+      ((snap.trailers || []).filter(isRichTrailerUnit) as Parameters<
+        typeof computeRigDimensions
+      >[1]) || []
+    )
+    if (dims.totalLengthFt > 0) return dims.totalLengthFt
+  }
+  if (snap?.overallLengthFt != null && Number(snap.overallLengthFt) > 0) {
+    return Number(snap.overallLengthFt)
+  }
+  return Number(trailerLengthFt) || 0
+}
+
+/** Unified gross for analyze / save / UI: prefer grossLoadedWeight when set. */
+function resolveSubmitWeightLbs(form: {
+  grossLoadedWeight?: number | string | null
+  weight?: number | string | null
+}): number {
+  const gross = Number(form.grossLoadedWeight)
+  if (Number.isFinite(gross) && gross > 0) return gross
+  const w = Number(form.weight)
+  return Number.isFinite(w) && w > 0 ? w : 0
+}
+
+/** Build rich rig snapshot for VehicleDiagram + permit equipment JSONB (groups/spacings/lifts). */
+function buildSelectedRigSnapshot(
+  rig: RigConfiguration,
+  fullTractor: Tractor | null,
+  fullTrailers: Trailer[]
+) {
+  const expectedTrailerIds = rig.trailer_ids || []
+  const missingTrailerIds = expectedTrailerIds.filter(
+    (tid) => !fullTrailers.some((tr) => tr.id === tid)
+  )
+  const incompleteEquipment =
+    (!!rig.tractor_id && !fullTractor) || missingTrailerIds.length > 0
+
+  // Prefer full units; fall back to id stubs only for display linkage (not for grouping).
+  const tractor = fullTractor || ({ id: rig.tractor_id } as Partial<Tractor>)
+  const trailers =
+    fullTrailers.length > 0
+      ? fullTrailers
+      : expectedTrailerIds.map((tid: string) => ({ id: tid }) as Partial<Trailer>)
+
+  // Groups only from units we actually hydrated (never invent trailer defaults from stubs).
+  const axleSnap = buildRigAxleSnapshot(
+    fullTractor,
+    fullTrailers.length > 0 ? fullTrailers : null
+  )
+
+  // Live length when equipment is present; else cached computed value.
+  let overallLengthFt: number | null = rig.computed_total_length_ft ?? null
+  if (fullTractor || fullTrailers.length > 0) {
+    const dims = computeRigDimensions(fullTractor, fullTrailers)
+    if (dims.totalLengthFt > 0) overallLengthFt = dims.totalLengthFt
+  }
+
+  // totalAxles: when hydration is complete use live groups (or cache).
+  // When partial, do NOT pad live tractor-only groups up to full computed_total_axles —
+  // that desyncs group layout from weight slots. Prefer live; keep cache only if live empty.
+  let totalAxles: number | null = axleSnap.totalAxles > 0 ? axleSnap.totalAxles : null
+  if (!incompleteEquipment) {
+    totalAxles =
+      axleSnap.totalAxles ||
+      rig.computed_total_axles ||
+      null
+  } else if (totalAxles == null) {
+    totalAxles = rig.computed_total_axles || null
+  }
+
+  // If complete hydration produced groups, store them; if partial, still store live groups
+  // but mark incomplete so resolvePermitAxleLayout can prefer precomputed when richer.
+  return {
+    rigId: rig.id,
+    rigName: rig.rig_name,
+    overallLengthFt,
+    totalAxles,
+    tractor,
+    trailers,
+    axleGroups: axleSnap.groups,
+    axleGroupSummary: axleSnap.groupLine,
+    tractorSpacingsIn: axleSnap.tractorSpacingsIn,
+    trailerSpacingsIn: axleSnap.trailerSpacingsIn,
+    kingpinToFirstAxleIn: axleSnap.kingpinToFirstAxleIn,
+    trailerHasLiftAxle: axleSnap.trailerHasLiftAxle,
+    incompleteEquipment,
+    missingTrailerIds,
+  }
+}
+
+/** Trim axleWeights to current axle count for analyze/optimize payloads. */
+function trimAxleWeightsForSubmit(
+  axleWeights: unknown,
+  axles: number | string | null | undefined,
+  rigSnapshot?: { tractor?: unknown; trailers?: unknown[] | null } | null
+): number[] | undefined {
+  if (!Array.isArray(axleWeights)) return undefined
+  const { n } = resolvePermitAxleLayout(axles, rigSnapshot)
+  return axleWeights.slice(0, n).map((w) => Number(w) || 0)
+}
 
 export default function PermitTestPage() {
   const [user, setUser] = useState<any>(null)
@@ -357,7 +578,12 @@ export default function PermitTestPage() {
     loadLengthFt: '',
     loadWidthFt: '',
     loadHeightFt: '',
-    axleWeights: [16000, 16000, 16000, 16000, 16000],
+    // Steer-first default: 12k on steer, remainder even on other axles (5-axle @ 80k → 12k + 4×17k).
+    axleWeights: distributeWeightSteerFirst(
+      5,
+      80_000,
+      resolveAxleGroupsFromConfig({ axles: 5 }).groups
+    ),
     grossLoadedWeight: 80000,
 
     ...EMPTY_PERMIT_CARRIER_DRIVER_FIELDS,
@@ -590,12 +816,16 @@ export default function PermitTestPage() {
   useEffect(() => {
     const tractorWt = Number(formData.tractorEmptyWeightLbs) || 0
     const trailerWt = Number(formData.trailerEmptyWeightLbs) || 0
+    // Prefer sum of tractor + all trailers when both sides present; else rigEmpty field.
     const rigEmpty =
       tractorWt > 0 && trailerWt > 0
         ? tractorWt + trailerWt
         : Number(formData.rigEmptyWeightLbs) || 0
-    const rigBaseLength =
-      selectedRigSnapshot?.overallLengthFt ?? (Number(formData.trailerLengthFt) || 0)
+    // Live recompute length from equipment when rich units available (not stale cache only).
+    const rigBaseLength = resolveRigBaseLengthFt(
+      selectedRigSnapshot,
+      formData.trailerLengthFt
+    )
     const envelope = computeRoutingEnvelope({
       rigLengthFt: rigBaseLength,
       loadOverhangFrontFt,
@@ -626,12 +856,34 @@ export default function PermitTestPage() {
         next.height = envelope.heightFt
         changed = true
       }
-      if (envelope.weightLbs > 0 && Math.abs(next.weight - envelope.weightLbs) > 1) {
+
+      const { n, groups } = resolvePermitAxleLayout(prev.axles, selectedRigSnapshot)
+      const prevWeights = Array.isArray(prev.axleWeights) ? prev.axleWeights : []
+      // Keep weight + grossLoadedWeight in lockstep from envelope gross.
+      const weightChanged =
+        envelope.weightLbs > 0 &&
+        (Math.abs(Number(prev.weight) - envelope.weightLbs) > 1 ||
+          Math.abs(Number(prev.grossLoadedWeight) - envelope.weightLbs) > 1)
+      const axleCountMismatch = prevWeights.length !== n
+      const axlesOutOfSync = Number(prev.axles) !== n
+
+      if (weightChanged) {
         next.weight = envelope.weightLbs
         next.grossLoadedWeight = envelope.weightLbs
         changed = true
-        const n = Math.max(1, Math.min(12, Number(prev.axles) || 5))
-        next.axleWeights = Array.from({ length: n }, () => Math.round(envelope.weightLbs / n))
+      }
+      // Redistribute when gross envelope changes or axle count/layout no longer matches weights.
+      if (weightChanged || axleCountMismatch) {
+        const gross = weightChanged
+          ? envelope.weightLbs
+          : Number(prev.grossLoadedWeight) || Number(prev.weight) || 80_000
+        next.axleWeights = distributeWeightSteerFirst(n, gross, groups)
+        changed = true
+      }
+      // Keep form axles aligned with equipment group total when a rig is selected.
+      if (axlesOutOfSync && selectedRigSnapshot && n > 0) {
+        next.axles = n
+        changed = true
       }
       return changed ? next : prev
     })
@@ -639,7 +891,7 @@ export default function PermitTestPage() {
     formData.loadWidthFt, formData.loadHeightFt, formData.loadWeightLbs, formData.trailerLengthFt,
     formData.trailerWidthFt, formData.trailerDeckHeightFt, formData.tractorEmptyWeightLbs,
     formData.trailerEmptyWeightLbs, formData.rigEmptyWeightLbs, loadOverhangFrontFt, loadOverhangRearFt,
-    selectedRigSnapshot?.overallLengthFt, formData.axles,
+    selectedRigSnapshot, formData.axles,
   ])
 
   // Full tractor/trailer objects (decoded from equipment_profiles RIGBUILDER payloads).
@@ -869,8 +1121,10 @@ export default function PermitTestPage() {
       tractorWt > 0 && trailerWt > 0
         ? tractorWt + trailerWt
         : Number(formData.rigEmptyWeightLbs) || 0
-    const rigBaseLength =
-      selectedRigSnapshot?.overallLengthFt ?? (Number(formData.trailerLengthFt) || 0)
+    const rigBaseLength = resolveRigBaseLengthFt(
+      selectedRigSnapshot,
+      formData.trailerLengthFt
+    )
     const envelope = computeRoutingEnvelope({
       rigLengthFt: rigBaseLength,
       loadOverhangFrontFt,
@@ -898,19 +1152,34 @@ export default function PermitTestPage() {
   ) {
     const primary = primaryTrailerDimensions(fullTrailers)
     const rigEmpty = computeRigEmptyWeightLbs(fullTractor, fullTrailers)
+    // Sum empty weight across ALL trailers (not primary-only) for envelope gross.
+    const allTrailersEmpty = fullTrailers.reduce(
+      (sum, tr) => sum + (Number(tr?.empty_weight_lbs) || 0),
+      0
+    )
+    const groupSummary = assignAxleGroups(fullTractor, fullTrailers)
+    const resolvedAxles =
+      groupSummary.totalAxles ||
+      (fullTractor && fullTrailers.length === (rig.trailer_ids || []).length
+        ? rig.computed_total_axles
+        : null) ||
+      fullTractor?.num_axles ||
+      5
     return {
       unitNumber: fullTractor?.unit_number || '',
       vin: fullTractor?.vin || '',
       trailerVin: primary.vin || '',
       tractorEmptyWeightLbs: fullTractor?.empty_weight_lbs ? String(fullTractor.empty_weight_lbs) : '',
-      trailerEmptyWeightLbs: primary.emptyWeightLbs ? String(primary.emptyWeightLbs) : '',
+      // Multi-trailer: sum all empty weights so envelope weight is not undercounted.
+      trailerEmptyWeightLbs: allTrailersEmpty > 0 ? String(allTrailersEmpty) : '',
       rigEmptyWeightLbs: rigEmpty ? String(rigEmpty) : '',
       trailerWidthFt: primary.widthFt ? String(primary.widthFt) : '',
       trailerDeckHeightFt: primary.deckHeightFt ? String(primary.deckHeightFt) : '',
       year: fullTractor?.year != null ? String(fullTractor.year) : '',
       make: fullTractor?.make || '',
       model: fullTractor?.model || '',
-      axles: rig.computed_total_axles || fullTractor?.num_axles || 5,
+      // Prefer resolved group total so axle-weight UI matches equipment layout.
+      axles: resolvedAxles,
       trailerMake: fullTrailers[0]?.make || fullTrailers[0]?.trailer_type || '',
       trailerModel: fullTrailers[0]?.model || '',
       trailerYear: fullTrailers[0]?.year != null ? String(fullTrailers[0].year) : '',
@@ -1095,19 +1364,19 @@ export default function PermitTestPage() {
       .map((tid: string) => trailers.find((tr) => tr.id === tid))
       .filter(Boolean) as Trailer[]
 
-    // Build rich snapshot (now carries the data VehicleDiagram needs + richer audit trail in permit_requests)
-    const snap = {
-      rigId: rig.id,
-      rigName: rig.rig_name,
-      overallLengthFt: rig.computed_total_length_ft,
-      totalAxles: rig.computed_total_axles,
-      tractor: fullTractor || { id: rig.tractor_id },
-      trailers: fullTrailers.length > 0 ? fullTrailers : (rig.trailer_ids || []).map((tid: string) => ({ id: tid })),
-    }
+    // Rich snapshot: VehicleDiagram geometry + axle groups/spacings/lift flags for permit prefill
+    const snap = buildSelectedRigSnapshot(rig, fullTractor, fullTrailers)
     setSelectedRigSnapshot(snap)
 
     const synced = rigFieldsFromEquipment(fullTractor, fullTrailers, rig)
-    setFormData((prev) => ({ ...prev, ...synced }))
+    setFormData((prev) => {
+      const next = { ...prev, ...synced }
+      const { n, groups } = resolvePermitAxleLayout(next.axles, snap)
+      const gross = Number(next.grossLoadedWeight) || Number(next.weight) || 80_000
+      next.axles = n
+      next.axleWeights = distributeWeightSteerFirst(n, gross, groups)
+      return next
+    })
     setGlance(null)
   }
 
@@ -1128,17 +1397,17 @@ export default function PermitTestPage() {
         .map((tid: string) => trailers.find((tr) => tr.id === tid))
         .filter(Boolean) as Trailer[]
 
-      const snap = {
-        rigId: currentRig.id,
-        rigName: currentRig.rig_name,
-        overallLengthFt: currentRig.computed_total_length_ft,
-        totalAxles: currentRig.computed_total_axles,
-        tractor: fullTractor || { id: currentRig.tractor_id },
-        trailers: fullTrailers.length > 0 ? fullTrailers : (currentRig.trailer_ids || []).map((tid: string) => ({ id: tid })),
-      }
+      const snap = buildSelectedRigSnapshot(currentRig, fullTractor, fullTrailers)
       setSelectedRigSnapshot(snap)
       const synced = rigFieldsFromEquipment(fullTractor, fullTrailers, currentRig)
-      setFormData((prev) => ({ ...prev, ...synced }))
+      setFormData((prev) => {
+        const next = { ...prev, ...synced }
+        const { n, groups } = resolvePermitAxleLayout(next.axles, snap)
+        const gross = Number(next.grossLoadedWeight) || Number(next.weight) || 80_000
+        next.axles = n
+        next.axleWeights = distributeWeightSteerFirst(n, gross, groups)
+        return next
+      })
     }
   }, [tractors, trailers, selectedRigId, rigs])
 
@@ -1575,7 +1844,8 @@ export default function PermitTestPage() {
           lat: d.lat,
           lon: d.lon,
         })),
-        weight: currentData.weight,
+        // Prefer grossLoadedWeight when set so scale checks match axle UI / envelope card.
+        weight: resolveSubmitWeightLbs(currentData),
         length: currentData.length,
         width: currentData.width,
         height: currentData.height,
@@ -1586,6 +1856,20 @@ export default function PermitTestPage() {
         routingEngine,
         specialInstructions: manualRoute,
         trailerLengthFt: Number(currentData.trailerLengthFt) || undefined,
+        axles: Number(currentData.axles) || undefined,
+        axleWeights: trimAxleWeightsForSubmit(
+          currentData.axleWeights,
+          currentData.axles,
+          selectedRigSnapshot
+        ),
+        equipment: selectedRigSnapshot
+          ? {
+              tractor: selectedRigSnapshot.tractor,
+              trailers: selectedRigSnapshot.trailers,
+              // Pass precomputed groups so agent keeps jeep/flip roles when trailers are rich.
+              axleGroups: selectedRigSnapshot.axleGroups ?? null,
+            }
+          : undefined,
         ...permitFormToLoadDetailsCarrierFields(currentData),
       }
 
@@ -1727,7 +2011,8 @@ export default function PermitTestPage() {
           lat: d.lat,
           lon: d.lon,
         })),
-        weight: formData.weight,
+        // Same weight source as analyze/envelope (prefer grossLoadedWeight).
+        weight: resolveSubmitWeightLbs(formData),
         length: formData.length,
         width: formData.width,
         height: formData.height,
@@ -1761,6 +2046,13 @@ export default function PermitTestPage() {
         },
         cargo: buildPermitCargoSnapshot(cargoFormData, selectedDriverKey, {
           organizationId: permitOrganizationId,
+          ...(() => {
+            const { summary } = resolvePermitAxleLayout(formData.axles, selectedRigSnapshot)
+            return {
+              axleGroups: summary,
+              axleGroupSummary: formatAxleGroupSummaryLine(summary),
+            }
+          })(),
         }),
       }
 
@@ -1840,7 +2132,7 @@ export default function PermitTestPage() {
           lat: d.lat,
           lon: d.lon,
         })),
-        weight: formData.weight,
+        weight: resolveSubmitWeightLbs(formData),
         length: formData.length,
         width: formData.width,
         height: formData.height,
@@ -1874,6 +2166,13 @@ export default function PermitTestPage() {
         },
         cargo: buildPermitCargoSnapshot(cargoFormData, selectedDriverKey, {
           organizationId: permitOrganizationId,
+          ...(() => {
+            const { summary } = resolvePermitAxleLayout(formData.axles, selectedRigSnapshot)
+            return {
+              axleGroups: summary,
+              axleGroupSummary: formatAxleGroupSummaryLine(summary),
+            }
+          })(),
         }),
       }
 
@@ -1961,7 +2260,7 @@ export default function PermitTestPage() {
             lat: d.lat,
             lon: d.lon,
           })),
-          weight: formData.weight,
+          weight: resolveSubmitWeightLbs(formData),
           length: formData.length,
           width: formData.width,
           height: formData.height,
@@ -1972,6 +2271,19 @@ export default function PermitTestPage() {
           routingEngine,
           manualRoute: states,
           trailerLengthFt: Number(formData.trailerLengthFt) || undefined,
+          axles: Number(formData.axles) || undefined,
+          axleWeights: trimAxleWeightsForSubmit(
+            formData.axleWeights,
+            formData.axles,
+            selectedRigSnapshot
+          ),
+          equipment: selectedRigSnapshot
+            ? {
+                tractor: selectedRigSnapshot.tractor,
+                trailers: selectedRigSnapshot.trailers,
+                axleGroups: selectedRigSnapshot.axleGroups ?? null,
+              }
+            : undefined,
           ...permitFormToLoadDetailsCarrierFields(formData),
         }
         const startTime = Date.now()
@@ -2020,7 +2332,7 @@ export default function PermitTestPage() {
               lat: d.lat,
               lon: d.lon,
             })),
-            weight: formData.weight,
+            weight: resolveSubmitWeightLbs(formData),
             length: formData.length,
             width: formData.width,
             height: formData.height,
@@ -2031,6 +2343,19 @@ export default function PermitTestPage() {
             routingEngine,
             manualRoute: states,
             trailerLengthFt: Number(formData.trailerLengthFt) || undefined,
+            axles: Number(formData.axles) || undefined,
+            axleWeights: trimAxleWeightsForSubmit(
+              formData.axleWeights,
+              formData.axles,
+              selectedRigSnapshot
+            ),
+            equipment: selectedRigSnapshot
+              ? {
+                  tractor: selectedRigSnapshot.tractor,
+                  trailers: selectedRigSnapshot.trailers,
+                  axleGroups: selectedRigSnapshot.axleGroups ?? null,
+                }
+              : undefined,
             ...permitFormToLoadDetailsCarrierFields(formData),
           }),
         })
@@ -2898,71 +3223,338 @@ export default function PermitTestPage() {
             </div>
           </details>
 
-          {/* Dynamic axle weights (driven by axles count) + auto gross + helpers */}
-          <div className="border border-gray-300 sm:border-gray-200 rounded-lg p-3 bg-white">
-            <div className="flex items-center justify-between mb-2">
-              <div className="font-medium text-sm text-gray-900">Axle Weight Distribution (lbs) — auto from gross weight</div>
-              <div className="flex gap-2 text-xs">
-                <button type="button" onClick={() => {
-                  const n = Math.max(1, Math.min(12, Number(formData.axles) || 5))
-                  const even = Math.round((Number(formData.grossLoadedWeight) || 80000) / n)
-                  const arr = Array.from({ length: n }, () => even)
-                  setFormData((p) => ({ ...p, axleWeights: arr }))
-                }} className="px-2 py-0.5 border rounded hover:bg-gray-50">Distribute Evenly</button>
-                <button type="button" onClick={() => {
-                  const sum = (formData.axleWeights || []).slice(0, Math.max(1, Math.min(12, Number(formData.axles) || 5))).reduce((a: number, b: any) => a + (Number(b) || 0), 0)
-                  setFormData((p) => ({ ...p, grossLoadedWeight: sum }))
-                }} className="px-2 py-0.5 border rounded hover:bg-gray-50">Axles → Gross</button>
-              </div>
-            </div>
+          {/* Dynamic axle weights — collapsed by default for mobile; group totals primary, per-axle advanced */}
+          {(() => {
+            const { n, summary: groupSummary } = resolvePermitAxleLayout(
+              formData.axles,
+              selectedRigSnapshot
+            )
+            const weights: number[] = formData.axleWeights || []
+            const sum = weights.slice(0, n).reduce((a, b) => a + (Number(b) || 0), 0)
+            const gross = Number(formData.grossLoadedWeight) || 0
+            const groupLine = formatAxleGroupSummaryLine(groupSummary)
 
-            {(() => {
-              const n = Math.max(1, Math.min(12, Number(formData.axles) || 5))
-              const weights: number[] = formData.axleWeights || []
-              const sum = weights.slice(0, n).reduce((a, b) => a + (Number(b) || 0), 0)
-              const gross = Number(formData.grossLoadedWeight) || 0
-              return (
-                <>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-2">
-                    {Array.from({ length: n }).map((_, i) => (
-                      <div key={i}>
-                        <label className={fieldLabelTinyClass}>Axle {i + 1}</label>
-                        <input
-                          type="number"
-                          value={weights[i] || 0}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0
-                            setFormData((prev) => {
-                              const arr = [...(prev.axleWeights || [])]
-                              arr[i] = val
-                              const newSum = arr.slice(0, n).reduce((a, b) => a + (Number(b) || 0), 0)
-                              return { ...prev, axleWeights: arr, grossLoadedWeight: newSum || prev.grossLoadedWeight }
-                            })
-                          }}
-                          className={inputCompactClass}
-                        />
-                      </div>
-                    ))}
+            // Spacings from selected rig → tandem vs spread labels per group.
+            // Axle counts use the same defaults as assignAxleGroups (tractor 3 / trailer 2)
+            // so missing num_axles does not shift spacings onto the wrong groups.
+            const tractorUnit = selectedRigSnapshot?.tractor as
+              | { num_axles?: number | null }
+              | null
+              | undefined
+            const trailerUnits = Array.isArray(selectedRigSnapshot?.trailers)
+              ? (selectedRigSnapshot.trailers as { num_axles?: number | null }[])
+              : []
+            const tractorAxleCount = tractorUnit
+              ? resolveDeclaredAxleCount(tractorUnit.num_axles, 3)
+              : 0
+            const trailerAxleCounts = trailerUnits.map((tr) =>
+              tr != null ? resolveDeclaredAxleCount(tr?.num_axles, 2) : 0
+            )
+            const comboSpacings = buildCombinationAdjacentSpacingsIn({
+              totalAxles: n,
+              tractorAxleCount: tractorAxleCount > 0 ? tractorAxleCount : null,
+              tractorSpacingsIn: selectedRigSnapshot?.tractorSpacingsIn ?? null,
+              trailerAxleCounts,
+              trailerSpacingsIn: selectedRigSnapshot?.trailerSpacingsIn ?? null,
+            })
+
+            // Precompute config + limits for summary over-count and inputs
+            const groupMetas = groupSummary.groups.map((g) => {
+              const groupSum = sumGroupWeightLbs(g, weights)
+              const withinSp = withinGroupSpacingsFromCombination(g, comboSpacings)
+              const config = classifyGroupAxleConfig(g, withinSp)
+              const limitLbs = displayGroupWeightLimitLbs(g, config)
+              return {
+                group: g,
+                groupSum,
+                config,
+                limitLbs,
+                overLimit: groupSum > limitLbs,
+              }
+            })
+            const overCount = groupMetas.filter((m) => m.overLimit).length
+
+            /**
+             * Even-split group total only when the parsed total differs from the current
+             * group sum (within 0.5 lb). Tab-through / blur with unchanged total preserves
+             * intentional unequal per-axle weights. Always sync gross + weight when applied.
+             */
+            const applyGroupTotal = (groupIndex: number, raw: string) => {
+              const val = parseFloat(raw)
+              const groupTotal = Number.isFinite(val) ? Math.max(0, Math.round(val)) : 0
+              setFormData((prev) => {
+                const layout = resolvePermitAxleLayout(prev.axles, selectedRigSnapshot)
+                const g = layout.groups[groupIndex]
+                if (!g) return prev
+                const currentSum = Math.round(sumGroupWeightLbs(g, prev.axleWeights))
+                // No-op when total unchanged — keep unequal per-axle split.
+                if (Math.abs(groupTotal - currentSum) < 0.5) return prev
+                const arr = distributeWeightToGroup(
+                  prev.axleWeights,
+                  g,
+                  groupTotal,
+                  layout.n
+                )
+                const newSum = arr
+                  .slice(0, layout.n)
+                  .reduce((a, b) => a + (Number(b) || 0), 0)
+                return {
+                  ...prev,
+                  axles: layout.n,
+                  axleWeights: arr.slice(0, layout.n),
+                  // Always write sum (including 0); dual-write weight for envelope parity.
+                  grossLoadedWeight: newSum,
+                  weight: newSum,
+                }
+              })
+            }
+
+            return (
+              <details className="mb-3 border rounded-lg bg-amber-50 text-sm">
+                <summary className="cursor-pointer font-medium text-amber-900 p-3 hover:text-amber-950 min-h-[44px]">
+                  Axle Weight Distribution (lbs)
+                  <span className="font-normal text-amber-800 text-xs sm:ml-2 block sm:inline">
+                    {sum > 0 ? `${sum.toLocaleString()} lbs` : '—'}
+                    {overCount > 0
+                      ? ` · ${overCount} group${overCount === 1 ? '' : 's'} over limit`
+                      : ''}
+                    {gross > 0 && gross !== sum
+                      ? ` · Gross ${gross.toLocaleString()}`
+                      : ''}
+                  </span>
+                </summary>
+                <div className="px-3 pb-3">
+                  <div className="text-[10px] text-amber-700 mb-2">
+                    {groupLine}
+                    {gross > 0 ? ` · Gross ${gross.toLocaleString()} lbs` : ''}
+                    {sum > 0 && sum !== gross ? ` · Axle sum ${sum.toLocaleString()}` : ''}
+                    {' · '}Edit group totals (even-split on blur). Tap per-axle for fine control.
                   </div>
+
+                  <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                    <div className="text-[10px] text-amber-800">
+                      Groups from selected rig (or synthetic layout when no rig)
+                    </div>
+                    <div className="flex gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const layout = resolvePermitAxleLayout(formData.axles, selectedRigSnapshot)
+                          // Prefer current gross/weight; if both 0 after a zero-out, fall back to 80k
+                          // so Distribute still produces a usable load and submit weight is non-zero.
+                          const g =
+                            Number(formData.grossLoadedWeight) || Number(formData.weight) || 80000
+                          // Steer fixed at 12k combined; remainder even-split across other axles.
+                          const arr = distributeWeightSteerFirst(layout.n, g, layout.groups)
+                          const distributedTotal = arr
+                            .slice(0, layout.n)
+                            .reduce((a, b) => a + (Number(b) || 0), 0)
+                          // Dual-write gross + weight so submit/envelope stay aligned after zeroing.
+                          setFormData((p) => ({
+                            ...p,
+                            axles: layout.n,
+                            axleWeights: arr,
+                            grossLoadedWeight: distributedTotal,
+                            weight: distributedTotal,
+                          }))
+                        }}
+                        className="px-2 py-1 border border-amber-300 rounded bg-white hover:bg-amber-100 min-h-[44px] text-amber-950"
+                        title="Steer 12,000 lbs; remainder even across other axles"
+                      >
+                        Distribute (steer 12k)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const layout = resolvePermitAxleLayout(formData.axles, selectedRigSnapshot)
+                          const axleSum = (formData.axleWeights || [])
+                            .slice(0, layout.n)
+                            .reduce((a: number, b: any) => a + (Number(b) || 0), 0)
+                          // Dual-write weight + gross for envelope parity.
+                          setFormData((p) => ({
+                            ...p,
+                            grossLoadedWeight: axleSum,
+                            weight: axleSum,
+                          }))
+                        }}
+                        className="px-2 py-1 border border-amber-300 rounded bg-white hover:bg-amber-100 min-h-[44px] text-amber-950"
+                      >
+                        Axles → Gross
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Primary UX: editable group combined weights (dynamic from selected rig) */}
+                  {groupMetas.length > 0 && (
+                    <div className="mb-3">
+                      <div
+                        className="text-[10px] font-medium text-amber-900 mb-1"
+                        id="axle-group-combined-weights-label"
+                      >
+                        Group combined weights
+                      </div>
+                      <div
+                        className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3"
+                        role="group"
+                        aria-labelledby="axle-group-combined-weights-label"
+                      >
+                        {groupMetas.map((meta, gi) => {
+                          const { group: g, groupSum, config, limitLbs, overLimit } = meta
+                          const inputId = `axle-group-weight-${g.type}-${gi}`
+                          const configId = `axle-group-config-${g.type}-${gi}`
+                          return (
+                            <div
+                              key={`${g.type}-${gi}`}
+                              className={
+                                overLimit
+                                  ? 'border border-amber-500 rounded-lg bg-amber-100/80 p-2'
+                                  : 'border border-amber-200 rounded-lg bg-white/70 p-2'
+                              }
+                              title={
+                                overLimit
+                                  ? `${g.label} over simple legal limit by ${(groupSum - limitLbs).toLocaleString()} lbs · ${config.detail}`
+                                  : `${config.detail} · simple legal limit ${limitLbs.toLocaleString()} lbs`
+                              }
+                            >
+                              <label htmlFor={inputId} className="block text-xs font-medium text-amber-950">
+                                {g.label}
+                                <span className="font-normal text-amber-800">
+                                  {' '}
+                                  · {config.label}
+                                  {g.axleCount > 1
+                                    ? ` · ${g.axleCount} axles`
+                                    : ' · 1 axle'}
+                                </span>
+                              </label>
+                              <div
+                                id={configId}
+                                className="text-[10px] text-amber-700 mt-0.5 mb-1"
+                              >
+                                {config.detail}
+                                {config.kind === 'spread' ? ' · limit 20k×axles' : ''}
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  id={inputId}
+                                  type="number"
+                                  min={0}
+                                  // Apply even-split on blur (not each keystroke) for easier mobile edit.
+                                  defaultValue={groupSum || 0}
+                                  key={`${g.type}-${gi}-${groupSum}`}
+                                  onBlur={(e) => applyGroupTotal(gi, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault()
+                                      ;(e.target as HTMLInputElement).blur()
+                                    }
+                                  }}
+                                  className={`${inputCompactClass} min-h-[44px]`}
+                                  aria-describedby={configId}
+                                />
+                                <span className="text-[10px] text-amber-800 shrink-0 whitespace-nowrap">
+                                  / {limitLbs.toLocaleString()}
+                                  {overLimit && (
+                                    <span className="ml-1 font-medium text-amber-900">over</span>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <p className="text-[10px] text-amber-700 mt-1">
+                        Editing a group total even-splits across that group&apos;s axles on blur.
+                        Spread groups show 20k×axles; other limits are simple legal defaults (v1).
+                        Distribute is steer-first (12k), not capacity-optimized.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Advanced: per-axle edit (kept for fine control) */}
+                  <details className="mb-2 border border-amber-200 rounded-lg bg-white/50">
+                    <summary className="cursor-pointer text-xs font-medium text-amber-900 p-2 hover:text-amber-950 min-h-[44px]">
+                      Per-axle weights (advanced)
+                    </summary>
+                    <div className="px-2 pb-2">
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                        {Array.from({ length: n }).map((_, i) => {
+                          const gType = groupSummary.axleTypes[i]
+                          const groupLabel = gType ? AXLE_GROUP_LABELS[gType] : null
+                          const inputId = `axle-weight-${i}`
+                          return (
+                            <div key={i}>
+                              <label htmlFor={inputId} className={fieldLabelTinyClass}>
+                                Axle {i + 1}
+                                {groupLabel ? ` · ${groupLabel}` : ''}
+                              </label>
+                              <input
+                                id={inputId}
+                                type="number"
+                                value={weights[i] || 0}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0
+                                  setFormData((prev) => {
+                                    const arr = [...(prev.axleWeights || [])]
+                                    // Ensure array covers all shown axles when user edits.
+                                    while (arr.length < n) arr.push(0)
+                                    arr[i] = val
+                                    const newSum = arr
+                                      .slice(0, n)
+                                      .reduce((a, b) => a + (Number(b) || 0), 0)
+                                    return {
+                                      ...prev,
+                                      axles: n,
+                                      axleWeights: arr.slice(0, n),
+                                      // Always write sum (including 0); dual-write weight for envelope.
+                                      grossLoadedWeight: newSum,
+                                      weight: newSum,
+                                    }
+                                  })
+                                }}
+                                className={`${inputCompactClass} min-h-[44px]`}
+                              />
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </details>
+
                   <div className="flex flex-wrap items-center gap-3 text-sm">
                     <div>
-                      <span className="font-medium">Gross Loaded Weight</span>
+                      <label htmlFor="gross-loaded-weight" className="font-medium text-amber-950">
+                        Gross Loaded Weight
+                      </label>
                       <input
+                        id="gross-loaded-weight"
                         type="number"
                         value={gross}
-                        onChange={(e) => setFormData((p) => ({ ...p, grossLoadedWeight: parseFloat(e.target.value) || 0 }))}
-                        className={`${fieldControlClass} ml-2 w-28 p-1 rounded`}
-                      /> lbs
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value) || 0
+                          setFormData((p) => ({
+                            ...p,
+                            grossLoadedWeight: v,
+                            weight: v,
+                          }))
+                        }}
+                        className={`${fieldControlClass} ml-2 w-28 p-1 rounded min-h-[44px]`}
+                      />{' '}
+                      <span className="text-amber-900">lbs</span>
                     </div>
-                    <div className={fieldHintClass}>Sum of shown axles: <span className="font-mono text-gray-900">{sum.toLocaleString()}</span></div>
+                    <div className="text-xs text-amber-800">
+                      Sum of shown axles:{' '}
+                      <span className="font-mono text-amber-950">{sum.toLocaleString()}</span>
+                    </div>
                     {gross !== sum && gross > 0 && (
-                      <div className="text-amber-600 text-xs">⚠ Gross differs from axle sum (normal for 5th-wheel/kingpin load transfer)</div>
+                      <div className="text-amber-700 text-xs">
+                        ⚠ Gross differs from axle sum (normal for 5th-wheel/kingpin load transfer)
+                      </div>
                     )}
                   </div>
-                </>
-              )
-            })()}
-          </div>
+                </div>
+              </details>
+            )
+          })()}
           <p className={`${fieldHintTinyClass} mt-1`}>Auto-calc + distribute helpers match real carrier bridge-law workflows. Values are captured on save.</p>
         </div>
 
@@ -3515,6 +4107,37 @@ export default function PermitTestPage() {
                         )
                       })}
                     </div>
+                  </div>
+                )}
+
+                {/* Scale / axle-group / corridor weight findings (from permit agent) */}
+                {(primary.unableToScale || primary.scaleFindings?.length > 0 || primary.axleGroupSummary || primary.corridorScaleFailedStates?.length > 0) && (
+                  <div className="p-4 border rounded-lg bg-white">
+                    <h3 className="font-semibold mb-3 text-gray-700">Scale &amp; Axle Groups</h3>
+                    {primary.axleGroupSummary && (
+                      <div className="text-sm text-gray-700 mb-2">
+                        <span className="font-medium">Groups:</span> {primary.axleGroupSummary}
+                      </div>
+                    )}
+                    {primary.unableToScale && (
+                      <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 font-medium">
+                        Unable to scale the proposed load on the current axle-group configuration.
+                      </div>
+                    )}
+                    {primary.corridorScaleFailedStates?.length > 0 && (
+                      <div className="mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+                        Corridor weight/scale failure in: <b>{primary.corridorScaleFailedStates.join(', ')}</b>
+                      </div>
+                    )}
+                    {primary.scaleFindings?.length > 0 && (
+                      <ul className="text-sm text-gray-800 space-y-1 list-disc list-inside">
+                        {primary.scaleFindings.map((f: { severity?: string; message?: string }, i: number) => (
+                          <li key={i} className={f.severity === 'failure' ? 'text-red-700' : 'text-amber-800'}>
+                            {f.message}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
 

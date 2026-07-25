@@ -96,22 +96,84 @@ export interface RigSnapshot {
   trailers: (Partial<Trailer> & { profile_name?: string })[]
   overallLengthFt?: number | null
   totalAxles?: number | null
+  /**
+   * Role-based axle groups (steer/drives/jeep/trailer/flip/stinger) + spacing/lift
+   * geometry for portal/history/prefill. Built via lib/axle-groups buildRigAxleSnapshot.
+   */
+  axleGroups?: {
+    groups: Array<{
+      type: string
+      axleIndexes: number[]
+      axleCount: number
+      label: string
+      source: string
+      trailerIndex?: number
+    }>
+    totalAxles: number
+    capped: boolean
+    axleTypes: string[]
+  } | null
+  axleGroupSummary?: string | null
+  /** Tractor inter-axle spacings (inches). */
+  tractorSpacingsIn?: number[] | null
+  /** Per-trailer inter-axle spacings (inches). */
+  trailerSpacingsIn?: number[][] | null
+  /** Per-trailer kingpin/pin → first axle (inches). */
+  kingpinToFirstAxleIn?: (number | null)[] | null
+  /** Per-trailer lift-axle flags. */
+  trailerHasLiftAxle?: boolean[] | null
 }
 
 // --- Core calculation logic (pure, reusable) ---
 
 /**
- * Parse axle spacings safely (supports number[] or legacy string "6 ft, 4 ft 10 in")
+ * Parse axle spacings preserving index slots (1-2, 2-3, …).
+ * Supports number[] or legacy string. Cleared / invalid slots become 0 — never compact
+ * middle zeros (that shifts later gap labels and breaks diagram alignment).
+ * When expectedLength is set, pad/truncate to that slot count.
  */
-export function parseAxleSpacings(input: number[] | string | null | undefined): number[] {
-  if (!input) return []
-  if (Array.isArray(input)) return input.filter((n) => Number.isFinite(n) && n > 0)
-  if (typeof input === 'string') {
-    // Very tolerant legacy parser for old "axleSpacing" text fields
-    const nums = input.match(/\d+(\.\d+)?/g)
-    return nums ? nums.map(Number).filter((n) => n > 0) : []
+export function parseAxleSpacings(
+  input: number[] | string | null | undefined,
+  expectedLength?: number | null
+): number[] {
+  if (input == null || input === '') {
+    if (expectedLength != null && expectedLength > 0) {
+      return Array.from({ length: Math.floor(expectedLength) }, () => 0)
+    }
+    return []
   }
-  return []
+
+  let raw: number[] = []
+  if (Array.isArray(input)) {
+    raw = input.map((x) => {
+      const n = Number(x)
+      return Number.isFinite(n) && n > 0 ? n : 0
+    })
+  } else if (typeof input === 'string') {
+    // Prefer comma-separated slots so empties keep index; fall back to digit scan for
+    // legacy prose like "6 ft, 4 ft 10 in".
+    if (input.includes(',')) {
+      raw = input.split(',').map((s) => {
+        const n = parseFloat(s.trim())
+        return Number.isFinite(n) && n > 0 ? n : 0
+      })
+    } else {
+      const nums = input.match(/\d+(\.\d+)?/g)
+      raw = nums ? nums.map(Number).filter((n) => Number.isFinite(n) && n > 0) : []
+    }
+  }
+
+  if (expectedLength != null && Number.isFinite(expectedLength) && expectedLength > 0) {
+    const n = Math.floor(expectedLength)
+    const out = raw.slice(0, n)
+    while (out.length < n) out.push(0)
+    return out
+  }
+
+  // Free-length: drop only trailing empties so middle zeros keep their index.
+  let end = raw.length
+  while (end > 0 && !(raw[end - 1] > 0)) end -= 1
+  return raw.slice(0, end)
 }
 
 /**
@@ -166,17 +228,20 @@ export function computeRigDimensions(
     const steerSetbackFt = (Number(t.steer_axle_setback_in) || 36) / 12
     axlePositionsFt.push(steerSetbackFt)
 
-    const tSpacings = parseAxleSpacings(t.axle_spacings)
     const targetTractorAxles = Math.max(2, Number(t.num_axles) || 3)
     const numDriveGaps = targetTractorAxles - 1
+    // Slot-preserving parse (middle zeros keep index). Empty slots use geometry defaults.
+    const tSpacings = parseAxleSpacings(t.axle_spacings, numDriveGaps > 0 ? numDriveGaps : null)
+    const hasDeclaredTractorSpacings =
+      (Array.isArray(t.axle_spacings) && t.axle_spacings.length > 0) ||
+      (typeof t.axle_spacings === 'string' && t.axle_spacings.trim().length > 0)
 
-    // Prefer new full individual axle spacings array [1-2 (steer→1st drive), 2-3, 3-4, ...]
-    // (length == numDriveGaps). Falls back to legacy wheelbase + post-first-drive spacings for old data.
-    if (tSpacings.length >= numDriveGaps && numDriveGaps > 0) {
-      // New detailed data from improved Tractor Profile form
+    // Prefer full individual axle spacings [1-2, 2-3, 3-4, …]. Falls back to legacy wheelbase.
+    if (hasDeclaredTractorSpacings && numDriveGaps > 0) {
       let pos = steerSetbackFt
       for (let i = 0; i < numDriveGaps; i++) {
-        const spIn = tSpacings[i] ?? (i === 0 ? 220 : 48)
+        const raw = tSpacings[i] || 0
+        const spIn = raw > 0 ? raw : i === 0 ? 220 : 48
         pos += spIn / 12
         axlePositionsFt.push(pos)
       }
@@ -186,7 +251,8 @@ export function computeRigDimensions(
       axlePositionsFt.push(driveX)
       const additionalDrives = Math.max(0, targetTractorAxles - 2)
       for (let i = 0; i < additionalDrives; i++) {
-        const spIn = i < tSpacings.length ? tSpacings[i] : 48
+        const raw = tSpacings[i] || 0
+        const spIn = raw > 0 ? raw : 48
         driveX += spIn / 12
         axlePositionsFt.push(driveX)
       }
@@ -228,11 +294,15 @@ export function computeRigDimensions(
     const trAxleCount = Number(trl.num_axles) || 2
     totalAxles += trAxleCount
 
-    const trSpacings = parseAxleSpacings(trl.axle_spacings)
+    const trGaps = Math.max(0, trAxleCount - 1)
+    const trSpacings = parseAxleSpacings(trl.axle_spacings, trGaps > 0 ? trGaps : null)
     for (let a = 0; a < trAxleCount; a++) {
       axlePositionsFt.push(axleX)
-      if (a < trSpacings.length) axleX += trSpacings[a] / 12
-      else axleX += 4 // default 4 ft spread
+      if (a < trAxleCount - 1) {
+        const raw = trSpacings[a] || 0
+        // Default ~49" (≈4.08 ft) between trailer axles when slot empty
+        axleX += (raw > 0 ? raw : 49) / 12
+      }
     }
 
     // For next trailer (if any), assume close couple at rear of previous
@@ -265,13 +335,41 @@ export function computeRigDimensions(
 
 /**
  * Convenience: compute just the numbers needed for quick display / prefill.
+ * axleGroupCount is a light heuristic (steer+drives on tractor + one group per trailer unit),
+ * not a full assignAxleGroups() call — use lib/axle-groups for permitting groups.
  */
 export function computeOverallDimensions(tractor: Partial<Tractor> | null, trailers: (Partial<Trailer> | null)[]) {
   const dims = computeRigDimensions(tractor, trailers)
+  let axleGroupCount = 0
+  const tAxles =
+    tractor == null
+      ? 0
+      : tractor.num_axles == null
+        ? 3
+        : Math.max(0, Math.floor(Number(tractor.num_axles)) || 0)
+  if (tAxles > 0) axleGroupCount += tAxles === 1 ? 1 : 2 // steer + drives (or steer only)
+  for (const tr of trailers || []) {
+    if (!tr) continue
+    const n =
+      tr.num_axles == null
+        ? 2
+        : Math.max(0, Math.floor(Number(tr.num_axles)) || 0)
+    if (n > 0) axleGroupCount += 1
+  }
+  // Do not invent groups when callers declared zero axles; only fall back when
+  // no equipment was supplied at all but geometry still reports axles.
+  if (
+    axleGroupCount === 0 &&
+    dims.totalAxles > 0 &&
+    tractor == null &&
+    (!trailers || trailers.length === 0)
+  ) {
+    axleGroupCount = Math.ceil(dims.totalAxles / 2)
+  }
   return {
     totalLengthFt: dims.totalLengthFt,
     totalAxles: dims.totalAxles,
-    axleGroupCount: Math.ceil(dims.totalAxles / 2), // rough for future bridge
+    axleGroupCount,
   }
 }
 

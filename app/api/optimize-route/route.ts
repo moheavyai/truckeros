@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { processPermitRequest, type LoadDetails } from '@/agents/permit-agent'
 import { buildLoadDetails } from '@/lib/build-load-details'
 import { enrichOrToolsResponseWithEscorts } from '@/lib/enrich-route-escorts'
+import { enrichOrToolsResponseWithScale } from '@/lib/enrich-route-scale'
 import {
   getOrToolsOptimizeUrl,
   isAbortOrTimeoutError,
@@ -185,11 +186,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const enriched = await enrichOrToolsResponseWithEscorts(data, {
+    const withEscorts = await enrichOrToolsResponseWithEscorts(data, {
       width: loadDetails.width,
       length: loadDetails.length,
       height: loadDetails.height,
       weight: loadDetails.weight,
+    })
+
+    // Attach axle-group scale findings so OR-Tools happy path matches analyze-permit UI.
+    const enriched = await enrichOrToolsResponseWithScale(withEscorts, {
+      weight: loadDetails.weight,
+      axles: loadDetails.axles,
+      axleWeights: loadDetails.axleWeights,
+      equipment: loadDetails.equipment,
     })
 
     return NextResponse.json(enriched)

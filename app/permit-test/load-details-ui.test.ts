@@ -171,3 +171,106 @@ describe('Permit test page — load details cargo fields', () => {
     expect(analyzeSlice).not.toContain('numberOfPieces')
   })
 })
+
+describe('Permit test page — axle weight distribution', () => {
+  function axleWeightsSectionSlice(source: string) {
+    const start = source.indexOf('Dynamic axle weights')
+    const end = source.indexOf('Routing envelope', start)
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    return source.slice(start, end)
+  }
+
+  it('wires distributeWeightSteerFirst for defaults, distribute, and envelope auto-fill', () => {
+    const source = readPermitPageSource()
+    expect(source).toContain('distributeWeightSteerFirst')
+    expect(source).toContain('resolvePermitAxleLayout')
+    expect(source).toContain('trimAxleWeightsForSubmit')
+    expect(source).toContain('buildRigAxleSnapshot')
+    expect(source).toContain('buildSelectedRigSnapshot')
+    // Initial form default
+    expect(source).toMatch(/axleWeights:\s*distributeWeightSteerFirst\(/)
+    // Envelope / axle-count redistribute
+    expect(source).toContain('next.axleWeights = distributeWeightSteerFirst(n, gross, groups)')
+    // Submit paths truncate weights to current axle count
+    expect(source).toContain('trimAxleWeightsForSubmit(')
+  })
+
+  it('shows expandable amber group weight inputs matching overhang chrome', () => {
+    const section = axleWeightsSectionSlice(readPermitPageSource())
+    // Collapsed-by-default details chrome (mobile-friendly) — matches Load Overhangs amber
+    expect(section).toContain('<details')
+    expect(section).toContain('<summary')
+    expect(section).toContain('mb-3 border rounded-lg bg-amber-50 text-sm')
+    expect(section).toContain('font-medium text-amber-900')
+    expect(section).toContain('Axle Weight Distribution (lbs)')
+    expect(section).toContain('Group combined weights')
+    expect(section).toContain('sumGroupWeightLbs')
+    expect(section).toContain('distributeWeightToGroup')
+    expect(section).toContain('classifyGroupAxleConfig')
+    expect(section).toContain('buildCombinationAdjacentSpacingsIn')
+    expect(section).toContain('withinGroupSpacingsFromCombination')
+    expect(section).toContain('displayGroupWeightLimitLbs')
+    expect(section).toContain('overLimit')
+    expect(section).toContain('overCount')
+    expect(section).toContain('even-split')
+    expect(section).toContain('steer-first (12k), not')
+    expect(section).toContain('aria-labelledby="axle-group-combined-weights-label"')
+    expect(section).toContain('aria-describedby={configId}')
+    expect(section).toContain('axle-group-weight-')
+    expect(section).toContain('Distribute (steer 12k)')
+    // Spacing axle counts match assignAxleGroups defaults (tractor 3 / trailer 2)
+    expect(section).toContain('resolveDeclaredAxleCount(tractorUnit.num_axles, 3)')
+    expect(section).toContain('resolveDeclaredAxleCount(tr?.num_axles, 2)')
+    // Gross always synced incl. 0; dual-write weight for envelope
+    expect(section).toContain('grossLoadedWeight: newSum')
+    expect(section).toContain('weight: newSum')
+    expect(section).not.toContain('newSum || prev.grossLoadedWeight')
+    // Distribute (steer 12k) dual-writes gross + weight to distributed total
+    expect(section).toContain('distributedTotal')
+    expect(section).toMatch(/grossLoadedWeight:\s*distributedTotal/)
+    expect(section).toMatch(/weight:\s*distributedTotal/)
+    // Group total applies on blur only when total changes (preserve unequal per-axle)
+    expect(section).toContain('onBlur={(e) => applyGroupTotal(gi, e.target.value)}')
+    expect(section).toContain('Math.abs(groupTotal - currentSum) < 0.5')
+    expect(section).toContain('defaultValue={groupSum || 0}')
+    expect(section).toContain('min-h-[44px]')
+    // Per-axle advanced nested edit kept
+    expect(section).toContain('Per-axle weights (advanced)')
+    expect(section).toContain('htmlFor={inputId}')
+    expect(section).toContain('id={inputId}')
+    expect(section).toContain('axle-weight-')
+    // Primary group fields are editable inputs (not chip-only display)
+    expect(section).toContain('applyGroupTotal')
+    expect(section).toContain('config.label')
+    expect(section).toContain('config.detail')
+  })
+
+  it('saves axle groups on cargo snapshot for portal/history prefill', () => {
+    const source = readPermitPageSource()
+    expect(source).toContain('axleGroups: summary')
+    expect(source).toContain('axleGroupSummary: formatAxleGroupSummaryLine(summary)')
+  })
+
+  it('wires axle groups into both save handlers and analyze equipment payload', () => {
+    const source = readPermitPageSource()
+    const approveSave = approveAndSaveHandlerSlice(source)
+    const approveSpecific = approveSpecificHandlerSlice(source)
+    for (const handler of [approveSave, approveSpecific]) {
+      expect(handler).toContain('axleGroups: summary')
+      expect(handler).toContain('resolveSubmitWeightLbs(formData)')
+    }
+    // Analyze / change-route pass precomputed groups so jeep/flip roles survive
+    expect(source).toContain('axleGroups: selectedRigSnapshot.axleGroups ?? null')
+    expect(source).toContain('resolveSubmitWeightLbs')
+    expect(source).toContain('resolveRigBaseLengthFt')
+    expect(source).toContain('incompleteEquipment')
+    expect(source).toContain('allTrailersEmpty')
+  })
+
+  it('redistributes when axle count mismatches weight array length', () => {
+    const source = readPermitPageSource()
+    expect(source).toContain('axleCountMismatch')
+    expect(source).toContain('weightChanged || axleCountMismatch')
+  })
+})

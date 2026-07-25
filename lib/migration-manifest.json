@@ -26,6 +26,7 @@
     "038_phase1_self_clerk_pe_and_accept_clerk.sql",
     "039_phase1_self_clerk_insert_block.sql",
     "040_phase1_team_invite_self_clerk_update.sql",
-    "041_phase1_team_invite_self_clerk_session_match.sql"
+    "041_phase1_team_invite_self_clerk_session_match.sql",
+    "042_axle_configs.sql"
   ]
 }

@@ -51,13 +51,14 @@ export function calculateEstimatedCost(
   const stateCount = permitRequiredStates.length
 
   if (stateCount === 0) {
+    // Preserve incoming analysis notes (axle groups / scale warnings) even when $0.
     return {
       total: 0,
       baseFee: 0,
       stateCount: 0,
       surcharges: {},
       perStateFee: DEFAULT_PRICING.BASE_FEE_PER_STATE,
-      notes: ['No permits required — cost is $0'],
+      notes: [...notes, 'No permits required — cost is $0'],
     }
   }
 

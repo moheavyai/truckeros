@@ -4,6 +4,13 @@ import React from 'react'
 import type { Tractor, Trailer } from '@/types/equipment'
 import { computeRigDimensions } from '@/types/equipment'
 import TractorGraphic from '@/components/TractorGraphic'
+import {
+  AXLE_GROUP_LABELS,
+  MAX_TOTAL_AXLES,
+  assignAxleGroups,
+  formatAxleGroupSummaryLine,
+  type AxleGroupType,
+} from '@/lib/axle-groups'
 
 interface VehicleDiagramProps {
   tractor: Partial<Tractor> | null | undefined
@@ -12,6 +19,15 @@ interface VehicleDiagramProps {
   className?: string
   height?: number // px
   compact?: boolean
+}
+
+const GROUP_COLORS: Record<AxleGroupType, string> = {
+  steer: '#0ea5e9',
+  drives: '#6366f1',
+  jeep: '#d97706',
+  trailer: '#475569',
+  flip: '#db2777',
+  stinger: '#9333ea',
 }
 
 /**
@@ -31,6 +47,9 @@ export default function VehicleDiagram({
   compact = false,
 }: VehicleDiagramProps) {
   const dims = computeRigDimensions(tractor, trailers)
+  const axleGroupSummary = assignAxleGroups(tractor, trailers || [])
+  // Cap diagram axle chrome at v1 max (geometry may still list more positions).
+  const diagramAxlePositions = dims.axlePositionsFt.slice(0, MAX_TOTAL_AXLES)
 
   const isCompact = !!compact
 
@@ -108,8 +127,8 @@ export default function VehicleDiagram({
           )
         })}
 
-        {/* Axle circles (core functionality kept intact) */}
-        {dims.axlePositionsFt.map((axleFt, idx) => {
+        {/* Axle circles (core functionality kept intact; capped at MAX_TOTAL_AXLES) */}
+        {diagramAxlePositions.map((axleFt, idx) => {
           const ax = toX(axleFt)
           return <circle key={idx} cx={ax} cy={BASE_Y + 3} r="2" fill="#111827" stroke="#4b5563" strokeWidth="0.5" />
         })}
@@ -207,14 +226,18 @@ export default function VehicleDiagram({
           )
         })}
 
-        {/* Axles (all) */}
-        {dims.axlePositionsFt.map((axleFt, idx) => {
+        {/* Axles with group labels (steer / drives / jeep / trailer / flip / stinger); cap at MAX_TOTAL_AXLES */}
+        {diagramAxlePositions.map((axleFt, idx) => {
           const ax = toX(axleFt)
-          const isSteer = idx === 0
+          const groupType = axleGroupSummary.axleTypes[idx] || (idx === 0 ? 'steer' : 'trailer')
+          const groupColor = GROUP_COLORS[groupType] || ACCENT
+          // Label only the first axle of each contiguous group to reduce clutter
+          const prevType = idx > 0 ? axleGroupSummary.axleTypes[idx - 1] : null
+          const showGroupLabel = groupType !== prevType
           return (
             <g key={idx}>
               {/* Tire / wheel */}
-              <circle cx={ax} cy={BASE_Y + 4} r="9" fill="#111827" stroke="#374151" strokeWidth="2" />
+              <circle cx={ax} cy={BASE_Y + 4} r="9" fill="#111827" stroke={groupColor} strokeWidth="2" />
               <circle cx={ax} cy={BASE_Y + 4} r="4" fill="#4b5563" />
               {/* Axle vertical line (suspension) */}
               <line x1={ax} y1={BASE_Y - 6} x2={ax} y2={BASE_Y + 12} stroke={AXLE_COLOR} strokeWidth="2.5" />
@@ -222,8 +245,10 @@ export default function VehicleDiagram({
               <text x={ax} y={BASE_Y + 28} fontSize="8" textAnchor="middle" fill="#475569">
                 {idx + 1}
               </text>
-              {isSteer && (
-                <text x={ax} y={BASE_Y - 14} fontSize="7" textAnchor="middle" fill="#0ea5e9">STEER</text>
+              {showGroupLabel && (
+                <text x={ax} y={BASE_Y - 14} fontSize="7" textAnchor="middle" fill={groupColor} fontWeight="700">
+                  {AXLE_GROUP_LABELS[groupType].toUpperCase()}
+                </text>
               )}
             </g>
           )
@@ -288,6 +313,10 @@ export default function VehicleDiagram({
 
           <circle cx="150" cy="0" r="4" fill="#0ea5e9" />
           <text x="160" y="4" fontSize="9" fill="#475569">5th / Kingpin</text>
+
+          <text x="260" y="4" fontSize="8" fill="#64748b">
+            Groups: {formatAxleGroupSummaryLine(axleGroupSummary)}
+          </text>
         </g>
 
         {/* Scale reference */}
@@ -314,6 +343,10 @@ export default function VehicleDiagram({
           <div className="bg-gray-50 rounded px-3 py-1.5">
             <span className="font-medium text-gray-800">Trailers</span><br />
             {dims.trailerLengths.length} × {dims.trailerLengths.map((l, i) => `${l}ft`).join(' + ')}
+          </div>
+          <div className="bg-gray-50 rounded px-3 py-1.5 sm:col-span-2 col-span-2">
+            <span className="font-medium text-gray-800">Axle Groups</span><br />
+            <span className="text-[11px] text-gray-800">{formatAxleGroupSummaryLine(axleGroupSummary)}</span>
           </div>
         </div>
       )}

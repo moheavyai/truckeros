@@ -138,11 +138,29 @@ export function formatPortalEquipmentSnapshot(
     if (rig.rigName) rigBits.push(rig.rigName)
     if (rig.overallLengthFt) rigBits.push(`${Number(rig.overallLengthFt).toFixed(1)} ft overall`)
     if (rig.totalAxles) rigBits.push(`${rig.totalAxles} axles total`)
+    // Prefer equipment.rig axle group line; fall back to cargo snapshot for older rows.
+    const groupLine =
+      (typeof rig.axleGroupSummary === 'string' && rig.axleGroupSummary) ||
+      (cargo && typeof cargo.axleGroupSummary === 'string' && cargo.axleGroupSummary) ||
+      null
+    if (groupLine) rigBits.push(groupLine)
 
     const tractorLine = rig.tractor ? formatTractorLine(rig.tractor as Record<string, any>) : null
     const trailerLines = (rig.trailers || []).map((tr, i) =>
       formatTrailerLine(tr as Record<string, any>, i)
     )
+    // Surface lift axles: prefer trailerHasLiftAxle flags; fall back to nested trailers[].has_lift_axle
+    const liftFlags = Array.isArray(rig.trailerHasLiftAxle) ? rig.trailerHasLiftAxle : []
+    const liftCount =
+      liftFlags.length > 0
+        ? liftFlags.filter(Boolean).length
+        : (rig.trailers || []).filter((tr) => !!(tr as { has_lift_axle?: boolean })?.has_lift_axle)
+            .length
+    if (liftCount > 0) {
+      trailerLines.push(
+        liftCount === 1 ? 'Lift axle on 1 trailer' : `Lift axles on ${liftCount} trailers`
+      )
+    }
     const overhangLine = formatOverhangLine(equipment, cargo)
 
     return {

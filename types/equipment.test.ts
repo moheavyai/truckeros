@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { computeRoutingEnvelope } from './equipment'
+import {
+  computeOverallDimensions,
+  computeRigDimensions,
+  computeRoutingEnvelope,
+  parseAxleSpacings,
+} from './equipment'
 
 describe('computeRoutingEnvelope', () => {
   it('length = rig length + front + rear overhangs', () => {
@@ -94,5 +99,51 @@ describe('computeRoutingEnvelope', () => {
       computeRoutingEnvelope({ rigLengthFt: 60, loadOverhangFrontFt: 4, loadOverhangRearFt: 0 })
         .lengthFt
     ).toBe(64)
+  })
+})
+
+describe('computeOverallDimensions axleGroupCount heuristic', () => {
+  it('counts steer+drives + one group per trailer unit', () => {
+    const d = computeOverallDimensions(
+      { num_axles: 3, overall_length_ft: 22 },
+      [{ num_axles: 2, overall_length_ft: 53 }]
+    )
+    // tractor: 2 groups (steer+drives), trailer: 1 → 3
+    expect(d.axleGroupCount).toBe(3)
+    expect(d.totalAxles).toBe(5)
+  })
+
+  it('does not invent groups for explicit zero axles', () => {
+    const d = computeOverallDimensions({ num_axles: 0 }, [{ num_axles: 0 }])
+    expect(d.axleGroupCount).toBe(0)
+  })
+})
+
+describe('parseAxleSpacings slot preservation', () => {
+  it('does not collapse middle zeros', () => {
+    expect(parseAxleSpacings([220, 0, 48])).toEqual([220, 0, 48])
+    expect(parseAxleSpacings([220, 48, 0])).toEqual([220, 48])
+    expect(parseAxleSpacings([220], 3)).toEqual([220, 0, 0])
+    expect(parseAxleSpacings('220,,48')).toEqual([220, 0, 48])
+  })
+})
+
+describe('computeRigDimensions spacing slots', () => {
+  it('keeps axle positions aligned when a middle gap is zero (uses default for geometry)', () => {
+    const dims = computeRigDimensions(
+      {
+        overall_length_ft: 28,
+        num_axles: 4,
+        steer_axle_setback_in: 36,
+        axle_spacings: [220, 0, 48],
+      },
+      []
+    )
+    // 4 axles → 4 positions; middle zero gap falls back to 48" so positions stay strictly increasing
+    expect(dims.totalAxles).toBe(4)
+    expect(dims.axlePositionsFt).toHaveLength(4)
+    for (let i = 1; i < dims.axlePositionsFt.length; i++) {
+      expect(dims.axlePositionsFt[i]).toBeGreaterThan(dims.axlePositionsFt[i - 1])
+    }
   })
 })

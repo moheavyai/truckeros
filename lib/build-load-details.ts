@@ -1,5 +1,49 @@
 import type { LoadDetails } from '@/agents/permit-agent'
 import { normalizeDrops } from '@/lib/location-stop'
+import type { Tractor, Trailer } from '@/types/equipment'
+
+/**
+ * Map optional equipment / axle fields from an analyze or optimize request body.
+ */
+export function extractAxleEquipmentFields(body: Record<string, unknown>): Pick<
+  LoadDetails,
+  'axles' | 'axleWeights' | 'equipment'
+> {
+  const axles =
+    body.axles != null && Number.isFinite(Number(body.axles))
+      ? Number(body.axles)
+      : undefined
+
+  let axleWeights: number[] | undefined
+  if (Array.isArray(body.axleWeights)) {
+    axleWeights = body.axleWeights.map((w) => Number(w) || 0)
+  }
+
+  let equipment: LoadDetails['equipment']
+  const rawEq = body.equipment as
+    | { tractor?: Partial<Tractor> | null; trailers?: (Partial<Trailer> | null)[] }
+    | null
+    | undefined
+  // Also accept rig-shaped snapshots from permit-test (tractor + trailers at top level of equipment or rig)
+  const rig = (body.rig || body.selectedRig || rawEq) as
+    | { tractor?: Partial<Tractor> | null; trailers?: (Partial<Trailer> | null)[] }
+    | null
+    | undefined
+
+  if (rig && (rig.tractor || (Array.isArray(rig.trailers) && rig.trailers.length > 0))) {
+    equipment = {
+      tractor: rig.tractor ?? null,
+      trailers: Array.isArray(rig.trailers) ? rig.trailers : [],
+    }
+  } else if (rawEq && (rawEq.tractor || (Array.isArray(rawEq.trailers) && rawEq.trailers.length > 0))) {
+    equipment = {
+      tractor: rawEq.tractor ?? null,
+      trailers: Array.isArray(rawEq.trailers) ? rawEq.trailers : [],
+    }
+  }
+
+  return { axles, axleWeights, equipment }
+}
 
 /**
  * Map an optimize-route / analyze-permit style JSON body to LoadDetails.
@@ -14,6 +58,7 @@ export function buildLoadDetails(body: Record<string, unknown>): LoadDetails {
     throw new Error(dropsResult.message)
   }
   const drops = dropsResult.drops
+  const axleFields = extractAxleEquipmentFields(body)
 
   return {
     origin: {
@@ -31,7 +76,11 @@ export function buildLoadDetails(body: Record<string, unknown>): LoadDetails {
       zip: destination.zip || '',
     },
     drops: drops.length > 0 ? drops : undefined,
-    weight: Number(body.weight),
+    // Prefer grossLoadedWeight when provided (axle UI) so scale checks match permit-test form.
+    weight:
+      body.grossLoadedWeight != null && Number(body.grossLoadedWeight) > 0
+        ? Number(body.grossLoadedWeight)
+        : Number(body.weight),
     length: Number(body.length),
     width: Number(body.width),
     height: Number(body.height),
@@ -52,5 +101,6 @@ export function buildLoadDetails(body: Record<string, unknown>): LoadDetails {
     routingEngine: 'osrm',
     trailerLengthFt:
       body.trailerLengthFt != null ? Number(body.trailerLengthFt) : undefined,
+    ...axleFields,
   }
 }

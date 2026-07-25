@@ -3,6 +3,7 @@ import {
   sanitizeMoveType,
   sanitizeNumberOfPieces,
 } from '@/lib/load-details-options'
+import type { AxleGroupSummary } from '@/lib/axle-groups'
 
 /** Minimal form slice required to build the persisted cargo snapshot. */
 export interface PermitCargoFormInput {
@@ -43,6 +44,10 @@ export interface PermitCargoFormInput {
 
 export type PermitCargoSnapshotOptions = {
   organizationId?: string | null
+  /** Role-based axle groups from selected rig (or synthetic form layout). */
+  axleGroups?: AxleGroupSummary | null
+  /** One-line group summary for portal/history display. */
+  axleGroupSummary?: string | null
 }
 
 /** Build sanitized cargo snapshot for permit request persistence. */
@@ -62,6 +67,18 @@ export function buildPermitCargoSnapshot(
     moveType: sanitizeMoveType(formData.moveType),
     axleWeights: formData.axleWeights,
     grossLoadedWeight: formData.grossLoadedWeight,
+    ...(options?.axleGroups
+      ? {
+          axleGroups: options.axleGroups,
+          axleGroupSummary:
+            options.axleGroupSummary ??
+            (options.axleGroups.totalAxles > 0
+              ? `${options.axleGroups.totalAxles} axles`
+              : null),
+        }
+      : options?.axleGroupSummary
+        ? { axleGroupSummary: options.axleGroupSummary }
+        : {}),
     envelope: {
       weight: formData.weight,
       length: formData.length,

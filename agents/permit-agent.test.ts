@@ -157,6 +157,70 @@ describe('permit-agent length permit integration', () => {
   })
 })
 
+describe('permit-agent scale findings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('surfaces axleGroupSummary and unableToScale on overweight unscaleable loads', async () => {
+    const result = await processPermitRequest({
+      origin: { city: 'Dallas', state: 'TX' },
+      destination: { city: 'Houston', state: 'TX' },
+      weight: 200_000,
+      length: 74,
+      width: 8.5,
+      height: 13.5,
+      axles: 5,
+      axleWeights: [40_000, 40_000, 40_000, 40_000, 40_000],
+      manualRoute: ['TX'],
+    })
+
+    expect(result.status).toBe('pending_review')
+    const option = result.options[0]
+    expect(option.axleGroupSummary).toMatch(/axles/i)
+    expect(option.scaleFindings?.length).toBeGreaterThan(0)
+    expect(option.unableToScale).toBe(true)
+    expect(option.notes?.some((n) => n.includes('Axle groups'))).toBe(true)
+    // Config scale fail promotes corridor states onto permit flags + card-friendly reasons
+    expect(option.corridorScaleFailedStates).toContain('TX')
+    expect(option.permitRequiredStates).toContain('TX')
+    expect(option.reasons.some((r) => r.startsWith('TX:') && r.includes('SCALE FAIL'))).toBe(true)
+  })
+
+  it('uses ${state}: prefix on dimension permit reasons for per-state cards', async () => {
+    const result = await processPermitRequest({
+      origin: { city: 'Dallas', state: 'TX' },
+      destination: { city: 'Houston', state: 'TX' },
+      weight: 80_000,
+      length: 74,
+      width: 12,
+      height: 13.5,
+      trailerLengthFt: 53,
+      manualRoute: ['TX'],
+    })
+    const option = result.options[0]
+    expect(option.permitRequiredStates).toContain('TX')
+    expect(option.reasons.some((r) => r.startsWith('TX: Permit required'))).toBe(true)
+    expect(option.reasons.some((r) => r.startsWith('TX (State):') || r.startsWith('TX (state):'))).toBe(false)
+  })
+
+  it('does not false-fail scale on legal 80k with group-aware weights missing', async () => {
+    const result = await processPermitRequest({
+      origin: { city: 'Dallas', state: 'TX' },
+      destination: { city: 'Houston', state: 'TX' },
+      weight: 80_000,
+      length: 74,
+      width: 8.5,
+      height: 13.5,
+      axles: 5,
+      manualRoute: ['TX'],
+    })
+    const option = result.options[0]
+    expect(option.unableToScale).toBe(false)
+    expect(option.scaleFindings?.some((f) => f.code === 'group_over')).toBe(false)
+  })
+})
+
 describe('permit-agent escort integration', () => {
   it('12\'7" width manual corridor surfaces escortWarnings via analyzeCorridor', async () => {
     const widthFt = parseDimensionInput("12'7")!.feetDecimal

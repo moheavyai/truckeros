@@ -363,6 +363,7 @@ describe('getVisibleDashboardTools', () => {
     expect(ids).toContain('permit_analysis')
     expect(ids).toContain('history')
     expect(ids).toContain('profile')
+    expect(ids).toContain('axle_optimizer')
     expect(ids).not.toContain('equipment')
   })
 

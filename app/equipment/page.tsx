@@ -30,6 +30,24 @@ import { formatLicensePlateDisplay } from '@/lib/license-plate'
 import { normalizeLicensePlateState } from '@/lib/us-states'
 import DimensionInput from '@/components/DimensionInput'
 import LicensePlateFields from '@/components/LicensePlateFields'
+import {
+  DEFAULT_TRAILER_TYPES,
+  TRAILER_TYPE_COUPLING_HINT,
+  TRAILER_TYPE_MAIN_HINT,
+  formatTrailerTypeLabel,
+  getTrailerTypeOptions,
+  isKingpinBoosterTrailerType,
+  isRearPinTrailerType,
+  mergeTrailerTypeOptions,
+  saveCustomTrailerType,
+} from '@/lib/trailer-types'
+import {
+  AXLE_GROUP_LABELS,
+  assignAxleGroups,
+  formatAxleGroupSummaryLine,
+  normalizeAxleSpacingSlots,
+  type AxleGroupType,
+} from '@/lib/axle-groups'
 
 type Tab = 'tractors' | 'trailers' | 'builder' | 'saved'
 
@@ -78,6 +96,14 @@ export default function EquipmentPage() {
   // Data
   const [tractors, setTractors] = useState<Tractor[]>([])
   const [trailers, setTrailers] = useState<Trailer[]>([])
+  /** Smart trailer-type dropdown options (defaults + localStorage customs). Hydrate on client to avoid SSR mismatch. */
+  const [trailerTypeOptions, setTrailerTypeOptions] = useState<string[]>(() =>
+    // Defaults only on first paint (SSR-safe); customs load in useEffect.
+    mergeTrailerTypeOptions(DEFAULT_TRAILER_TYPES, [])
+  )
+  useEffect(() => {
+    setTrailerTypeOptions(getTrailerTypeOptions())
+  }, [])
   const [rigs, setRigs] = useState<RigConfiguration[]>([])
 
   const [loading, setLoading] = useState(false)
@@ -361,20 +387,13 @@ export default function EquipmentPage() {
   // and guarantees profile_name is always a trimmed non-empty string for the NOT NULL column.
   // Type remains hardcoded per save function (provably driven by activeTab + startNew* + JSX conditional render of editors/buttons).
   // No UI, onChange, or editing-state changes.
-  function normalizeAxleSpacings(input: any): number[] {
-    if (input == null) return []
-    if (typeof input === 'string') {
-      return input
-        .split(',')
-        .map((s: string) => parseFloat(s.trim()))
-        .filter((n: number) => Number.isFinite(n) && n > 0)
-    }
-    if (Array.isArray(input)) {
-      return input
-        .map((x: any) => parseFloat(String(x).trim()))
-        .filter((n: number) => Number.isFinite(n) && n > 0)
-    }
-    return []
+  /**
+   * Parse axle spacings preserving labeled gap indices (1-2, 2-3, …).
+   * Cleared / invalid middle slots stay 0 — never compact (that shifts later labels).
+   * When expectedLength is set, pad/truncate to that slot count.
+   */
+  function normalizeAxleSpacings(input: any, expectedLength?: number | null): number[] {
+    return normalizeAxleSpacingSlots(input, expectedLength)
   }
 
   /**
@@ -386,45 +405,60 @@ export default function EquipmentPage() {
   }
 
   function axleSpacingForDb(input: any): string[] | null {
+    // Preserve middle zeros as "0"; strip only trailing empties for compact storage.
     const nums = normalizeAxleSpacings(input)
     if (nums.length === 0) return null
-    // Return native JS string[] (or number[] also works) so the Supabase client correctly
-    // serializes to the Postgres text[] column (post-011 migration). Never emit a raw
-    // '{...}' literal string — the driver expects the array value for array columns.
-    return nums.map((n) => String(n))
+    // Return native JS string[] so the Supabase client serializes to Postgres text[].
+    return nums.map((n) => String(n > 0 ? n : 0))
   }
 
-  function getAxleSpacingLabel(isTractor: boolean, numAxles: number | null | undefined, idx: number) {
+  function getAxleSpacingLabel(
+    isTractor: boolean,
+    numAxles: number | null | undefined,
+    idx: number,
+    trailerType?: string | null
+  ) {
     const n = Math.max(isTractor ? 3 : 2, Number(numAxles) || (isTractor ? 3 : 2))
     if (!isTractor) {
+      const roleSummary = assignAxleGroups(null, [{ num_axles: n, trailer_type: trailerType }])
+      const gType: AxleGroupType = roleSummary.axleTypes[0] || 'trailer'
+      const groupLabel = AXLE_GROUP_LABELS[gType]
       return {
         main: `${idx + 1}-${idx + 2}`,
-        desc: `Between axles ${idx + 1} & ${idx + 2}`
+        desc: `${groupLabel}: between axles ${idx + 1} & ${idx + 2}`,
       }
     }
     // Tractor: full consecutive gaps for all axles (steer + drives)
     if (idx === 0) {
       return {
         main: '1-2',
-        desc: 'Steer to 1st Drive Axle'
+        desc: 'Steer → Drives (group gap)',
       }
     }
     const d1 = idx   // drive index for the "from"
     const d2 = idx + 1
     return {
       main: `${idx + 1}-${idx + 2}`,
-      desc: `Between Drive Axles ${d1}–${d2}`
+      desc: `Drives: between axles ${d1 + 1}–${d2 + 1}`,
     }
   }
 
   function resizeAxleSpacings(current: any, newNum: number | null, isTractor: boolean): number[] {
-    const nums = normalizeAxleSpacings(current)
     const n = Math.max(isTractor ? 2 : 1, Number(newNum) || (isTractor ? 3 : 2))
-    const expected = Math.max(0, n - 1)  // full inter-axle gaps for both (tractor now includes 1-2 steer-to-drive)
-    let out = nums.slice(0, expected)
-    const def = isTractor ? 48 : 49
-    while (out.length < expected) {
-      out.push(out.length > 0 ? out[out.length - 1] : def)
+    const expected = Math.max(0, n - 1) // full inter-axle gaps (tractor includes 1-2 steer→drive)
+    // Free-length parse first (preserves middle zeros). Do NOT pad with zeros then seed —
+    // zero-pad makes the seed loop a no-op and leaves new gaps empty.
+    const prev = normalizeAxleSpacingSlots(current)
+    const out: number[] = []
+    for (let i = 0; i < expected; i++) {
+      if (i < prev.length) {
+        // Keep existing slot values including explicit cleared zeros
+        out.push(prev[i] > 0 ? prev[i] : 0)
+      } else {
+        // NEW slot only — tractor 1-2 seeds 220"; later tractor gaps 48"; trailer 49"
+        if (isTractor && i === 0) out.push(220)
+        else out.push(isTractor ? 48 : 49)
+      }
     }
     return out
   }
@@ -434,54 +468,96 @@ export default function EquipmentPage() {
     if (s.length < 1) return null
     const s12 = s[0] || 0
     const s23 = s[1] || 0
-    const wb = s12 + (s23 / 2)
+    // Need a positive 1-2 gap for a meaningful wheelbase
+    if (!(s12 > 0)) return null
+    const wb = s12 + (s23 > 0 ? s23 / 2 : 0)
     return wb > 0 ? Math.round(wb * 10) / 10 : null
   }
 
   // Dynamic, clearly-labeled axle spacing inputs.
-  // For tractors: (num_axles - 1) fields starting with 1-2 (Steer to 1st Drive).
-  // For trailers: (num_axles - 1) fields.
+  // For tractors: (num_axles - 1) fields starting with 1-2 (Steer to 1st Drive), then 2-3, 3-4…
+  // For trailers: optional kingpin→1st axle + (num_axles - 1) inter-axle 1-2, 2-3… by role group.
   // Wheelbase for tractor is auto-computed in real time from the first two spacings.
   function AxleSpacingsInputs({
     numAxles,
     spacings,
     onChangeSpacing,
     isTractor,
+    trailerType,
+    kingpinToFirstAxleIn,
+    onChangeKingpinToFirst,
+    hasLiftAxle,
   }: {
     numAxles: number | null | undefined
     spacings: any
     onChangeSpacing: (idx: number, value: number | null) => void
     isTractor: boolean
+    trailerType?: string | null
+    kingpinToFirstAxleIn?: number | null
+    onChangeKingpinToFirst?: (value: number | null) => void
+    hasLiftAxle?: boolean | null
   }) {
     const n = Number(numAxles) || (isTractor ? 3 : 2)
     const expected = Math.max(0, n - 1)
-    if (expected <= 0) return null
-    const arr = normalizeAxleSpacings(spacings)
+    if (expected <= 0 && isTractor) return null
+    // Fixed-length slots so clearing gap 2-3 does not shift 3-4 into the 2-3 field.
+    const arr = normalizeAxleSpacings(spacings, expected)
+    const groupLine = isTractor
+      ? formatAxleGroupSummaryLine(assignAxleGroups({ num_axles: n }, []))
+      : formatAxleGroupSummaryLine(assignAxleGroups(null, [{ num_axles: n, trailer_type: trailerType }]))
+    const rearPin = !isTractor && isRearPinTrailerType(trailerType)
+    const kpLabel = rearPin ? 'Pin → 1st Axle (in)' : 'Kingpin → 1st Axle (in)'
     return (
       <div className="md:col-span-3">
-        <label className={fieldLabelTinyClass}>Axle Spacings (inches)</label>
-        <div className="mt-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-          {Array.from({ length: expected }).map((_, idx) => {
-            const { main, desc } = getAxleSpacingLabel(isTractor, n, idx)
-            const v = arr[idx]
-            return (
-              <div key={idx}>
-                <div className={`${fieldHintTinyClass} leading-tight`}>{main}</div>
-                <div className={`${fieldHintTinyClass} leading-tight mb-0.5`}>{desc}</div>
-                <input
-                  type="number"
-                  value={v && v > 0 ? v : ''}
-                  onChange={(e) => {
-                    const val = e.target.value.trim() === '' ? null : parseFloat(e.target.value)
-                    onChangeSpacing(idx, val && Number.isFinite(val) && val > 0 ? val : null)
-                  }}
-                  placeholder={String(isTractor ? 48 : 49)}
-                  className={inputClass}
-                />
-              </div>
-            )
-          })}
+        <label className={fieldLabelTinyClass}>
+          {isTractor ? 'Tractor axle spacings (inches)' : 'Trailer axle geometry (inches)'}
+        </label>
+        <div className={`${fieldHintTinyClass} mt-0.5 mb-1`}>
+          {groupLine}
+          {hasLiftAxle ? ' · Lift axle' : ''}
         </div>
+        {!isTractor && onChangeKingpinToFirst && (
+          <div className="mb-2 max-w-[11rem]">
+            <div className={`${fieldHintTinyClass} leading-tight`}>{kpLabel}</div>
+            <div className={`${fieldHintTinyClass} leading-tight mb-0.5`}>
+              {rearPin ? 'Rear pin to first axle center' : 'Kingpin to first axle center'}
+            </div>
+            <input
+              type="number"
+              value={kingpinToFirstAxleIn && kingpinToFirstAxleIn > 0 ? kingpinToFirstAxleIn : ''}
+              onChange={(e) => {
+                const val = e.target.value.trim() === '' ? null : parseFloat(e.target.value)
+                onChangeKingpinToFirst(val && Number.isFinite(val) && val > 0 ? val : null)
+              }}
+              placeholder="480"
+              className={inputClass}
+            />
+          </div>
+        )}
+        {expected > 0 && (
+          <div className="mt-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            {Array.from({ length: expected }).map((_, idx) => {
+              const { main, desc } = getAxleSpacingLabel(isTractor, n, idx, trailerType)
+              const v = arr[idx]
+              return (
+                <div key={idx}>
+                  <div className={`${fieldHintTinyClass} leading-tight font-medium text-gray-700`}>{main}</div>
+                  <div className={`${fieldHintTinyClass} leading-tight mb-0.5`}>{desc}</div>
+                  <input
+                    type="number"
+                    value={v && v > 0 ? v : ''}
+                    onChange={(e) => {
+                      const val = e.target.value.trim() === '' ? null : parseFloat(e.target.value)
+                      onChangeSpacing(idx, val && Number.isFinite(val) && val > 0 ? val : null)
+                    }}
+                    placeholder={String(isTractor ? (idx === 0 ? 220 : 48) : 49)}
+                    className={inputClass}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     )
   }
@@ -636,6 +712,11 @@ export default function EquipmentPage() {
     payloadData.axle_spacings = normalizeAxleSpacings(payloadData.axle_spacings)
     payloadData.license_plate = (payloadData.license_plate || '').trim().toUpperCase() || null
     payloadData.license_plate_state = normalizeLicensePlateState(payloadData.license_plate_state)
+    // Smart trailer types: normalize + persist new user-typed entries to local list
+    if (payloadData.trailer_type) {
+      payloadData.trailer_type = saveCustomTrailerType(payloadData.trailer_type)
+      setTrailerTypeOptions(getTrailerTypeOptions())
+    }
 
     const plainNotes = payloadData.notes || ''
     const structured = {
@@ -649,7 +730,7 @@ export default function EquipmentPage() {
       has_lift_axle: !!payloadData.has_lift_axle,
       is_extendable: !!payloadData.is_extendable,
       extendable_extra_ft: payloadData.extendable_extra_ft ?? 0,
-      trailer_type: payloadData.trailer_type ?? null,
+      trailer_type: formatTrailerTypeLabel(payloadData.trailer_type) || payloadData.trailer_type || null,
       license_plate: payloadData.license_plate ?? null,
       license_plate_state: payloadData.license_plate_state ?? null,
       vin: payloadData.vin ?? null,
@@ -1067,9 +1148,18 @@ export default function EquipmentPage() {
                       <div key={tr.id || idx} className="bg-gray-50 border border-gray-300 sm:border-gray-200 rounded-lg px-3 py-2">
                         <span className="font-semibold text-gray-700">Trailer {idx + 1} plate:</span>{' '}
                         <span className="font-mono text-gray-900">{plate || '—'}</span>
+                        {tr.has_lift_axle ? (
+                          <span className="ml-1 text-amber-800">· Lift axle</span>
+                        ) : null}
                       </div>
                     )
                   })}
+                  <div className="sm:col-span-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-emerald-900">
+                    <span className="font-semibold">Axle groups:</span>{' '}
+                    {formatAxleGroupSummaryLine(
+                      assignAxleGroups(currentTractor || null, currentTrailers)
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1172,7 +1262,6 @@ export default function EquipmentPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                   {[
                     ['Profile Name *', 'profile_name', 'text'],
-                    ['Overall Length (ft)', 'overall_length_ft', 'number'],
                     ['# Axles (3–6)', 'num_axles', 'number'],
                     ['Steer Axle Setback (in)', 'steer_axle_setback_in', 'number'],
                     ['Wheelbase (auto-calculated, in)', 'wheelbase_in', 'number'],
@@ -1213,6 +1302,12 @@ export default function EquipmentPage() {
                       )}
                     </div>
                   ))}
+                  <DimensionInput
+                    label="Overall Length"
+                    value={editingTractor.overall_length_ft ?? ''}
+                    onChange={(ft) => setEditingTractor({ ...editingTractor, overall_length_ft: ft })}
+                    placeholder={`e.g. 28' 0" or 336"`}
+                  />
                   <LicensePlateFields
                     idPrefix={`tractor-${editingTractor.id ?? 'new'}`}
                     plate={editingTractor.license_plate}
@@ -1236,7 +1331,9 @@ export default function EquipmentPage() {
                     numAxles={editingTractor.num_axles}
                     spacings={editingTractor.axle_spacings}
                     onChangeSpacing={(idx, val) => {
-                      const curr = normalizeAxleSpacings(editingTractor.axle_spacings)
+                      const n = Number(editingTractor.num_axles) || 3
+                      const expected = Math.max(0, n - 1)
+                      const curr = normalizeAxleSpacings(editingTractor.axle_spacings, expected)
                       const next = [...curr]
                       next[idx] = val ?? 0
                       const wb = computeWheelbase(next)
@@ -1272,7 +1369,18 @@ export default function EquipmentPage() {
                   <div className={`${mutedTextClass} text-xs mb-1`}>{t.unit_number ? `#${t.unit_number} • ` : ''}{t.make} {t.model} {t.year || ''}</div>
 
                   <div className={`text-[11px] ${bodyTextClass} space-y-0.5`}>
-                    <div>Length: <b>{t.overall_length_ft || '?'} ft</b> • Axles: <b>{t.num_axles || 3}</b></div>
+                    <div>
+                      Length:{' '}
+                      <b>
+                        {t.overall_length_ft
+                          ? formatDimensionDisplay(Number(t.overall_length_ft))
+                          : '?'}
+                      </b>{' '}
+                      • Axles: <b>{t.num_axles || 3}</b>
+                    </div>
+                    <div className={fieldHintTinyClass}>
+                      {formatAxleGroupSummaryLine(assignAxleGroups({ num_axles: t.num_axles || 3 }, []))}
+                    </div>
                     <div>5th: {t.fifth_wheel_from_rear_in || '?'} in • WB: {t.wheelbase_in || '?'} in</div>
                     {formatLicensePlateDisplay(t.license_plate, t.license_plate_state) && (
                       <div>Plate: <span className="font-mono">{formatLicensePlateDisplay(t.license_plate, t.license_plate_state)}</span></div>
@@ -1319,16 +1427,22 @@ export default function EquipmentPage() {
               <div className={editorShellClass}>
                 <div className="font-semibold mb-3">Trailer Profile</div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                  {[
-                    ['Profile Name *', 'profile_name', 'text'],
-                    ['Overall Length (ft)', 'overall_length_ft', 'number'],
-                    ['Kingpin from Front (in)', 'kingpin_distance_from_front_in', 'number'],
-                    ['# Axles', 'num_axles', 'number'],
-                    ['Kingpin → 1st Axle (in)', 'kingpin_to_first_axle_in', 'number'],
-                    ['Trailer VIN', 'vin', 'text'],
-                    ['Empty Weight (lbs)', 'empty_weight_lbs', 'number'],
-                    ['Extendable Extra (ft)', 'extendable_extra_ft', 'number'],
-                  ].map(([label, key, type]) => (
+                  {(() => {
+                    const rearPin = isRearPinTrailerType(editingTrailer.trailer_type)
+                    // Flip/stinger pin to rear of RGN — soft-relabel kingpin fields (geometry still stored for v1).
+                    // Kingpin → 1st axle lives with AxleSpacingsInputs (geometry block).
+                    const kpFromFrontLabel = rearPin
+                      ? 'Nose setback (in, optional — rear pin)'
+                      : 'Kingpin from Front (in)'
+                    return [
+                      ['Profile Name *', 'profile_name', 'text'],
+                      [kpFromFrontLabel, 'kingpin_distance_from_front_in', 'number'],
+                      ['# Axles', 'num_axles', 'number'],
+                      ['Trailer VIN', 'vin', 'text'],
+                      ['Empty Weight (lbs)', 'empty_weight_lbs', 'number'],
+                      ['Extendable Extra (ft)', 'extendable_extra_ft', 'number'],
+                    ] as [string, string, string][]
+                  })().map(([label, key, type]) => (
                     <div key={key}>
                       <label className={fieldLabelTinyClass}>{label}</label>
                       <input
@@ -1348,6 +1462,12 @@ export default function EquipmentPage() {
                       />
                     </div>
                   ))}
+                  <DimensionInput
+                    label="Overall Length"
+                    value={editingTrailer.overall_length_ft ?? ''}
+                    onChange={(ft) => setEditingTrailer({ ...editingTrailer, overall_length_ft: ft })}
+                    placeholder={`e.g. 53' 0" or 636"`}
+                  />
                   <LicensePlateFields
                     idPrefix={`trailer-${editingTrailer.id ?? 'new'}`}
                     plate={editingTrailer.license_plate}
@@ -1377,11 +1497,43 @@ export default function EquipmentPage() {
                     value={editingTrailer.deck_height_ft ?? ''}
                     onChange={(ft) => setEditingTrailer({ ...editingTrailer, deck_height_ft: ft })}
                   />
-                  <div>
-                    <label className={fieldLabelTinyClass}>Trailer Type</label>
-                    <input value={editingTrailer.trailer_type || ''} onChange={(e) => setEditingTrailer({ ...editingTrailer, trailer_type: e.target.value })} className={inputMtClass} />
+                  <div className="md:col-span-2">
+                    <label className={fieldLabelTinyClass} htmlFor="trailer-type-input">Trailer Type</label>
+                    <input
+                      id="trailer-type-input"
+                      list="trailer-type-options"
+                      value={editingTrailer.trailer_type || ''}
+                      onChange={(e) =>
+                        setEditingTrailer({ ...editingTrailer, trailer_type: e.target.value })
+                      }
+                      onBlur={() => {
+                        // Format only on blur — custom list persists on Save (avoids abandoned drafts clutter).
+                        const formatted = formatTrailerTypeLabel(editingTrailer.trailer_type)
+                        if (formatted && formatted !== editingTrailer.trailer_type) {
+                          setEditingTrailer((prev) => (prev ? { ...prev, trailer_type: formatted } : prev))
+                        }
+                      }}
+                      placeholder="Flatbed, RGN, Jeep, Flip…"
+                      className={inputMtClass}
+                    />
+                    <datalist id="trailer-type-options">
+                      {trailerTypeOptions.map((opt) => (
+                        <option key={opt} value={opt} />
+                      ))}
+                    </datalist>
+                    {isRearPinTrailerType(editingTrailer.trailer_type) ||
+                    isKingpinBoosterTrailerType(editingTrailer.trailer_type) ? (
+                      <p className={`${fieldHintTinyClass} mt-1 leading-snug`}>{TRAILER_TYPE_COUPLING_HINT}</p>
+                    ) : (
+                      <p className={`${fieldHintTinyClass} mt-1 leading-snug`}>{TRAILER_TYPE_MAIN_HINT}</p>
+                    )}
+                    {isRearPinTrailerType(editingTrailer.trailer_type) && (
+                      <p className="text-[10px] text-pink-700 mt-0.5">
+                        Flip/stinger: pin to rear of RGN (not a kingpin/5th-wheel jeep). Kingpin fields above are optional geometry for v1 layout.
+                      </p>
+                    )}
                   </div>
-                  <div className="flex items-center gap-4 pt-5 text-sm">
+                  <div className="flex items-center gap-4 pt-5 text-sm md:col-span-2">
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input type="checkbox" checked={!!editingTrailer.has_lift_axle} onChange={(e) => setEditingTrailer({ ...editingTrailer, has_lift_axle: e.target.checked })} className={checkboxClass} /> Lift axle
                     </label>
@@ -1393,12 +1545,20 @@ export default function EquipmentPage() {
                     numAxles={editingTrailer.num_axles}
                     spacings={editingTrailer.axle_spacings}
                     onChangeSpacing={(idx, val) => {
-                      const curr = normalizeAxleSpacings(editingTrailer.axle_spacings)
+                      const n = Number(editingTrailer.num_axles) || 2
+                      const expected = Math.max(0, n - 1)
+                      const curr = normalizeAxleSpacings(editingTrailer.axle_spacings, expected)
                       const next = [...curr]
                       next[idx] = val ?? 0
                       setEditingTrailer({ ...editingTrailer, axle_spacings: next })
                     }}
                     isTractor={false}
+                    trailerType={editingTrailer.trailer_type}
+                    kingpinToFirstAxleIn={editingTrailer.kingpin_to_first_axle_in}
+                    onChangeKingpinToFirst={(val) =>
+                      setEditingTrailer({ ...editingTrailer, kingpin_to_first_axle_in: val })
+                    }
+                    hasLiftAxle={editingTrailer.has_lift_axle}
                   />
                 </div>
 
@@ -1425,10 +1585,27 @@ export default function EquipmentPage() {
               {trailers.map((tr) => (
                 <div key={tr.id} className={cardItemClass}>
                   <div className="font-semibold">{tr.profile_name}</div>
-                  <div className={`text-xs ${mutedTextClass}`}>{tr.trailer_type || 'Trailer'} • {tr.overall_length_ft || '?'} ft • {tr.num_axles || 2} axles</div>
+                  <div className={`text-xs ${mutedTextClass}`}>
+                    {tr.trailer_type || 'Trailer'} •{' '}
+                    {tr.overall_length_ft
+                      ? formatDimensionDisplay(Number(tr.overall_length_ft))
+                      : '?'}{' '}
+                    • {tr.num_axles || 2} axles
+                  </div>
+                  <div className={`${fieldHintTinyClass} mt-0.5`}>
+                    {formatAxleGroupSummaryLine(
+                      assignAxleGroups(null, [
+                        { num_axles: tr.num_axles || 2, trailer_type: tr.trailer_type },
+                      ])
+                    )}
+                  </div>
                   <div className={`text-[12px] mt-1 ${bodyTextClass} space-y-0.5`}>
                     <div>
-                      Kingpin from nose: {tr.kingpin_distance_from_front_in || '?'} in • KP to axle: {tr.kingpin_to_first_axle_in || '?'} in
+                      {isRearPinTrailerType(tr.trailer_type) ? (
+                        <>Pin / nose: {tr.kingpin_distance_from_front_in || '—'} in • Pin→axle: {tr.kingpin_to_first_axle_in || '—'} in</>
+                      ) : (
+                        <>Kingpin from nose: {tr.kingpin_distance_from_front_in || '?'} in • KP to axle: {tr.kingpin_to_first_axle_in || '?'} in</>
+                      )}
                       {tr.has_lift_axle && ' • Lift axle'} {tr.is_extendable && ` • Extendable +${tr.extendable_extra_ft || 0} ft`}
                     </div>
                     {formatLicensePlateDisplay(tr.license_plate, tr.license_plate_state) && (
@@ -1506,7 +1683,15 @@ export default function EquipmentPage() {
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-emerald-700">{rig.computed_total_length_ft?.toFixed(1) || '?'} ft total • {rig.computed_total_axles || '?'} axles</div>
+                        <div className="text-xs text-emerald-700">
+                          {rig.computed_total_length_ft
+                            ? formatDimensionDisplay(Number(rig.computed_total_length_ft))
+                            : '?'}{' '}
+                          total • {rig.computed_total_axles || '?'} axles
+                        </div>
+                        <div className={`${fieldHintTinyClass} mt-0.5 text-emerald-800`}>
+                          {formatAxleGroupSummaryLine(assignAxleGroups(tr || null, rigTrailers))}
+                        </div>
                       </div>
                       {!isServiceModeReadOnly && (
                         <button onClick={() => deleteRig(rig.id)} className="text-xs text-red-600 self-start">Delete</button>
@@ -1520,6 +1705,9 @@ export default function EquipmentPage() {
                     <div className={`mt-3 text-sm ${bodyTextClass}`}>
                       Tractor: <span className="font-medium text-gray-900">{tr?.profile_name || 'Unknown'}</span><br />
                       Trailers: {(rig.trailer_ids || []).length}
+                      {rigTrailers.some((t) => t.has_lift_axle) ? (
+                        <span className="text-amber-800"> · Lift axle</span>
+                      ) : null}
                     </div>
 
                     <div className={`mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] ${bodyTextClass}`}>

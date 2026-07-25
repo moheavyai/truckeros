@@ -74,4 +74,53 @@ describe('formatPortalEquipmentSnapshot', () => {
     expect(snapshot.legacyLine).toContain('5 axles')
     expect(snapshot.overhangLine).toBe('front 3 ft / rear 4 ft')
   })
+
+  it('includes axle group summary and lift flags from rich rig snapshot', () => {
+    const snapshot = formatPortalEquipmentSnapshot(
+      {
+        rig: {
+          rigName: 'KW + Flat',
+          totalAxles: 5,
+          axleGroupSummary: '5 axles: Steer×1 · Drives×2 · Trailer×2',
+          trailerHasLiftAxle: [true],
+          tractor: { profile_name: 'KW', num_axles: 3 },
+          trailers: [{ profile_name: 'Flat', num_axles: 2, has_lift_axle: true }],
+        },
+      },
+      {}
+    )
+    expect(snapshot.rigLine).toContain('5 axles: Steer×1 · Drives×2 · Trailer×2')
+    expect(snapshot.trailerLines.some((l) => /Lift axle/i.test(l))).toBe(true)
+  })
+
+  it('falls back to cargo.axleGroupSummary when rig omits it', () => {
+    const snapshot = formatPortalEquipmentSnapshot(
+      {
+        rig: {
+          rigName: 'Legacy rig',
+          tractor: { profile_name: 'Pete', num_axles: 3 },
+          trailers: [{ profile_name: 'Flat', num_axles: 2 }],
+        },
+      },
+      { axleGroupSummary: '5 axles: Steer×1 · Drives×2 · Trailer×2' }
+    )
+    expect(snapshot.rigLine).toContain('5 axles: Steer×1 · Drives×2 · Trailer×2')
+  })
+
+  it('falls back to trailers[].has_lift_axle when trailerHasLiftAxle is absent', () => {
+    const snapshot = formatPortalEquipmentSnapshot(
+      {
+        rig: {
+          rigName: 'Lift rig',
+          tractor: { profile_name: 'KW', num_axles: 3 },
+          trailers: [
+            { profile_name: 'Flat', num_axles: 2, has_lift_axle: true },
+            { profile_name: 'Jeep', num_axles: 2, has_lift_axle: false },
+          ],
+        },
+      },
+      {}
+    )
+    expect(snapshot.trailerLines.some((l) => /Lift axle on 1 trailer/i.test(l))).toBe(true)
+  })
 })

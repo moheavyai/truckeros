@@ -116,6 +116,10 @@ const SCHEMA_CHECKS: SchemaCheck[] = [
     table: 'carrier_connection_invites',
     columns: ['invite_token', 'status', 'company_name', 'organization_id', 'invite_email'],
   },
+  {
+    table: 'axle_configs',
+    columns: ['id', 'user_id', 'name', 'axles', 'state_rules', 'organization_id'],
+  },
 ]
 
 type TableCheckResult = {
