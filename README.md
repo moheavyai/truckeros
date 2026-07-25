@@ -1,32 +1,99 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TruckerOS
 
-## Getting Started
+Agentic OSOW (oversize/overweight) permit platform for owner-operators and small carriers.
 
-First, run the development server:
+TruckerOS helps build intelligent multi-state corridors, flag permit and escort needs, estimate costs, and assist with state portal prefill — including geometry-aligned border entry/exit points for through-states.
+
+## Stack
+
+| Layer | Tech |
+|-------|------|
+| App | Next.js 16 (App Router), React, TypeScript, Tailwind |
+| Auth / DB | Supabase (Auth, Postgres, RLS) |
+| Routing | OSRM (default) + optional GraphHopper truck profile |
+| Optimization | Python FastAPI + OR-Tools (`or-tools-service/`) |
+| Tests | Vitest (`npm test` / `prebuild`) |
+
+## Quick start
 
 ```bash
+# 1. Install
+npm install
+
+# 2. Env
+cp .env.local.example .env.local
+# Fill NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+# 3. Dev server
 npm run dev
 ```
 
-> **Note for Windows users**: The `dev` script now uses `cross-env` so `npm run dev` works reliably on Windows, macOS, and Linux (forces Webpack instead of Turbopack for PostCSS/Tailwind v4 stability). The `dev:webpack` script is kept as an alternative.
+Open [http://localhost:3000](http://localhost:3000).
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Windows note: `npm run dev` uses Webpack for stable Tailwind/PostCSS. Optional: `npm run dev:turbo`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Core product areas
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Permit agent** — corridor options, state rules, escorts, DOT restrictions, cost
+- **Corridor builder** (`lib/build-corridor.ts`) — ordered states, highways, `borderCrossings`
+- **Equipment / rigs** — tractors, trailers, axle groups, scale checks
+- **Portal Assist** — per-state prefill packages (origin / through / destination border fields)
+- **Multi-org roles** — Owner, Admin, Driver, Permit Clerk, Viewer; service mode isolation
 
-## Learn More
+## Database migrations
 
-To learn more about Next.js, take a look at the following resources:
+Migrations live in `supabase/migrations/`. The project is linked to Supabase CLI.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+# Apply pending migrations to the linked remote project
+npx supabase db push
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Notable migrations include equipment/rigs, multi-org RLS (Phase 1b), axle configs (042), and `border_crossings` / `highways` on `permit_requests` (043).
 
-## Deploy on Vercel
+**Important:** Apply migrations before deploying app code that writes new columns. Migration 043 is required for permit saves that emit `border_crossings` and `highways`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Next.js dev server |
+| `npm test` | Vitest once |
+| `npm run build` | Runs tests (`prebuild`) then production build |
+| `npm run safety:backup` | Zip backup + commit + push (Windows PowerShell) |
+| `npm run restart:ortools` | Restart local OR-Tools service (Windows) |
+
+## OR-Tools service
+
+Optional local Python service under `or-tools-service/` for advanced VRP/OSOW optimization. The main Next.js app can run without it for corridor analysis via OSRM/GraphHopper.
+
+See `or-tools-service/` and `restart-ortools.ps1` for local setup.
+
+## Safety
+
+- Use `npm run safety:backup` before large changes
+- Follow `SAFETY-CHECKLIST.md` for release hygiene
+- Never commit `.env.local` or secrets
+
+## Repo layout (high level)
+
+```
+app/                 Next.js routes & UI (permit-test, portal-assist, equipment, …)
+agents/              Permit agent
+lib/                 Corridor, portals, cost, equipment helpers
+components/          Shared UI
+supabase/migrations/ SQL migrations
+or-tools-service/    Python FastAPI + OR-Tools
+scripts/             Backups, migration helpers
+docs/                Plans and product notes
+```
+
+## Deferred / later
+
+- Stripe payments
+- Commercial map / ProMiles-class routing product
+- Full visual map UI
+
+## License
+
+Private — `moheavyai/truckeros`.
