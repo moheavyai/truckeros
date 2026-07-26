@@ -3695,7 +3695,8 @@ export default function PermitTestPage() {
           </h2>
           <p className={`${fieldHintClass} mb-2`}>
             Add avoid/prefer rules before addresses so the first optimization uses them
-            (e.g. avoid AR, prefer I-40 south). With multiple drops, only avoid-state rules apply—via/include waypoints are ignored.
+            (e.g. avoid AR, prefer I-40 south). Prefer/include vias still apply with drops
+            (placed before the first drop); multi-drop skips automatic corridor via suggestions.
           </p>
           <textarea
             placeholder="E.g. avoid AR, avoid IL, include Corinth MS, prefer I-40 southern, stay on interstates..."
