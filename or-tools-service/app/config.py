@@ -106,6 +106,9 @@ CITY_MAP: Final[dict[str, tuple[float, float, str]]] = {
     "wichita": (37.6872, -97.3301, "KS"),
     "tampa": (27.9506, -82.4572, "FL"),
     "chattanooga": (35.0456, -85.3097, "TN"),
+    # US-136 MO–NE border area (prefer US 136 via seed for OSRM/OR-Tools geometry)
+    "rock port": (40.4122, -95.5169, "MO"),
+    "rockport": (40.4122, -95.5169, "MO"),
 }
 
 STATE_ABBR: Final[set[str]] = {
