@@ -24,7 +24,7 @@ import {
   primaryTrailerDimensions,
   sortRigsForDisplay,
 } from '@/types/equipment'
-import { formatDimensionDisplay, formatRigSummaryLine } from '@/lib/parse-dimension'
+import { formatDimensionDisplay } from '@/lib/parse-dimension'
 import { formatLicensePlateDisplay } from '@/lib/license-plate'
 import { normalizeLicensePlateState } from '@/lib/us-states'
 import DimensionInput from '@/components/DimensionInput'
@@ -76,7 +76,6 @@ const checkboxClass = 'h-4 w-4 rounded accent-emerald-700 border-gray-500 sm:bor
 const editorShellClass =
   'mb-6 bg-white border border-emerald-300 sm:border-emerald-200 rounded-2xl p-4 sm:p-5'
 const cardClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-2xl p-4 sm:p-5'
-const cardCompactClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-xl p-3 text-sm'
 const cardItemClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-xl p-4 text-sm'
 const cardPanelClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-2xl p-4 sm:p-5'
 /** Soft metric chips — visual hierarchy only, not a compliance engine */
@@ -1069,7 +1068,7 @@ export default function EquipmentPage() {
             <button
               key={t.k}
               onClick={() => setActiveTab(t.k)}
-              className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-all ${
+              className={`min-h-[44px] px-5 py-2.5 text-sm font-medium border-b-2 transition-all touch-manipulation ${
                 activeTab === t.k
                   ? 'border-emerald-600 text-emerald-700'
                   : 'border-transparent text-gray-700 sm:text-gray-600 hover:text-gray-900'
@@ -1547,7 +1546,7 @@ export default function EquipmentPage() {
                         <option key={opt} value={opt} />
                       ))}
                     </datalist>
-                    <p className={`${mutedTextClass} text-xs mt-1 leading-snug`}>
+                    <p className={`${fieldHintTinyClass} mt-1 leading-snug`}>
                       {isRearPinTrailerType(editingTrailer.trailer_type) ||
                       isKingpinBoosterTrailerType(editingTrailer.trailer_type)
                         ? TRAILER_TYPE_COUPLING_HINT
@@ -1701,13 +1700,13 @@ export default function EquipmentPage() {
                   .filter(Boolean) as Trailer[]
                 const primaryTrailer = primaryTrailerDimensions(rigTrailers)
                 const rigEmptyWt = computeRigEmptyWeightLbs(tr, rigTrailers)
-                const summaryLine = formatRigSummaryLine({
-                  name: rig.rig_name,
-                  lengthFt: rig.computed_total_length_ft,
-                  widthFt: primaryTrailer.widthFt,
-                  heightFt: primaryTrailer.deckHeightFt,
-                  weightLbs: rigEmptyWt,
-                })
+                const tractorPlate = formatLicensePlateDisplay(tr?.license_plate, tr?.license_plate_state)
+                const trailerPlate = formatLicensePlateDisplay(
+                  primaryTrailer.licensePlate,
+                  primaryTrailer.licensePlateState
+                )
+                const plateParts = [tractorPlate, trailerPlate].filter(Boolean)
+                const vinParts = [tr?.vin, primaryTrailer.vin].filter(Boolean) as string[]
                 return (
                   <div key={rig.id} className={cardPanelClass}>
                     <div className="flex justify-between gap-2">
@@ -1760,20 +1759,11 @@ export default function EquipmentPage() {
                     </div>
 
                     <div className={`${bodyTextClass} text-xs mt-2 space-y-0.5`}>
-                      {formatLicensePlateDisplay(tr?.license_plate, tr?.license_plate_state) ||
-                      formatLicensePlateDisplay(primaryTrailer.licensePlate, primaryTrailer.licensePlateState) ? (
-                        <div>
-                          Plates:{' '}
-                          {formatLicensePlateDisplay(tr?.license_plate, tr?.license_plate_state) || '—'}
-                          {' / '}
-                          {formatLicensePlateDisplay(primaryTrailer.licensePlate, primaryTrailer.licensePlateState) || '—'}
-                        </div>
+                      {plateParts.length > 0 ? (
+                        <div>Plates: {plateParts.join(' / ')}</div>
                       ) : null}
-                      {(tr?.vin || primaryTrailer.vin) ? (
-                        <div>
-                          VIN: {tr?.vin || '—'}
-                          {primaryTrailer.vin ? ` / ${primaryTrailer.vin}` : ''}
-                        </div>
+                      {vinParts.length > 0 ? (
+                        <div>VIN: {vinParts.join(' / ')}</div>
                       ) : null}
                       {rigEmptyWt ? (
                         <div>Empty: {rigEmptyWt.toLocaleString()} lbs</div>
@@ -1789,7 +1779,6 @@ export default function EquipmentPage() {
                             : null}
                         </div>
                       ) : null}
-                      <div className={fieldHintTinyClass}>{summaryLine}</div>
                     </div>
 
                     {/* Compact graphic preview of the full rig */}

@@ -138,7 +138,7 @@ describe('Equipment page — mobile contrast classes', () => {
     expect(source).toContain('const checkboxClass =')
     expect(source).toContain('const editorShellClass =')
     expect(source).toContain('const cardClass =')
-    expect(source).toContain('const cardCompactClass =')
+    expect(source).not.toContain('const cardCompactClass =')
     expect(source).toContain('const cardItemClass =')
     expect(source).toContain('const cardPanelClass =')
     expect(source).toContain('const metricChipClass =')
@@ -210,12 +210,19 @@ describe('Equipment page — mobile contrast classes', () => {
     expect(source).not.toContain('Coming soon')
     expect(source).not.toContain('FUTURE_FEATURES')
     expect(source).not.toMatch(/text-pink-700/)
-    // Trailer type: single muted hint line (coupling OR main), not both + essay
+    // Trailer type: single soft field-hint line (coupling OR main), not both + essay
     expect(source).toContain('TRAILER_TYPE_COUPLING_HINT')
     expect(source).toContain('TRAILER_TYPE_MAIN_HINT')
+    expect(source).toMatch(
+      /fieldHintTinyClass[\s\S]{0,250}TRAILER_TYPE_COUPLING_HINT/
+    )
+    expect(source).not.toContain('formatRigSummaryLine')
     expect(source).toContain('Tractor profile')
     expect(source).toContain('Trailer profile')
     expect(source).toContain('metricChipClass')
+    // Plates/VIN omit empty sides (join filtered parts, no "— / value")
+    expect(source).toContain('plateParts.join')
+    expect(source).toContain('vinParts.join')
   })
 
   it('wires form controls and cards to shared contrast classes', () => {
