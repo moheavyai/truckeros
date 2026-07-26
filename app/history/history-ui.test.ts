@@ -23,6 +23,16 @@ function modalFooterSlice(source: string) {
   return source.slice(start)
 }
 
+/** Extract a single const handler body so scoping asserts cannot span other handlers/fetch. */
+function handlerBodySlice(source: string, handlerName: string) {
+  const start = source.indexOf(`const ${handlerName} = async`)
+  expect(start).toBeGreaterThan(-1)
+  const from = source.slice(start)
+  const next = from.indexOf('\n  const ', 1)
+  expect(next).toBeGreaterThan(-1)
+  return from.slice(0, next)
+}
+
 describe('History page UI cleanup', () => {
   it('uses AppHeader without activePage so no top nav item is highlighted', () => {
     const source = readHistorySource()
@@ -61,29 +71,35 @@ describe('History page UI cleanup', () => {
 })
 
 describe('History page delete actions', () => {
-  it('confirms single and delete-all with irreversible warnings', () => {
-    const source = readHistorySource()
+  it('binds irreversible confirm strings to window.confirm args', () => {
+    const one = handlerBodySlice(readHistorySource(), 'handleDeleteOne')
+    const all = handlerBodySlice(readHistorySource(), 'handleDeleteAll')
 
-    expect(source).toContain("Delete this analysis? This cannot be undone.")
-    expect(source).toContain('Delete ALL ${requests.length} analyses? This cannot be undone.')
-    expect(source).toContain('window.confirm')
+    expect(one).toContain("window.confirm('Delete this analysis? This cannot be undone.')")
+    expect(all).toContain(
+      'window.confirm(`Delete ALL ${ids.length} analyses? This cannot be undone.`)'
+    )
   })
 
-  it('scopes single-delete by id and user_id', () => {
-    const source = readHistorySource()
+  it('scopes single-delete by id and user_id inside handleDeleteOne only', () => {
+    const body = handlerBodySlice(readHistorySource(), 'handleDeleteOne')
 
-    expect(source).toContain('handleDeleteOne')
-    expect(source).toMatch(/\.from\('permit_requests'\)[\s\S]*?\.delete\(\)[\s\S]*?\.eq\('id',\s*id\)[\s\S]*?\.eq\('user_id',\s*user\.id\)/)
+    expect(body).toMatch(
+      /\.from\('permit_requests'\)\s*\n\s*\.delete\(\)\s*\n\s*\.eq\('id',\s*id\)\s*\n\s*\.eq\('user_id',\s*user\.id\)/
+    )
+    // Must not use the loose delete-all-style id batch inside this handler
+    expect(body).not.toContain(".in('id'")
   })
 
-  it('scopes delete-all by user_id only', () => {
+  it('scopes delete-all to loaded ids plus user_id (confirm N matches delete set)', () => {
     const source = readHistorySource()
+    const body = handlerBodySlice(source, 'handleDeleteAll')
 
-    expect(source).toContain('handleDeleteAll')
+    expect(source).toContain('onClick={handleDeleteAll}')
     expect(source).toContain('Delete all')
-    // delete-all must filter by user_id (not wipe other users)
-    expect(source).toMatch(
-      /handleDeleteAll[\s\S]*?\.from\('permit_requests'\)[\s\S]*?\.delete\(\)[\s\S]*?\.eq\('user_id',\s*user\.id\)/
+    expect(body).toContain('const ids = requests.map((r) => r.id)')
+    expect(body).toMatch(
+      /\.from\('permit_requests'\)\s*\n\s*\.delete\(\)\s*\n\s*\.in\('id',\s*ids\)\s*\n\s*\.eq\('user_id',\s*user\.id\)/
     )
   })
 

@@ -161,12 +161,14 @@ export default function HistoryPage() {
   }
 
   /**
-   * Delete all of the current user's analyses (user_id scoped).
-   * Related portal_submissions are removed via FK ON DELETE CASCADE.
+   * Delete the currently loaded analyses only (matches confirm N).
+   * Scoped by loaded ids + user_id so we never wipe rows beyond the displayed list
+   * (fetch uses .limit(100)). Related portal_submissions cascade via FK ON DELETE CASCADE.
    */
   const handleDeleteAll = async () => {
     if (!user?.id || deleting || requests.length === 0) return
-    if (!window.confirm(`Delete ALL ${requests.length} analyses? This cannot be undone.`)) return
+    const ids = requests.map((r) => r.id)
+    if (!window.confirm(`Delete ALL ${ids.length} analyses? This cannot be undone.`)) return
 
     setDeleting(true)
     setDeleteError(null)
@@ -175,6 +177,7 @@ export default function HistoryPage() {
       const { error } = await supabase
         .from('permit_requests')
         .delete()
+        .in('id', ids)
         .eq('user_id', user.id)
 
       if (error) {
@@ -182,9 +185,12 @@ export default function HistoryPage() {
         return
       }
 
-      setRequests([])
-      setSubmissions([])
-      setSelectedRequest(null)
+      const idSet = new Set(ids)
+      setRequests((prev) => prev.filter((r) => !idSet.has(r.id)))
+      setSubmissions((prev) => prev.filter((s) => !idSet.has(s.permit_request_id)))
+      if (selectedRequest && idSet.has(selectedRequest.id)) {
+        setSelectedRequest(null)
+      }
     } catch (err: any) {
       setDeleteError(err?.message || 'Failed to delete analyses.')
     } finally {
@@ -291,7 +297,7 @@ export default function HistoryPage() {
                     <th className="text-left px-6 py-4 font-semibold text-gray-700">Corridor</th>
                     <th className="text-left px-6 py-4 font-semibold text-gray-700">Status</th>
                     <th className="text-right px-6 py-4 font-semibold text-gray-700">Est. Cost</th>
-                    <th className="w-20"></th>
+                    <th className="w-40"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -361,7 +367,7 @@ export default function HistoryPage() {
                               disabled={deleting}
                               className="text-sm px-3 py-1.5 border border-red-200 text-red-700 hover:bg-red-50 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              Delete
+                              {deleting ? 'Deleting...' : 'Delete'}
                             </button>
                           </div>
                         </td>
