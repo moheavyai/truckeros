@@ -31,23 +31,25 @@ describe('Dashboard page — onboarding + role tools', () => {
     expect(source).toMatch(/tools\.length === 0/)
   })
 
-  it('welcome CTAs keep route analysis and omit Equipment/History/Profile/Axle Optimizer', () => {
+  it('welcome CTAs omit Equipment/History/Profile; axle only when no Equipment nav', () => {
     const source = readDashboardSource()
-    // Welcome tools strip header destinations + axle optimizer before primary/secondary split
+    // Welcome tools strip header destinations (equipment/history/profile)
+    expect(source).toContain("t.id === 'equipment'")
+    expect(source).toContain("t.id === 'history'")
+    expect(source).toContain("t.id === 'profile'")
+    // Axle hidden for equipment-capable roles only (Drivers keep secondary discovery)
+    expect(source).toContain('hasEquipmentNav')
+    expect(source).toMatch(/hasEquipmentNav\s*=\s*shouldShowEquipmentNav\(navActor\)/)
     expect(source).toMatch(
-      /welcomeTools = tools\.filter\([\s\S]*t\.id !== 'equipment'[\s\S]*t\.id !== 'history'[\s\S]*t\.id !== 'profile'[\s\S]*t\.id !== 'axle_optimizer'/
+      /t\.id === 'axle_optimizer' && hasEquipmentNav/
     )
-    expect(source).toContain("t.id !== 'equipment'")
-    expect(source).toContain("t.id !== 'history'")
-    expect(source).toContain("t.id !== 'profile'")
-    expect(source).toContain("t.id !== 'axle_optimizer'")
     // Prefer permit_analysis as primary; never fall back to tools[0] from full list
     expect(source).toMatch(
       /primaryTool =\s*welcomeTools\.find\(\(t\) => t\.id === 'permit_analysis'\)/
     )
     expect(source).not.toMatch(/primaryTool = tools\.find/)
     expect(source).not.toMatch(/tools\[0\]/)
-    // Secondary is remaining welcome tools (e.g. carriers in service mode)
+    // Secondary is remaining welcome tools (e.g. carriers; axle for non-equipment roles)
     expect(source).toMatch(
       /secondaryTools = welcomeTools\.filter\(\(t\) => t\.id !== primaryTool\?\.id\)/
     )
@@ -62,6 +64,8 @@ describe('Dashboard page — onboarding + role tools', () => {
     expect(source).toMatch(/href=\{`\/portal-assist\?requestId=\$\{req\.id\}`\}/)
     expect(source).toMatch(/key=\{req\.id\}/)
     expect(source).toContain('hover:bg-gray-50')
+    expect(source).toContain('focus-visible:bg-gray-50')
+    expect(source).toContain('focus-visible:ring-2')
     expect(source).toContain('View all →')
     expect(source).toContain('href="/history"')
     // No Pro Tips card chrome

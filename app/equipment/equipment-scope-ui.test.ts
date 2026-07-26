@@ -191,6 +191,9 @@ describe('Equipment page — mobile contrast classes', () => {
     expect(axleIdx).toBeGreaterThan(titleIdx)
     expect(tabsIdx).toBeGreaterThan(axleIdx)
     expect(source).toMatch(/cardCompactClass.*mb-6|mb-6.*cardCompactClass/)
+    // Touch target + keyboard focus parity with hover
+    expect(source).toMatch(/axle-optimizer[\s\S]{0,200}min-h-\[44px\]/)
+    expect(source).toMatch(/axle-optimizer[\s\S]{0,250}focus-visible:ring-2/)
   })
 
   it('wires form controls and cards to shared contrast classes', () => {

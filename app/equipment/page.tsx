@@ -1036,10 +1036,10 @@ export default function EquipmentPage() {
           </div>
         </div>
 
-        {/* Axle Group Optimizer — primary product entry (not a dashboard CTA) */}
+        {/* Axle Group Optimizer — primary entry for equipment-capable roles */}
         <a
           href="/axle-optimizer"
-          className={`${cardCompactClass} mb-6 flex items-center justify-between gap-3 hover:bg-gray-50 transition-colors`}
+          className={`${cardCompactClass} mb-6 min-h-[44px] flex items-center justify-between gap-3 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 transition-colors`}
         >
           <div className="min-w-0">
             <div className="font-semibold text-gray-900">Axle Group Optimizer</div>

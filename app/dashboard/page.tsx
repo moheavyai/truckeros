@@ -308,15 +308,17 @@ export default function Dashboard() {
   )
 
   // Welcome CTAs: route analysis (+ carriers in service mode). Never promote
-  // Equipment / History / Profile / Axle Optimizer here — header owns nav destinations;
-  // Axle Optimizer primary entry is Equipment. Full `tools` still drives stats / recent.
-  const welcomeTools = tools.filter(
-    (t) =>
-      t.id !== 'equipment' &&
-      t.id !== 'history' &&
-      t.id !== 'profile' &&
-      t.id !== 'axle_optimizer'
-  )
+  // Equipment / History / Profile here — those live in AppHeader only.
+  // Axle Optimizer: primary entry is Equipment for roles with equipment access.
+  // Permit-only roles (e.g. Driver without equipment) keep axle as a secondary
+  // welcome tool for discovery. Full `tools` still drives stats / recent.
+  const hasEquipmentNav = shouldShowEquipmentNav(navActor)
+  const welcomeTools = tools.filter((t) => {
+    if (t.id === 'equipment' || t.id === 'history' || t.id === 'profile') return false
+    // Owners/admins with Equipment: hide axle from dashboard CTAs.
+    if (t.id === 'axle_optimizer' && hasEquipmentNav) return false
+    return true
+  })
   const primaryTool =
     welcomeTools.find((t) => t.id === 'permit_analysis') ??
     welcomeTools.find((t) => t.primary) ??
@@ -456,7 +458,7 @@ export default function Dashboard() {
                     <a
                       key={req.id}
                       href={`/portal-assist?requestId=${req.id}`}
-                      className="py-4 flex items-center justify-between text-sm hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors"
+                      className="py-4 flex items-center justify-between text-sm hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 -mx-2 px-2 rounded-lg transition-colors"
                     >
                       <div>
                         <div className="font-medium text-gray-900">
