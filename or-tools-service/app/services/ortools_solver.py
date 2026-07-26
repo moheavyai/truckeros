@@ -1196,9 +1196,11 @@ def build_stops_from_load(
     """
     Build VRP stops: [origin, ...prefer/include/manual vias..., destination]
     or with explicit drops: [origin, ...vias..., ...ordered drops...].
-    Prefer/include vias are always considered even when drops exist (permit-test
-    often sends destination as is_drop); only coord-dupes vs O/D/drops are skipped.
-    manualRoute list (from change-route or form) forces via order when cities match CITY_MAP.
+    Prefer/include (and manualRoute) vias always apply even when drops exist
+    (permit-test often sends destination as is_drop); only coord-dupes vs O/D/drops
+    are skipped. suggest_practical_vias is skipped when len(drops) > 1 to avoid
+    silent multi-drop expansion (e.g. KS→FL Joplin/Memphis); single dest-as-drop
+    still gets practical vias (permit-test).
     """
     stops: list[dict[str, Any]] = []
 
@@ -1240,32 +1242,18 @@ def build_stops_from_load(
             for d in (load.drops or [])
         ]
 
-    has_explicit_drops = False
     drop_stops: list[dict[str, Any]] = []
-    if explicit_drops:
-        for i, drop in enumerate(explicit_drops):
-            lat_raw = drop.get("lat")
-            lon_raw = drop.get("lon")
-            if lat_raw is None or lon_raw is None:
-                raise ValueError(f"drops[{i}] missing lat/lon coordinates")
-            try:
-                dlat_chk, dlon_chk = float(lat_raw), float(lon_raw)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(f"drops[{i}] invalid lat/lon coordinates") from exc
-            if not (math.isfinite(dlat_chk) and math.isfinite(dlon_chk)):
-                raise ValueError(f"drops[{i}] requires finite lat/lon coordinates")
-        has_explicit_drops = True
     for i, drop in enumerate(explicit_drops):
-        lat = drop.get("lat")
-        lon = drop.get("lon")
-        if lat is None or lon is None:
-            continue
+        lat_raw = drop.get("lat")
+        lon_raw = drop.get("lon")
+        if lat_raw is None or lon_raw is None:
+            raise ValueError(f"drops[{i}] missing lat/lon coordinates")
         try:
-            dlat, dlon = float(lat), float(lon)
-        except (TypeError, ValueError):
-            continue
+            dlat, dlon = float(lat_raw), float(lon_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"drops[{i}] invalid lat/lon coordinates") from exc
         if not (math.isfinite(dlat) and math.isfinite(dlon)):
-            continue
+            raise ValueError(f"drops[{i}] requires finite lat/lon coordinates")
         d_stop: dict[str, Any] = {
             "name": drop.get("query") or drop.get("city") or f"drop_{i + 1}",
             "lat": dlat,
@@ -1277,7 +1265,7 @@ def build_stops_from_load(
         if dst:
             d_stop["state"] = str(dst).upper().strip()
         drop_stops.append(d_stop)
-
+    has_explicit_drops = len(drop_stops) > 0
     # special instructions
     special = None
     if hasattr(load, "get_special_instructions"):
@@ -1347,10 +1335,15 @@ def build_stops_from_load(
             if not _via_coord_dup(seed, included) and not _via_coord_dup(seed, od_refs):
                 included.append(seed)
         # Lane-specific practical vias (AL→NE, KS→FL, …). Prefer-hwy anchors owned above only.
-        suggested = suggest_practical_vias(o_state_for_suggest, d_state_for_suggest, avoided, special)
-        for sv in suggested:
-            if not _via_coord_dup(sv, included) and not _via_coord_dup(sv, od_refs):
-                included.append(sv)
+        # Skip when multi-drop (len > 1): pure multi-stop must not silently expand with
+        # Joplin/Memphis/etc. Single dest-as-drop (permit-test) still gets practical vias.
+        if len(drop_stops) <= 1:
+            suggested = suggest_practical_vias(
+                o_state_for_suggest, d_state_for_suggest, avoided, special
+            )
+            for sv in suggested:
+                if not _via_coord_dup(sv, included) and not _via_coord_dup(sv, od_refs):
+                    included.append(sv)
         vias = included
 
     # Append vias after origin (before drops/destination). Dedupe by rounded coord; skip O/D/drop coincidence.

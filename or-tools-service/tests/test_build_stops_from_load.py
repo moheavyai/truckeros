@@ -288,6 +288,50 @@ def test_prefer_via_before_multi_drops_order():
     assert any("rock" in stops[i]["name"].lower() for i in via_idxs)
 
 
+def test_multi_drop_no_specials_skips_practical_auto_vias():
+    """Multi-drop with no specials: only origin + drops (no KS→FL Joplin/Memphis auto vias)."""
+    load = {
+        "origin": {"city": "Wichita", "state": "KS"},
+        "destination": {"city": "Miami", "state": "FL"},
+        "drops": [
+            {"query": "Tampa", "lat": 27.9506, "lon": -82.4572, "state": "FL"},
+            {"query": "Miami", "lat": 25.7617, "lon": -80.1918, "state": "FL"},
+        ],
+    }
+    stops = build_stops_from_load(load, (37.6872, -97.3301), (25.7617, -80.1918))
+    assert len(stops) == 3
+    assert stops[0]["name"] == "origin"
+    assert all(s.get("is_drop") for s in stops[1:])
+    assert all(not s.get("is_via") for s in stops)
+    names = " ".join(s["name"].lower() for s in stops)
+    assert "joplin" not in names
+    assert "memphis" not in names
+    assert "nashville" not in names
+    assert "atlanta" not in names
+
+
+def test_via_coinciding_with_drop_coords_is_deduped():
+    """Prefer/include via that matches a drop lat/lon is skipped (no double stop)."""
+    rp_lat, rp_lon, _ = CITY_MAP["rock port"]
+    load = {
+        "origin": {"city": "Kansas City", "state": "MO"},
+        "destination": {"city": "Lincoln", "state": "NE"},
+        "specialInstructions": "prefer US 136",
+        "drops": [
+            {"query": "Rock Port stop", "lat": rp_lat, "lon": rp_lon, "state": "MO"},
+            {"query": "Lincoln", "lat": 40.8136, "lon": -96.7026, "state": "NE"},
+        ],
+    }
+    stops = build_stops_from_load(load, (39.0997, -94.5786), (40.8136, -96.7026))
+    vias = [s for s in stops if s.get("is_via")]
+    assert not any("rock" in v["name"].lower() for v in vias)
+    drops = [s for s in stops if s.get("is_drop")]
+    assert len(drops) == 2
+    assert any(
+        abs(s["lat"] - rp_lat) < 0.05 and abs(s["lon"] - rp_lon) < 0.05 for s in drops
+    )
+
+
 def test_honesty_copy_via_seeded_vs_not_injected():
     """Missing pref copy distinguishes seeded via vs never injected."""
     seeded_msg = format_missing_pref_warning(
