@@ -179,6 +179,20 @@ describe('Equipment page — mobile contrast classes', () => {
     expect(source).toMatch(/const buttonSecondaryClass =[\s\S]*?min-h-\[44px\]/)
   })
 
+  it('surfaces Axle Group Optimizer entry near top of main content', () => {
+    const source = readEquipmentSource()
+    expect(source).toContain('Axle Group Optimizer')
+    expect(source).toContain('href="/axle-optimizer"')
+    // Placed after page title block, before tabs
+    const titleIdx = source.indexOf('Equipment &amp; Rig Builder')
+    const axleIdx = source.indexOf('Axle Group Optimizer')
+    const tabsIdx = source.indexOf('{/* Tabs */}')
+    expect(titleIdx).toBeGreaterThan(-1)
+    expect(axleIdx).toBeGreaterThan(titleIdx)
+    expect(tabsIdx).toBeGreaterThan(axleIdx)
+    expect(source).toMatch(/cardCompactClass.*mb-6|mb-6.*cardCompactClass/)
+  })
+
   it('wires form controls and cards to shared contrast classes', () => {
     const source = readEquipmentSource()
 

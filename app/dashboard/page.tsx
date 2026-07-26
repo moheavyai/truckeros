@@ -308,11 +308,14 @@ export default function Dashboard() {
   )
 
   // Welcome CTAs: route analysis (+ carriers in service mode). Never promote
-  // Equipment / History / Profile here — those live in AppHeader only.
-  // Full `tools` still drives stats / recent-activity visibility below.
-  // Welcome CTAs: route analysis, axle optimizer, carriers (service). Header owns Equipment/History/Profile.
+  // Equipment / History / Profile / Axle Optimizer here — header owns nav destinations;
+  // Axle Optimizer primary entry is Equipment. Full `tools` still drives stats / recent.
   const welcomeTools = tools.filter(
-    (t) => t.id !== 'equipment' && t.id !== 'history' && t.id !== 'profile'
+    (t) =>
+      t.id !== 'equipment' &&
+      t.id !== 'history' &&
+      t.id !== 'profile' &&
+      t.id !== 'axle_optimizer'
   )
   const primaryTool =
     welcomeTools.find((t) => t.id === 'permit_analysis') ??
@@ -408,9 +411,9 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Stats + Quick Cards — only when permit history is in scope */}
+        {/* Stats — only when permit history is in scope */}
         {tools.some((t) => t.id === 'history' || t.id === 'permit_analysis') && (
-          <div className="grid md:grid-cols-3 gap-6 mb-10">
+          <div className="grid md:grid-cols-2 gap-6 mb-10">
             <div className={cardClass}>
               <div className={`text-sm ${mutedTextClass} mb-1`}>Recent analyses</div>
               <div className="text-4xl font-semibold tracking-tighter text-gray-900">
@@ -428,116 +431,72 @@ export default function Dashboard() {
               </div>
               <div className={`text-xs ${mutedTextClass} mt-2`}>Across recent routes</div>
             </div>
-            <div className={cardClass}>
-              <div className={`text-sm ${mutedTextClass} mb-1`}>Tools for your role</div>
-              <div className="text-4xl font-semibold tracking-tighter text-gray-900">{tools.length}</div>
-              <div className={`text-xs ${mutedTextClass} mt-2`}>Based on membership permissions</div>
-            </div>
           </div>
         )}
 
-        {/* Main Content Grid */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Recent Activity */}
-          {tools.some((t) => t.id === 'history' || t.id === 'permit_analysis') && (
-            <div className={`lg:col-span-2 ${cardClass}`}>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-lg tracking-tight text-gray-900">Recent Analyses</h2>
-                {tools.some((t) => t.id === 'history') && (
-                  <a href="/history" className={`text-sm ${bodyTextClass} hover:text-black`}>
-                    View all →
-                  </a>
-                )}
-              </div>
+        {/* Recent Activity */}
+        {tools.some((t) => t.id === 'history' || t.id === 'permit_analysis') && (
+          <div className={cardClass}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-lg tracking-tight text-gray-900">Recent Analyses</h2>
+              {tools.some((t) => t.id === 'history') && (
+                <a href="/history" className={`text-sm ${bodyTextClass} hover:text-black`}>
+                  View all →
+                </a>
+              )}
+            </div>
 
-              <div className="divide-y divide-gray-200 sm:divide-gray-100">
-                {recentRequests.length > 0 ? (
-                  recentRequests.map((req, index) => {
-                    const permitCount = req.permit_required_states?.length || 0
-                    const date = req.created_at ? new Date(req.created_at).toLocaleDateString() : ''
+            <div className="divide-y divide-gray-200 sm:divide-gray-100">
+              {recentRequests.length > 0 ? (
+                recentRequests.map((req) => {
+                  const permitCount = req.permit_required_states?.length || 0
+                  const date = req.created_at ? new Date(req.created_at).toLocaleDateString() : ''
 
-                    return (
-                      <div key={index} className="py-4 flex items-center justify-between text-sm">
-                        <div>
-                          <div className="font-medium text-gray-900">
-                            {req.origin_city}, {req.origin_state} → {req.destination_city},{' '}
-                            {req.destination_state}
-                          </div>
-                          <div className={`${mutedTextClass} text-xs mt-0.5`}>
-                            {req.weight?.toLocaleString()} lbs • {req.length} ft
-                          </div>
+                  return (
+                    <a
+                      key={req.id}
+                      href={`/portal-assist?requestId=${req.id}`}
+                      className="py-4 flex items-center justify-between text-sm hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors"
+                    >
+                      <div>
+                        <div className="font-medium text-gray-900">
+                          {req.origin_city}, {req.origin_state} → {req.destination_city},{' '}
+                          {req.destination_state}
                         </div>
-                        <div className="text-right">
-                          <div
-                            className={`${permitCount > 0 ? 'text-orange-700 sm:text-orange-600' : 'text-emerald-700 sm:text-emerald-600'} font-medium text-xs`}
-                          >
-                            {permitCount > 0
-                              ? `${permitCount} State${permitCount > 1 ? 's' : ''} Require Permit`
-                              : 'No Permit Required'}
-                          </div>
-                          <div className={`${mutedTextClass} text-xs`}>{date}</div>
+                        <div className={`${mutedTextClass} text-xs mt-0.5`}>
+                          {req.weight?.toLocaleString()} lbs • {req.length} ft
                         </div>
                       </div>
-                    )
-                  })
-                ) : (
-                  <div className={`py-6 text-center text-sm ${mutedTextClass}`}>
-                    No analyses yet. Run your first route analysis to see history here.
-                  </div>
-                )}
-              </div>
-
-              {recentRequests.length > 0 && (
-                <div className={`pt-4 text-xs ${mutedTextClass} border-t border-gray-200 sm:border-gray-100`}>
-                  Showing your last {recentRequests.length} saved analyses.
+                      <div className="text-right">
+                        <div
+                          className={`${permitCount > 0 ? 'text-orange-700 sm:text-orange-600' : 'text-emerald-700 sm:text-emerald-600'} font-medium text-xs`}
+                        >
+                          {permitCount > 0
+                            ? `${permitCount} State${permitCount > 1 ? 's' : ''} Require Permit`
+                            : 'No Permit Required'}
+                        </div>
+                        <div className={`${mutedTextClass} text-xs`}>{date}</div>
+                      </div>
+                    </a>
+                  )
+                })
+              ) : (
+                <div className={`py-6 text-center text-sm ${mutedTextClass}`}>
+                  <p>No analyses yet. Run your first route analysis to see history here.</p>
+                  <p className={`${bodyTextClass} text-xs mt-2`}>
+                    Tip: geocode origin and destination for the most accurate corridor.
+                  </p>
                 </div>
               )}
             </div>
-          )}
 
-          {/* Tips / Guidance */}
-          <div
-            className={`${cardClass} ${
-              tools.some((t) => t.id === 'history' || t.id === 'permit_analysis')
-                ? ''
-                : 'lg:col-span-3'
-            }`}
-          >
-            <h2 className="font-semibold text-lg tracking-tight text-gray-900 mb-4">Pro Tips</h2>
-            <div className="space-y-4 text-sm">
-              <div className="flex gap-3">
-                <div className="text-lg">🛣️</div>
-                <div>
-                  <div className="font-medium text-gray-900">Use real coordinates</div>
-                  <div className={`${bodyTextClass} text-xs`}>
-                    Geocoding your origin and destination gives the most accurate corridor.
-                  </div>
-                </div>
+            {recentRequests.length > 0 && (
+              <div className={`pt-4 text-xs ${mutedTextClass} border-t border-gray-200 sm:border-gray-100`}>
+                Showing your last {recentRequests.length} saved analyses.
               </div>
-              <div className="flex gap-3">
-                <div className="text-lg">❄️</div>
-                <div>
-                  <div className="font-medium text-gray-900">Check seasonal restrictions</div>
-                  <div className={`${bodyTextClass} text-xs`}>
-                    Northern routes often have spring frost laws that reduce allowable weights.
-                  </div>
-                </div>
-              </div>
-              {shouldShowEquipmentNav(navActor) && (
-                <div className="flex gap-3">
-                  <div className="text-lg">🚛</div>
-                  <div>
-                    <div className="font-medium text-gray-900">Use the Rig Builder first</div>
-                    <div className={`${bodyTextClass} text-xs`}>
-                      Save precise tractor/trailer measurements once — then they prefill every
-                      permit request with accurate overall length.
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
           </div>
-        </div>
+        )}
       </main>
     </div>
   )

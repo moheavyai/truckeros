@@ -415,6 +415,7 @@ export function getVisibleDashboardTools(
   }
 
   // Spacing-based federal/state group planner (not equipment role groups).
+  // Primary UI entry is Equipment page; dashboard welcome CTAs exclude this tool.
   if (canAccessArea('permit_agent', permissions) || shouldShowEquipmentNav(actor)) {
     tools.push({
       id: 'axle_optimizer',

@@ -31,15 +31,16 @@ describe('Dashboard page — onboarding + role tools', () => {
     expect(source).toMatch(/tools\.length === 0/)
   })
 
-  it('welcome CTAs keep route analysis and omit Equipment/History/Profile (header owns those)', () => {
+  it('welcome CTAs keep route analysis and omit Equipment/History/Profile/Axle Optimizer', () => {
     const source = readDashboardSource()
-    // Welcome tools strip header destinations before primary/secondary split
+    // Welcome tools strip header destinations + axle optimizer before primary/secondary split
     expect(source).toMatch(
-      /welcomeTools = tools\.filter\([\s\S]*t\.id !== 'equipment'[\s\S]*t\.id !== 'history'[\s\S]*t\.id !== 'profile'/
+      /welcomeTools = tools\.filter\([\s\S]*t\.id !== 'equipment'[\s\S]*t\.id !== 'history'[\s\S]*t\.id !== 'profile'[\s\S]*t\.id !== 'axle_optimizer'/
     )
     expect(source).toContain("t.id !== 'equipment'")
     expect(source).toContain("t.id !== 'history'")
     expect(source).toContain("t.id !== 'profile'")
+    expect(source).toContain("t.id !== 'axle_optimizer'")
     // Prefer permit_analysis as primary; never fall back to tools[0] from full list
     expect(source).toMatch(
       /primaryTool =\s*welcomeTools\.find\(\(t\) => t\.id === 'permit_analysis'\)/
@@ -53,6 +54,18 @@ describe('Dashboard page — onboarding + role tools', () => {
     // Full tools still used for stats / recent activity
     expect(source).toMatch(/tools\.some\(\(t\) => t\.id === 'history' \|\| t\.id === 'permit_analysis'\)/)
     expect(source).toContain('getVisibleDashboardTools')
+  })
+
+  it('recent analyses rows link to portal-assist by requestId and use req.id as key', () => {
+    const source = readDashboardSource()
+    expect(source).toContain('portal-assist?requestId=')
+    expect(source).toMatch(/href=\{`\/portal-assist\?requestId=\$\{req\.id\}`\}/)
+    expect(source).toMatch(/key=\{req\.id\}/)
+    expect(source).toContain('hover:bg-gray-50')
+    expect(source).toContain('View all →')
+    expect(source).toContain('href="/history"')
+    // No Pro Tips card chrome
+    expect(source).not.toContain('Pro Tips')
   })
 
   it('honors guided dismiss and admin setup eligibility for finish-setup banner', () => {
@@ -125,9 +138,8 @@ describe('Dashboard page — mobile contrast classes', () => {
     expect(source).toContain('className={buttonPrimaryClass}')
     expect(source).toContain('className={buttonSecondaryClass}')
     expect(source).toContain('className={cardClass}')
-    expect(source).toContain('className={`lg:col-span-2 ${cardClass}`}')
     expect(source).toContain('className={`${mutedTextClass} text-xs`}')
-    expect(source).toContain('className={`${bodyTextClass} text-xs`}')
+    expect(source).toContain('className={`${bodyTextClass} text-xs mt-2`}')
     expect(source).toContain('border-t border-gray-200 sm:border-gray-100')
     expect(source).toContain('divide-y divide-gray-200 sm:divide-gray-100')
 
