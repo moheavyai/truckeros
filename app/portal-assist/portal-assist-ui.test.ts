@@ -6,7 +6,8 @@ const pagePath = path.join(process.cwd(), 'app', 'portal-assist', 'page.tsx')
 const permitPagePath = path.join(process.cwd(), 'app', 'permit-test', 'page.tsx')
 
 function readSource(filePath: string) {
-  return readFileSync(filePath, 'utf8')
+  // Normalize CRLF so multiline toContain / indexOf markers match LF fixtures on Windows.
+  return readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n')
 }
 
 describe('Portal Assist page UX', () => {
@@ -67,7 +68,10 @@ describe('Portal Assist page UX', () => {
     expect(source).toContain("params.get('approved') === '1'")
     expect(source).toContain('isReviewStep')
     expect(source).toContain('Analysis approved')
-    expect(source).toContain('Review the prefill below, then record and open portals state by state.')
+    expect(source).toContain(
+      'Review the prefill below, then launch all corridor portals or open one state at a time.'
+    )
+    expect(source).not.toContain('open portals state by state')
   })
 
   it('suppresses launch hint when in review step (PAU-2)', () => {
@@ -134,6 +138,41 @@ describe('Portal Assist page UX', () => {
     const source = readSource(pagePath)
     expect(source).toContain("Load a request and click 'Regenerate Prefill' in Final Review first.")
     expect(source).not.toContain("Generate / Regenerate Prefill")
+  })
+})
+
+describe('Portal Assist state selector', () => {
+  it('does not expand on focus (avoids first-click glitch)', () => {
+    const source = readSource(pagePath)
+    expect(source).not.toContain('onFocus={() => setIsExpanded(true)}')
+    // Click + Enter/Space still toggle expand
+    expect(source).toContain('onClick={() => setIsExpanded(!isExpanded)}')
+    expect(source).toMatch(/e\.key === 'Enter' \|\| e\.key === ' '/)
+    expect(source).toContain('setIsExpanded(!isExpanded)')
+  })
+
+  it('orders list corridor/permit first via portalStatesForRequest then remaining A–Z', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('orderedStateCodes')
+    expect(source).toContain('portalStatesForRequest.filter')
+    expect(source).toContain('filteredStateCodes')
+    expect(source).toMatch(/filteredStateCodes\.map/)
+    // Corridor-priority ordering is built from portalStatesForRequest before all-states tail
+    const orderedStart = source.indexOf('const orderedStateCodes =')
+    const filteredStart = source.indexOf('const filteredStateCodes =')
+    expect(orderedStart).toBeGreaterThan(-1)
+    expect(filteredStart).toBeGreaterThan(orderedStart)
+    const orderedBlock = source.slice(orderedStart, filteredStart)
+    expect(orderedBlock).toContain('portalStatesForRequest')
+    expect(orderedBlock).toContain('localeCompare')
+    expect(orderedBlock).toContain('corridorStateSet')
+  })
+
+  it('mutes non-corridor states and emphasizes corridor rows', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain("text-gray-500")
+    expect(source).toMatch(/isCorridor[\s\S]*text-gray-900 font-medium[\s\S]*text-gray-500/)
+    expect(source).toContain('corridorStateSet.has(state)')
   })
 })
 
@@ -244,12 +283,31 @@ describe('Portal Assist mobile contrast classes', () => {
   })
 })
 
-describe('Permit test page — Approve and Launch Portals flow', () => {
-  it('uses Approve and Launch Portals label and navigates with step=review', () => {
+describe('Permit test page — Approve & Continue to Portal Assist flow', () => {
+  it('uses Approve & Continue to Portal Assist label and navigates with step=review', () => {
     const source = readSource(permitPagePath)
-    expect(source).toContain('Approve and Launch Portals')
+    expect(source).toContain('Approve & Continue to Portal Assist')
+    expect(source).toContain('Saving…')
+    expect(source).not.toContain('Approve and Launch Portals')
+    expect(source).not.toContain('Opening portals…')
     expect(source).not.toContain('Approve & Open All Portals')
     expect(source).toContain('/portal-assist?requestId=${requestId}&step=review')
+  })
+
+  it('approve handlers do not call openStatePortals', () => {
+    const source = readSource(permitPagePath)
+    expect(source).not.toContain('openStatePortals')
+    expect(source).not.toContain('getPortalStatesForAnalysis')
+
+    const approveStart = source.indexOf('const handleApproveAndSave = async () => {')
+    const specificStart = source.indexOf('const handleApproveSpecificOption = async (option: any) => {')
+    const rejectStart = source.indexOf('// Reject & Start Over', specificStart)
+    const approveHandler = source.slice(approveStart, specificStart)
+    const specificHandler = source.slice(specificStart, rejectStart)
+    expect(approveHandler).not.toContain('openStatePortals')
+    expect(specificHandler).not.toContain('openStatePortals')
+    expect(approveHandler).toContain('router.push(`/portal-assist?requestId=${requestId}&step=review`)')
+    expect(specificHandler).toContain('router.push(`/portal-assist?requestId=${requestId}&step=review`)')
   })
 
   it('handleApproveSpecificOption navigates to portal-assist with step=review', () => {
@@ -258,5 +316,49 @@ describe('Permit test page — Approve and Launch Portals flow', () => {
     const handlerEnd = source.indexOf('// Reject & Start Over', handlerStart)
     const handler = source.slice(handlerStart, handlerEnd)
     expect(handler).toContain('router.push(`/portal-assist?requestId=${requestId}&step=review`)')
+  })
+})
+
+describe('Portal Assist — Launch all corridor portals', () => {
+  it('defines handleLaunchCorridorPortals and shows Launch all corridor portals action', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('handleLaunchCorridorPortals')
+    expect(source).toContain('openStatePortals')
+    expect(source).toContain('Launch all corridor portals')
+    expect(source).toContain('Review prefill first, then launch')
+    // Must not auto-launch on load or approval gate
+    const approveGateStart = source.indexOf('const handleApproveGate = async () => {')
+    const parseOutputStart = source.indexOf('const handleParseOutput = async () => {')
+    const approveGate = source.slice(approveGateStart, parseOutputStart)
+    expect(approveGate).not.toContain('openStatePortals')
+    const loadStart = source.indexOf('const loadRealRequest = async (')
+    const loadEnd = source.indexOf('const loadSubmissionsForRequest', loadStart)
+    const loadBody = source.slice(loadStart, loadEnd > loadStart ? loadEnd : loadStart + 2000)
+    expect(loadBody).not.toContain('openStatePortals')
+  })
+
+  it('handler opens corridor states with staggerMs 0 and sets corridorLaunchHint', () => {
+    const source = readSource(pagePath)
+    const handlerStart = source.indexOf('const handleLaunchCorridorPortals = () => {')
+    expect(handlerStart).toBeGreaterThan(-1)
+    const handlerEnd = source.indexOf('// Prominent HUMAN APPROVAL GATE', handlerStart)
+    const handler = source.slice(handlerStart, handlerEnd)
+    expect(handler).toContain('portalStatesForRequest')
+    expect(handler).toContain('openStatePortals(states, { staggerMs: 0 })')
+    expect(handler).toContain('setCorridorLaunchHint')
+    expect(handler).toContain("portalStatesForRequest.length === 0")
+    expect(handler).not.toContain('setLaunchHint')
+    // No redundant getPortalStatesForAnalysis fallback in handler
+    expect(handler).not.toContain('getPortalStatesForAnalysis')
+  })
+
+  it('disables Launch all when corridor count is empty and wires light a11y', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('disabled={portalStatesForRequest.length === 0}')
+    expect(source).toContain('Launch all corridor portals ({portalStatesForRequest.length})')
+    expect(source).toContain('aria-describedby="launch-corridor-help"')
+    expect(source).toContain('id="launch-corridor-help"')
+    expect(source).toContain('aria-live="polite"')
+    expect(source).toContain('corridorLaunchHint')
   })
 })

@@ -10,7 +10,8 @@ const permitPagePath = path.join(process.cwd(), 'app', 'permit-test', 'page.tsx'
 const devModePath = path.join(process.cwd(), 'lib', 'dev-mode.ts')
 
 function readPermitPageSource() {
-  return readFileSync(permitPagePath, 'utf8')
+  // Normalize CRLF so multiline indexOf markers match LF fixtures on Windows.
+  return readFileSync(permitPagePath, 'utf8').replace(/\r\n/g, '\n')
 }
 
 /** Status banner IIFE gated by isDevEnvironment — from open gate to closing })()}. */

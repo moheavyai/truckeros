@@ -28,7 +28,6 @@ import {
   type LocationStop,
 } from '@/lib/location-stop'
 import { formatHighwayForDisplay, formatHighwaysForDisplay } from '@/lib/format-highway-display'
-import { getPortalStatesForAnalysis, openStatePortals } from '@/lib/portal-assistant'
 import { formatDimensionDisplay, formatRigSummaryLine as buildRigSummaryLine } from '@/lib/parse-dimension'
 import { getGrossHeightDisplay } from '@/lib/routing-envelope-display'
 import { formatLicensePlateDisplay } from '@/lib/license-plate'
@@ -1970,9 +1969,6 @@ export default function PermitTestPage() {
     // Always derive the primary option correctly (supports both single and multi-option shapes)
     const primary = getPrimary(agentResult, null)
 
-    // Open portals synchronously in the click gesture (before await) to reduce popup blocking
-    openStatePortals(getPortalStatesForAnalysis(primary), { staggerMs: 0 })
-
     setLoading(true)
 
     try {
@@ -2092,9 +2088,6 @@ export default function PermitTestPage() {
   // Approve a specific route option (from the list of alternatives)
   const handleApproveSpecificOption = async (option: any) => {
     if (!option || !agentResult) return;
-
-    // Open portals synchronously in the click gesture (before await) to reduce popup blocking
-    openStatePortals(getPortalStatesForAnalysis(option), { staggerMs: 0 })
 
     setLoading(true)
 
@@ -3898,7 +3891,7 @@ export default function PermitTestPage() {
                         disabled={loading}
                         className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-8 py-3 rounded-lg text-lg disabled:bg-gray-400"
                       >
-                        {loading ? 'Opening portals…' : 'Approve and Launch Portals'}
+                        {loading ? 'Saving…' : 'Approve & Continue to Portal Assist'}
                       </button>
                       <button
                         onClick={() => setShowChangeRouteInput(!showChangeRouteInput)}

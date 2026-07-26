@@ -13,6 +13,7 @@ import {
   compareRecommendedVsPortalRoute,
   createPortalSubmissionRecord,
   getPortalStatesForAnalysis,
+  openStatePortals,
   resolveInitialPortalState,
   type RouteComparison,
   type PortalSubmissionRecord,
@@ -170,6 +171,8 @@ export default function PortalAssistPage() {
   const [parseError, setParseError] = useState<string | null>(null)
   const [savingSubmission, setSavingSubmission] = useState(false)
   const [launchHint, setLaunchHint] = useState<string | null>(null)
+  /** Post-click feedback under Launch all (separate from pre-load launchHint). */
+  const [corridorLaunchHint, setCorridorLaunchHint] = useState<string | null>(null)
   const [isReviewStep, setIsReviewStep] = useState(false)
 
   const router = useRouter()
@@ -180,6 +183,21 @@ export default function PortalAssistPage() {
         permitRequiredStates: request.permit_required_states,
       })
     : []
+
+  // Corridor/permit states first (origin → destination), then remaining configs A–Z.
+  const corridorStateSet = new Set(portalStatesForRequest)
+  const orderedStateCodes = [
+    ...portalStatesForRequest.filter((s) => STATE_PORTAL_CONFIGS[s]),
+    ...allStateCodes
+      .filter((s) => !corridorStateSet.has(s))
+      .sort((a, b) => a.localeCompare(b)),
+  ]
+  const filteredStateCodes = orderedStateCodes.filter((state) => {
+    if (!stateQuery) return true
+    const c = STATE_PORTAL_CONFIGS[state]
+    const q = stateQuery.toUpperCase()
+    return state.includes(q) || (c?.name || '').toUpperCase().includes(q)
+  })
 
   const applyPortalState = (req: PermitRequest, state: string, opts?: { showLaunchHint?: boolean }) => {
     if (!STATE_PORTAL_CONFIGS[state]) {
@@ -480,6 +498,17 @@ export default function PortalAssistPage() {
     } finally {
       setSavingCreds(false)
     }
+  }
+
+  /** Explicit user action: open all corridor state portals after reviewing prefill. */
+  const handleLaunchCorridorPortals = () => {
+    if (!request || portalStatesForRequest.length === 0) return
+    const states = portalStatesForRequest
+    openStatePortals(states, { staggerMs: 0 })
+    const n = states.length
+    setCorridorLaunchHint(
+      `Opened ${n} corridor portal tab${n === 1 ? '' : 's'}.`
+    )
   }
 
   // Prominent HUMAN APPROVAL GATE — records submission with human_approved + status
@@ -791,7 +820,9 @@ export default function PortalAssistPage() {
         {isReviewStep && (
           <div className="mb-6 p-4 bg-blue-50 border border-blue-300 sm:border-blue-200 rounded-2xl text-sm text-blue-900">
             <div className="font-semibold mb-0.5">Analysis approved</div>
-            <div>Review the prefill below, then record and open portals state by state.</div>
+            <div>
+              Review the prefill below, then launch all corridor portals or open one state at a time.
+            </div>
           </div>
         )}
 
@@ -811,7 +842,6 @@ export default function PortalAssistPage() {
             aria-expanded={isExpanded}
             aria-controls="state-portal-list"
             onClick={() => setIsExpanded(!isExpanded)}
-            onFocus={() => setIsExpanded(true)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
@@ -834,43 +864,52 @@ export default function PortalAssistPage() {
                 placeholder="Type to filter (e.g. CA, New York, NY) — 49 states"
                 aria-label="Searchable state portal selector. Type to filter the visible list of all 49 states (except HI) with nice names. Click any entry to select via handleStateChange."
               />
-              {/* Filtered list (shown only when expanded for compact-by-default; live filter on type; CODE — Name from STATE_PORTAL_CONFIGS; click selects via handleStateChange + auto-collapses) */}
+              {/* Corridor-first ordered list (portalStatesForRequest), then remaining states A–Z; filter after order; muted non-corridor */}
               <div id="state-portal-list" className="mt-1 w-full max-w-xs border border-gray-500 sm:border-gray-300 rounded-xl bg-white shadow-sm max-h-52 overflow-y-auto text-xs text-gray-900">
-                {allStateCodes
-                  .filter((state) => {
-                    if (!stateQuery) return true
-                    const c = STATE_PORTAL_CONFIGS[state]
-                    const q = stateQuery.toUpperCase()
-                    return state.includes(q) || (c?.name || '').toUpperCase().includes(q)
-                  })
-                  .map((state) => {
-                    const c = STATE_PORTAL_CONFIGS[state]
-                    const display = `${state} — ${c.name}`
-                    const isCurrent = state === selectedState
-                    return (
+                {!stateQuery && portalStatesForRequest.length > 0 && (
+                  <div className="px-3 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 bg-gray-50 border-b border-gray-200">Corridor</div>
+                )}
+                {filteredStateCodes.map((state, idx) => {
+                  const c = STATE_PORTAL_CONFIGS[state]
+                  const display = `${state} — ${c.name}`
+                  const isCurrent = state === selectedState
+                  const isCorridor = corridorStateSet.has(state)
+                  const showAllStatesDivider =
+                    !stateQuery &&
+                    portalStatesForRequest.length > 0 &&
+                    idx > 0 &&
+                    isCorridor === false &&
+                    corridorStateSet.has(filteredStateCodes[idx - 1])
+                  return (
+                    <div key={state}>
+                      {showAllStatesDivider && (
+                        <div className="px-3 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 bg-gray-50 border-b border-gray-200 border-t">All states</div>
+                      )}
                       <div
-                        key={state}
                         onClick={() => {
                           handleStateChange(state)
                           setStateQuery('')
                           setIsExpanded(false)
                         }}
-                        className={`px-3 py-1 cursor-pointer hover:bg-gray-100 font-mono border-b border-gray-300 sm:border-gray-200 last:border-b-0 ${isCurrent ? 'bg-gray-100 font-semibold' : ''}`}
+                        className={`px-3 py-1 cursor-pointer hover:bg-gray-100 font-mono border-b border-gray-300 sm:border-gray-200 last:border-b-0 ${
+                          isCurrent
+                            ? 'bg-gray-100 font-semibold text-gray-900'
+                            : isCorridor
+                              ? 'text-gray-900 font-medium'
+                              : 'text-gray-500'
+                        }`}
                         title={`Select ${display}`}
                       >
                         {display}
                       </div>
-                    )
-                  })}
-                {stateQuery && allStateCodes.filter((s) => {
-                  const c = STATE_PORTAL_CONFIGS[s]
-                  const q = stateQuery.toUpperCase()
-                  return s.includes(q) || (c?.name || '').toUpperCase().includes(q)
-                }).length === 0 && (
+                    </div>
+                  )
+                })}
+                {stateQuery && filteredStateCodes.length === 0 && (
                   <div className={`px-3 py-1 ${fieldHintClass}`}>No matches. Clear to see all 49.</div>
                 )}
               </div>
-              <div className="text-[10px] text-emerald-800 sm:text-emerald-700 mt-1">49 states supported (all except HI). Extensible with one object. Compact header by default — click/focus to expand list (filter/scroll/click). Selection auto-collapses + updates right panel immediately.</div>
+              <div className="text-[10px] text-emerald-800 sm:text-emerald-700 mt-1">49 states supported (all except HI). Extensible with one object. Compact header by default — click or press Enter/Space to expand list (filter/scroll/click). Selection auto-collapses + updates right panel immediately.</div>
             </>
           )}
         </div>
@@ -1272,6 +1311,31 @@ export default function PortalAssistPage() {
                   >
                     Load Rich Demo Request for {selectedState}
                   </button>
+                )}
+                {request && (
+                  <div className="mb-3">
+                    <button
+                      type="button"
+                      onClick={handleLaunchCorridorPortals}
+                      disabled={portalStatesForRequest.length === 0}
+                      aria-describedby="launch-corridor-help"
+                      className={`inline-block px-4 py-2 ${buttonSuccessClass} rounded-lg`}
+                    >
+                      Launch all corridor portals ({portalStatesForRequest.length})
+                    </button>
+                    <p id="launch-corridor-help" className={`mt-1.5 text-xs ${bodyTextClass}`}>
+                      Review prefill first, then launch all corridor portals in new tabs.
+                    </p>
+                    {corridorLaunchHint && (
+                      <p
+                        role="status"
+                        aria-live="polite"
+                        className="mt-1.5 text-xs text-emerald-800 sm:text-emerald-700"
+                      >
+                        {corridorLaunchHint}
+                      </p>
+                    )}
+                  </div>
                 )}
                 <p className={`text-sm ${bodyTextClass} whitespace-pre-wrap`}>{config.instructions}</p>
                 {config.typicalRestrictions && config.typicalRestrictions.length > 0 && (
