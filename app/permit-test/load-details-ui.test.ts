@@ -289,4 +289,85 @@ describe('Permit test page — axle weight distribution', () => {
     expect(source).toContain('axleCountMismatch')
     expect(source).toContain('weightChanged || axleCountMismatch')
   })
+
+  it('clears residual rig envelope when switching to custom dimensions (no rig)', () => {
+    const source = readPermitPageSource()
+    // Slice only the null/custom branch (before setSelectedRigId(rig.id) for a real rig).
+    const start = source.indexOf('function handleSelectRig(rig: RigConfiguration | null)')
+    const nullBranchEnd = source.indexOf('setSelectedRigId(rig.id)', start)
+    expect(start).toBeGreaterThan(-1)
+    expect(nullBranchEnd).toBeGreaterThan(start)
+    const nullPath = source.slice(start, nullBranchEnd)
+
+    // Null path clears selection + snapshot
+    expect(nullPath).toContain('if (!rig)')
+    expect(nullPath).toContain('setSelectedRigId(null)')
+    expect(nullPath).toContain('setSelectedRigSnapshot(null)')
+
+    // Clears full set of rig-derived equipment fields so residual envelope cannot stick
+    expect(nullPath).toContain("unitNumber: ''")
+    expect(nullPath).toContain("vin: ''")
+    expect(nullPath).toContain("trailerVin: ''")
+    expect(nullPath).toContain("tractorEmptyWeightLbs: ''")
+    expect(nullPath).toContain("trailerEmptyWeightLbs: ''")
+    expect(nullPath).toContain("rigEmptyWeightLbs: ''")
+    expect(nullPath).toContain("trailerWidthFt: ''")
+    expect(nullPath).toContain("trailerDeckHeightFt: ''")
+    expect(nullPath).toContain("trailerLengthFt: ''")
+    expect(nullPath).toContain("year: ''")
+    expect(nullPath).toContain("make: ''")
+    expect(nullPath).toContain("model: ''")
+    expect(nullPath).toContain("trailerMake: ''")
+    expect(nullPath).toContain("trailerModel: ''")
+    expect(nullPath).toContain("trailerYear: ''")
+    expect(nullPath).toContain('kingpinSettingIn: 36')
+    expect(nullPath).toContain('axles: 5')
+
+    // Recomputes load-only envelope and writes form envelope outputs
+    expect(nullPath).toContain('computeRoutingEnvelope')
+    expect(nullPath).toContain('rigLengthFt: Number(next.loadLengthFt) || 0')
+    expect(nullPath).toContain('rigEmptyWeightLbs: 0')
+    expect(nullPath).toContain('trailerWidthFt: 0')
+    expect(nullPath).toContain('deckHeightFt: 0')
+    expect(nullPath).toContain('next.length = envelope.lengthFt > 0 ? envelope.lengthFt : 60')
+    expect(nullPath).toContain('next.width = envelope.widthFt > 0 ? envelope.widthFt : 8.5')
+    expect(nullPath).toContain('next.height = envelope.heightFt > 0 ? envelope.heightFt : 13.5')
+    expect(nullPath).toContain('next.weight = gross')
+    expect(nullPath).toContain('next.grossLoadedWeight = gross')
+    expect(nullPath).toContain(
+      'const gross = envelope.weightLbs > 0 ? envelope.weightLbs : 80_000'
+    )
+    expect(nullPath).toContain('resolvePermitAxleLayout(next.axles, null)')
+    expect(nullPath).toContain('distributeWeightSteerFirst')
+    expect(nullPath).toContain('next.axleWeights = distributeWeightSteerFirst(n, gross, groups)')
+
+    // Must not wipe pure load detail fields
+    expect(nullPath).not.toContain("loadWeightLbs: ''")
+    expect(nullPath).not.toContain("loadLengthFt: ''")
+    expect(nullPath).not.toContain("loadWidthFt: ''")
+    expect(nullPath).not.toContain("loadHeightFt: ''")
+
+    // UI wires empty select value to handleSelectRig(null) and closes picker
+    expect(source).toContain('handleSelectRig(null)')
+    expect(source).toContain('— Custom dimensions —')
+    const selectOnChange = source.slice(
+      source.indexOf('value={selectedRigId || \'\''),
+      source.indexOf('— Custom dimensions —')
+    )
+    expect(selectOnChange).toContain('handleSelectRig(null)')
+    expect(selectOnChange).toContain('setShowRigPicker(false)')
+
+    // Live envelope: no-rig base is load length only (never trailer default 53)
+    expect(source).toContain('function resolveEnvelopeBaseLengthFt')
+    expect(source).toMatch(
+      /function resolveEnvelopeBaseLengthFt\([\s\S]*?if \(snap\) \{[\s\S]*?return resolveRigBaseLengthFt\(snap, trailerLengthFt\)[\s\S]*?return Number\(loadLengthFt\) \|\| 0/
+    )
+    expect(source).toMatch(
+      /resolveEnvelopeBaseLengthFt\(\s*selectedRigSnapshot,\s*formData\.trailerLengthFt,\s*formData\.loadLengthFt\s*\)/
+    )
+    // Must not fall back through resolveRigBaseLengthFt(null, trailer…) which yields default 53
+    expect(source).not.toMatch(
+      /resolveRigBaseLengthFt\(selectedRigSnapshot,\s*formData\.trailerLengthFt\)\s*\|\|/
+    )
+  })
 })

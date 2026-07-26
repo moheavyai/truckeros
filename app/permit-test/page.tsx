@@ -260,6 +260,26 @@ function resolveRigBaseLengthFt(
   return Number(trailerLengthFt) || 0
 }
 
+/**
+ * Routing-envelope base length.
+ * Selected rig → equipment geometry (via resolveRigBaseLengthFt).
+ * No rig / custom dimensions → load length only (never trailer default 53).
+ */
+function resolveEnvelopeBaseLengthFt(
+  snap: {
+    tractor?: unknown
+    trailers?: unknown[] | null
+    overallLengthFt?: number | null
+  } | null | undefined,
+  trailerLengthFt?: number | string | null,
+  loadLengthFt?: number | string | null
+): number {
+  if (snap) {
+    return resolveRigBaseLengthFt(snap, trailerLengthFt)
+  }
+  return Number(loadLengthFt) || 0
+}
+
 /** Unified gross for analyze / save / UI: prefer grossLoadedWeight when set. */
 function resolveSubmitWeightLbs(form: {
   grossLoadedWeight?: number | string | null
@@ -821,9 +841,11 @@ export default function PermitTestPage() {
         ? tractorWt + trailerWt
         : Number(formData.rigEmptyWeightLbs) || 0
     // Live recompute length from equipment when rich units available (not stale cache only).
-    const rigBaseLength = resolveRigBaseLengthFt(
+    // No-rig / custom dimensions: load length only — never trailer default 53.
+    const rigBaseLength = resolveEnvelopeBaseLengthFt(
       selectedRigSnapshot,
-      formData.trailerLengthFt
+      formData.trailerLengthFt,
+      formData.loadLengthFt
     )
     const envelope = computeRoutingEnvelope({
       rigLengthFt: rigBaseLength,
@@ -887,10 +909,10 @@ export default function PermitTestPage() {
       return changed ? next : prev
     })
   }, [
-    formData.loadWidthFt, formData.loadHeightFt, formData.loadWeightLbs, formData.trailerLengthFt,
-    formData.trailerWidthFt, formData.trailerDeckHeightFt, formData.tractorEmptyWeightLbs,
-    formData.trailerEmptyWeightLbs, formData.rigEmptyWeightLbs, loadOverhangFrontFt, loadOverhangRearFt,
-    selectedRigSnapshot, formData.axles,
+    formData.loadWidthFt, formData.loadHeightFt, formData.loadWeightLbs, formData.loadLengthFt,
+    formData.trailerLengthFt, formData.trailerWidthFt, formData.trailerDeckHeightFt,
+    formData.tractorEmptyWeightLbs, formData.trailerEmptyWeightLbs, formData.rigEmptyWeightLbs,
+    loadOverhangFrontFt, loadOverhangRearFt, selectedRigSnapshot, formData.axles,
   ])
 
   // Full tractor/trailer objects (decoded from equipment_profiles RIGBUILDER payloads).
@@ -1120,9 +1142,10 @@ export default function PermitTestPage() {
       tractorWt > 0 && trailerWt > 0
         ? tractorWt + trailerWt
         : Number(formData.rigEmptyWeightLbs) || 0
-    const rigBaseLength = resolveRigBaseLengthFt(
+    const rigBaseLength = resolveEnvelopeBaseLengthFt(
       selectedRigSnapshot,
-      formData.trailerLengthFt
+      formData.trailerLengthFt,
+      formData.loadLengthFt
     )
     const envelope = computeRoutingEnvelope({
       rigLengthFt: rigBaseLength,
@@ -1349,8 +1372,57 @@ export default function PermitTestPage() {
   // NEW Smart Rig Selector handler (v3) — sets snapshot for clean display + submit payload
   function handleSelectRig(rig: RigConfiguration | null) {
     if (!rig) {
+      // Custom dimensions / no rig: drop residual equipment envelope so analysis is load-only
+      // (self-powered oversize e.g. taxi crane). Keep pure load detail fields.
       setSelectedRigId(null)
       setSelectedRigSnapshot(null)
+      setFormData((prev) => {
+        const next = {
+          ...prev,
+          unitNumber: '',
+          vin: '',
+          trailerVin: '',
+          tractorEmptyWeightLbs: '',
+          trailerEmptyWeightLbs: '',
+          rigEmptyWeightLbs: '',
+          trailerWidthFt: '',
+          trailerDeckHeightFt: '',
+          year: '',
+          make: '',
+          model: '',
+          trailerMake: '',
+          trailerModel: '',
+          trailerYear: '',
+          trailerLengthFt: '',
+          kingpinSettingIn: 36,
+          axleSpacing: '',
+          // Synthetic layout when no rig (do not keep previous rig axle count/groups).
+          axles: 5,
+        }
+        const envelope = computeRoutingEnvelope({
+          // Self-powered: cargo/load length is the vehicle base length.
+          rigLengthFt: Number(next.loadLengthFt) || 0,
+          loadOverhangFrontFt,
+          loadOverhangRearFt,
+          trailerWidthFt: 0,
+          loadWidthFt: Number(next.loadWidthFt) || 0,
+          deckHeightFt: 0,
+          loadHeightFt: Number(next.loadHeightFt) || 0,
+          rigEmptyWeightLbs: 0,
+          loadWeightLbs: Number(next.loadWeightLbs) || 0,
+        })
+        next.length = envelope.lengthFt > 0 ? envelope.lengthFt : 60
+        next.width = envelope.widthFt > 0 ? envelope.widthFt : 8.5
+        next.height = envelope.heightFt > 0 ? envelope.heightFt : 13.5
+        const gross = envelope.weightLbs > 0 ? envelope.weightLbs : 80_000
+        next.weight = gross
+        next.grossLoadedWeight = gross
+        const { n, groups } = resolvePermitAxleLayout(next.axles, null)
+        next.axles = n
+        next.axleWeights = distributeWeightSteerFirst(n, gross, groups)
+        return next
+      })
+      setGlance(null)
       return
     }
     setSelectedRigId(rig.id)
@@ -2984,6 +3056,7 @@ export default function PermitTestPage() {
                 const id = e.target.value
                 if (!id) {
                   handleSelectRig(null)
+                  setShowRigPicker(false)
                   return
                 }
                 const rig = rigs.find((r: any) => r.id === id)
