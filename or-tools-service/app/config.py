@@ -178,7 +178,9 @@ DEFAULT_PRICING: Final[dict] = {
 HIGHWAY_STATE_HINTS: Final[dict[str, str]] = {
     "I-65": "AL", "I-70": "MO", "I-80": "NE",
     "I-55": "MS", "I-57": "MO", "I-44": "MO", "I-24": "TN", "I-22": "MS",
-    "I-85": "GA", "I-20": "AL", "I-10": "LA", "I-35": "OK", "I-29": "MO",
+    # I-10 / I-20 / I-85 / I-95 etc. are multi-state — never single-state hint
+    # (see MULTI_STATE_HWYS in ortools_solver; bare I-10 ≠ LA).
+    "I-35": "OK", "I-29": "MO",
     "I-64": "MO", "I-72": "IL", "I-75": "GA", "I-4": "FL",
     "I-90": "SD", "I-25": "WY", "US 81": "NE", "US 83": "NE",
 }

@@ -157,3 +157,134 @@ class TestCalvertAlNe:
             ["AL", "MS", "MO", "IA", "NE"], ["I-35", "I-40"]
         )
         assert "OK" not in corridor
+
+
+# Plausible mid-Atlantic NJ→FL step chain; trailing bare I-10 must not inject LA.
+_NJ_FL_I95_STEPS = [
+    {"ref": "NJ 42"},
+    {"ref": "I 95;DE 1"},
+    {"ref": "I 95;MD 295"},
+    {"ref": "I 95;VA 3"},
+    {"ref": "I 95;NC 49"},
+    {"ref": "I 95;GA 400"},
+    {"ref": "I 95;FL 9"},
+    {"ref": "I 10"},  # bare multi-state I-10 must not force LA via HIGHWAY_STATE_HINTS
+]
+
+
+class TestEastCoastCorridorNjFl:
+    def test_sc_fill_when_nc_ga_index_neighbors(self):
+        corridor = complete_corridor_with_highways(
+            ["NJ", "DE", "MD", "VA", "NC", "GA", "FL"],
+            ["I-95", "I-85"],
+        )
+        assert "SC" in corridor
+        assert "LA" not in corridor
+        assert corridor[0] == "NJ"
+        assert corridor[-1] == "FL"
+        assert corridor.index("NC") < corridor.index("SC") < corridor.index("GA")
+        assert has_plausible_transitions(corridor)
+
+    def test_sc_and_ga_fill_for_nc_fl_gap(self):
+        corridor = complete_corridor_with_highways(
+            ["NJ", "DE", "MD", "VA", "NC", "FL"],
+            ["I-95"],
+        )
+        assert "SC" in corridor
+        assert "GA" in corridor
+        assert "LA" not in corridor
+        assert corridor[0] == "NJ"
+        assert corridor[-1] == "FL"
+        assert has_plausible_transitions(corridor)
+
+    def test_no_sc_when_inland_between_nc_fl(self):
+        corridor = complete_corridor_with_highways(
+            ["NC", "TN", "AL", "FL"],
+            ["I-95"],
+        )
+        assert "SC" not in corridor
+        assert corridor == ["NC", "TN", "AL", "FL"]
+
+    def test_i81_alone_does_not_trigger_sc_fill(self):
+        corridor = complete_corridor_with_highways(
+            ["VA", "NC", "GA", "FL"],
+            ["I-81"],
+        )
+        assert "SC" not in corridor
+        assert corridor == ["VA", "NC", "GA", "FL"]
+
+    def test_strip_mid_corridor_la_then_fill_sc(self):
+        corridor = complete_corridor_with_highways(
+            ["NJ", "DE", "MD", "VA", "NC", "LA", "GA", "FL"],
+            ["I-95", "I-10"],
+        )
+        assert "LA" not in corridor
+        assert "SC" in corridor
+        assert has_plausible_transitions(corridor)
+
+    def test_strip_la_even_with_distant_ms(self):
+        # Global TX/MS/AR-anywhere must not block strip; only local gulf prev/next keeps LA.
+        corridor = complete_corridor_with_highways(
+            ["NJ", "DE", "MD", "VA", "NC", "LA", "GA", "FL", "AL", "MS"],
+            ["I-95", "I-10"],
+        )
+        assert "LA" not in corridor
+        assert "SC" in corridor
+        assert "MS" in corridor
+        assert corridor.index("NC") < corridor.index("SC") < corridor.index("GA")
+        assert has_plausible_transitions(corridor)
+
+    def test_never_strip_la_bookend(self):
+        dest_la = complete_corridor_with_highways(
+            ["TX", "MS", "AL", "FL", "LA"],
+            ["I-95", "I-10"],
+        )
+        assert dest_la[-1] == "LA"
+
+        origin_la = complete_corridor_with_highways(
+            ["LA", "MS", "AL", "GA", "NC"],
+            ["I-95"],
+        )
+        assert origin_la[0] == "LA"
+
+    def test_keep_la_on_gulf_i10_path(self):
+        corridor = complete_corridor_with_highways(
+            ["TX", "LA", "MS", "AL", "FL"],
+            ["I-10", "I-95"],
+        )
+        assert "LA" in corridor
+        assert corridor.index("TX") < corridor.index("LA") < corridor.index("MS")
+
+    def test_reverse_fl_nj_inserts_sc(self):
+        corridor = complete_corridor_with_highways(
+            ["FL", "GA", "NC", "VA", "MD", "DE", "NJ"],
+            ["I-95"],
+        )
+        assert "SC" in corridor
+        assert corridor[0] == "FL"
+        assert corridor[-1] == "NJ"
+        assert corridor.index("GA") < corridor.index("SC") < corridor.index("NC")
+        assert has_plausible_transitions(corridor)
+
+    def test_bare_i10_does_not_inject_la(self):
+        corridor = build_corridor_from_steps(_NJ_FL_I95_STEPS, "NJ", "FL")
+        assert corridor[0] == "NJ"
+        assert corridor[-1] == "FL"
+        assert "MD" in corridor
+        assert "VA" in corridor
+        assert "NC" in corridor
+        assert "GA" in corridor
+        assert "LA" not in corridor
+        completed = complete_corridor_with_highways(corridor, ["I-95", "I-10"])
+        assert "LA" not in completed
+        assert "SC" in completed
+        assert has_plausible_transitions(completed)
+
+    def test_ga_la_fl_on_east_coast_strips_la_fills_sc(self):
+        corridor = complete_corridor_with_highways(
+            ["NJ", "DE", "MD", "VA", "NC", "GA", "LA", "FL"],
+            ["I-95", "I-10"],
+        )
+        assert "LA" not in corridor
+        assert "SC" in corridor
+        assert has_plausible_transitions(corridor)
