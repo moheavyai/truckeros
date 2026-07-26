@@ -111,6 +111,76 @@ describe('completeCorridorWithHighways Calvert AL->NE', () => {
   })
 })
 
+/** NJ→FL I-95-style steps: mid-Atlantic through NC/GA/FL, SC often missing from sparse refs; bare I-10 must not inject LA. */
+const njFlI95Steps = [
+  { ref: 'I 95', maneuver: { location: [-74.5, 40.2] }, geometry: { coordinates: [[-74.5, 40.2], [-74.6, 39.5]] } },
+  { ref: 'I 95', maneuver: { location: [-75.5, 39.0] }, geometry: { coordinates: [[-75.5, 39.0], [-76.5, 38.5]] } },
+  { ref: 'I 95;MD 295', maneuver: { location: [-76.6, 39.2] }, geometry: { coordinates: [[-76.6, 39.2], [-77.0, 38.8]] } },
+  { ref: 'I 95', maneuver: { location: [-77.4, 37.5] }, geometry: { coordinates: [[-77.4, 37.5], [-77.5, 36.5]] } },
+  { ref: 'I 95;NC 49', maneuver: { location: [-78.6, 35.8] }, geometry: { coordinates: [[-78.6, 35.8], [-78.8, 35.0]] } },
+  { ref: 'I 95', maneuver: { location: [-81.1, 32.1] }, geometry: { coordinates: [[-81.1, 32.1], [-81.3, 31.5]] } },
+  { ref: 'I 95;GA 400', maneuver: { location: [-81.5, 31.2] }, geometry: { coordinates: [[-81.5, 31.2], [-81.6, 30.8]] } },
+  { ref: 'I 95', maneuver: { location: [-81.4, 30.3] }, geometry: { coordinates: [[-81.4, 30.3], [-81.5, 29.5]] } },
+  // Bare multi-state I-10 must not force LA via HIGHWAY_STATE_HINTS
+  { ref: 'I 10', maneuver: { location: [-81.6, 30.2] }, geometry: { coordinates: [[-81.6, 30.2]] } },
+]
+
+describe('east-coast corridor NJ→FL I-95', () => {
+  it('completeCorridorWithHighways inserts SC when NC+GA present on I-95, does not invent LA', () => {
+    const corridor = completeCorridorWithHighways(
+      ['NJ', 'DE', 'MD', 'VA', 'NC', 'GA', 'FL'],
+      ['I-95', 'I-85'],
+    )
+    expect(corridor).toContain('SC')
+    expect(corridor).not.toContain('LA')
+    expect(corridor[0]).toBe('NJ')
+    expect(corridor[corridor.length - 1]).toBe('FL')
+    const ncIdx = corridor.indexOf('NC')
+    const scIdx = corridor.indexOf('SC')
+    const gaIdx = corridor.indexOf('GA')
+    expect(ncIdx).toBeLessThan(scIdx)
+    expect(scIdx).toBeLessThan(gaIdx)
+    expect(hasPlausibleTransitions(corridor)).toBe(true)
+  })
+
+  it('completeCorridorWithHighways inserts SC (and GA) for NC→FL I-95 gap without GA', () => {
+    // Plausible mid-Atlantic skeleton so final guard can keep east-coast fills
+    const corridor = completeCorridorWithHighways(
+      ['NJ', 'DE', 'MD', 'VA', 'NC', 'FL'],
+      ['I-95'],
+    )
+    expect(corridor).toContain('SC')
+    expect(corridor).toContain('GA')
+    expect(corridor).not.toContain('LA')
+    expect(corridor[0]).toBe('NJ')
+    expect(corridor[corridor.length - 1]).toBe('FL')
+    expect(hasPlausibleTransitions(corridor)).toBe(true)
+  })
+
+  it('strips spurious LA from I-95 corridor when no gulf I-10 path', () => {
+    const corridor = completeCorridorWithHighways(
+      ['NJ', 'DE', 'MD', 'VA', 'NC', 'LA', 'GA', 'FL'],
+      ['I-95', 'I-10'],
+    )
+    expect(corridor).not.toContain('LA')
+    expect(corridor).toContain('SC')
+    expect(hasPlausibleTransitions(corridor)).toBe(true)
+  })
+
+  it('bare I-10 hint must not force LA into mid-Atlantic→FL corridor from steps', () => {
+    const corridor = buildCorridorFromSteps(njFlI95Steps, 'NJ', 'FL')
+    expect(corridor[0]).toBe('NJ')
+    expect(corridor[corridor.length - 1]).toBe('FL')
+    expect(corridor).not.toContain('LA')
+    // Prefer SC present when NC and GA/FL path is completed
+    const completed = completeCorridorWithHighways(corridor, ['I-95', 'I-10'])
+    expect(completed).not.toContain('LA')
+    if (completed.includes('NC') && (completed.includes('GA') || completed.includes('FL'))) {
+      expect(completed).toContain('SC')
+    }
+  })
+})
+
 describe('parseSpecialInstructions OD guard + avoid clause bound', () => {
   it('avoid IA. use US136 from Rock Port, MO to enter NE → only IA avoided, US 136 preferred, not MO/NE', () => {
     const parsed = parseSpecialInstructions(

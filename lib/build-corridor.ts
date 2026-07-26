@@ -437,13 +437,17 @@ function getStateAbbreviation(stateName: string): string | null {
 const HIGHWAY_STATE_HINTS: Record<string, string> = {
   'I-65': 'AL', 'I-70': 'MO', 'I-80': 'NE',
   'I-55': 'MS', 'I-57': 'MO', 'I-44': 'MO', 'I-24': 'TN', 'I-22': 'MS',
-  'I-85': 'GA', 'I-20': 'AL', 'I-10': 'LA', 'I-35': 'OK', 'I-29': 'MO',
+  // I-10 / I-20 / I-85 / I-95 etc. are multi-state — never single-state hint (see MULTI_STATE_HWYS).
+  'I-35': 'OK', 'I-29': 'MO',
   'I-64': 'MO', 'I-72': 'IL', 'I-75': 'GA', 'I-4': 'FL',
   'I-90': 'SD', 'I-25': 'WY', 'US 81': 'NE', 'US 83': 'NE',
 }
 
-/** Multi-state interstates: do not use hint when ref/name already has state codes. */
-const MULTI_STATE_HWYS = new Set(['I-35', 'I-40', 'I-44', 'I-55', 'I-57', 'I-70', 'I-75', 'I-80', 'I-90', 'I-29', 'I-25', 'US 81'])
+/** Multi-state interstates: do not use single-state HIGHWAY_STATE_HINTS (bare I-10 ≠ LA, etc.). */
+const MULTI_STATE_HWYS = new Set([
+  'I-10', 'I-20', 'I-25', 'I-29', 'I-35', 'I-40', 'I-44', 'I-55', 'I-57',
+  'I-70', 'I-75', 'I-80', 'I-81', 'I-85', 'I-90', 'I-95', 'US 81',
+])
 
 const COMPASS_SUFFIX_CODES = new Set(['NE', 'NW', 'SE', 'SW'])
 
@@ -1033,6 +1037,76 @@ export function completeCorridorWithHighways(states: string[], highways: string[
       if (!result.includes('SD') && result.includes('NE')) {
         const neIdx = result.indexOf('NE')
         if (neIdx !== -1) result.splice(neIdx + 1, 0, 'SD')
+      }
+    }
+  }
+
+  // East-coast / I-95 family: NC→GA/FL without SC → insert SC (common long-haul gap on I-95/I-85).
+  // When only NC→FL (no GA), also insert GA so SC-FL is not a non-border jump.
+  // Preserves origin/dest bookends; final hasPlausibleTransitions guard reverts bad inserts (same as OK heuristics).
+  const eastCoastHwy =
+    plainHwys.has('I-95') || plainHwys.has('I-85') || plainHwys.has('I-81')
+  if (
+    eastCoastHwy &&
+    result.includes('NC') &&
+    (result.includes('GA') || result.includes('FL'))
+  ) {
+    if (!result.includes('SC')) {
+      if (result.includes('GA')) {
+        const ncIdx = result.indexOf('NC')
+        const gaIdx = result.indexOf('GA')
+        if (ncIdx !== -1 && gaIdx !== -1) {
+          if (ncIdx < gaIdx) result.splice(ncIdx + 1, 0, 'SC')
+          else result.splice(gaIdx + 1, 0, 'SC')
+        }
+      } else {
+        // NC … FL without GA: SC alone would leave SC→FL non-adjacent; fill SC then GA.
+        const ncIdx = result.indexOf('NC')
+        const flIdx = result.indexOf('FL')
+        if (ncIdx !== -1 && flIdx !== -1) {
+          if (ncIdx < flIdx) {
+            result.splice(ncIdx + 1, 0, 'SC')
+            if (!result.includes('GA')) {
+              const scIdx = result.indexOf('SC')
+              if (scIdx !== -1) result.splice(scIdx + 1, 0, 'GA')
+            }
+          } else {
+            result.splice(ncIdx, 0, 'SC')
+            if (!result.includes('GA')) {
+              const scIdx = result.indexOf('SC')
+              if (scIdx !== -1) result.splice(scIdx, 0, 'GA')
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Safety strip: I-95-family mid-Atlantic→FL corridors must not keep spurious LA (legacy bare I-10→LA hint).
+  // Strip when LA is not on a gulf neighbor path; keep only if trial is plausible or strictly improves LA adjacency.
+  if (
+    result.includes('LA') &&
+    eastCoastHwy &&
+    !(
+      plainHwys.has('I-10') &&
+      (result.includes('TX') || result.includes('MS') || result.includes('AR'))
+    )
+  ) {
+    const laIdx = result.indexOf('LA')
+    const prev = laIdx > 0 ? result[laIdx - 1] : null
+    const next = laIdx < result.length - 1 ? result[laIdx + 1] : null
+    const gulfNeighbor = (s: string | null) => !!s && (s === 'TX' || s === 'MS' || s === 'AR')
+    if (!(gulfNeighbor(prev) || gulfNeighbor(next))) {
+      const withoutLa = result.filter(s => s !== 'LA')
+      const improved =
+        hasPlausibleTransitions(withoutLa) ||
+        (!hasPlausibleTransitions(result) &&
+          ((prev !== null && !areAdjacent(prev, 'LA')) ||
+            (next !== null && !areAdjacent('LA', next)) ||
+            (!!prev && !!next && areAdjacent(prev, next))))
+      if (improved || hasPlausibleTransitions(withoutLa)) {
+        result.length = 0
+        result.push(...withoutLa)
       }
     }
   }
