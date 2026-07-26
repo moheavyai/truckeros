@@ -1041,49 +1041,11 @@ export function completeCorridorWithHighways(states: string[], highways: string[
     }
   }
 
-  // East-coast / I-95 family: NC→GA/FL without SC → insert SC (common long-haul gap on I-95/I-85).
-  // When only NC→FL (no GA), also insert GA so SC-FL is not a non-border jump.
-  // Preserves origin/dest bookends; final hasPlausibleTransitions guard reverts bad inserts (same as OK heuristics).
-  const eastCoastHwy =
-    plainHwys.has('I-95') || plainHwys.has('I-85') || plainHwys.has('I-81')
-  if (
-    eastCoastHwy &&
-    result.includes('NC') &&
-    (result.includes('GA') || result.includes('FL'))
-  ) {
-    if (!result.includes('SC')) {
-      if (result.includes('GA')) {
-        const ncIdx = result.indexOf('NC')
-        const gaIdx = result.indexOf('GA')
-        if (ncIdx !== -1 && gaIdx !== -1) {
-          if (ncIdx < gaIdx) result.splice(ncIdx + 1, 0, 'SC')
-          else result.splice(gaIdx + 1, 0, 'SC')
-        }
-      } else {
-        // NC … FL without GA: SC alone would leave SC→FL non-adjacent; fill SC then GA.
-        const ncIdx = result.indexOf('NC')
-        const flIdx = result.indexOf('FL')
-        if (ncIdx !== -1 && flIdx !== -1) {
-          if (ncIdx < flIdx) {
-            result.splice(ncIdx + 1, 0, 'SC')
-            if (!result.includes('GA')) {
-              const scIdx = result.indexOf('SC')
-              if (scIdx !== -1) result.splice(scIdx + 1, 0, 'GA')
-            }
-          } else {
-            result.splice(ncIdx, 0, 'SC')
-            if (!result.includes('GA')) {
-              const scIdx = result.indexOf('SC')
-              if (scIdx !== -1) result.splice(scIdx, 0, 'GA')
-            }
-          }
-        }
-      }
-    }
-  }
+  // I-95 / I-85 seaboard family (I-81 stays MULTI_STATE only — not a seaboard SC-fill trigger).
+  const eastCoastHwy = plainHwys.has('I-95') || plainHwys.has('I-85')
 
-  // Safety strip: I-95-family mid-Atlantic→FL corridors must not keep spurious LA (legacy bare I-10→LA hint).
-  // Strip when LA is not on a gulf neighbor path; keep only if trial is plausible or strictly improves LA adjacency.
+  // Safety strip first: clear spurious mid-corridor LA so NC|GA become adjacent for SC fill.
+  // Never strip LA when it is origin/dest bookend (first/last). Gulf I-10 paths (TX/MS/AR) kept.
   if (
     result.includes('LA') &&
     eastCoastHwy &&
@@ -1093,20 +1055,50 @@ export function completeCorridorWithHighways(states: string[], highways: string[
     )
   ) {
     const laIdx = result.indexOf('LA')
-    const prev = laIdx > 0 ? result[laIdx - 1] : null
-    const next = laIdx < result.length - 1 ? result[laIdx + 1] : null
-    const gulfNeighbor = (s: string | null) => !!s && (s === 'TX' || s === 'MS' || s === 'AR')
-    if (!(gulfNeighbor(prev) || gulfNeighbor(next))) {
-      const withoutLa = result.filter(s => s !== 'LA')
-      const improved =
-        hasPlausibleTransitions(withoutLa) ||
-        (!hasPlausibleTransitions(result) &&
-          ((prev !== null && !areAdjacent(prev, 'LA')) ||
-            (next !== null && !areAdjacent('LA', next)) ||
-            (!!prev && !!next && areAdjacent(prev, next))))
-      if (improved || hasPlausibleTransitions(withoutLa)) {
-        result.length = 0
-        result.push(...withoutLa)
+    if (laIdx > 0 && laIdx < result.length - 1) {
+      const prev = result[laIdx - 1]
+      const next = result[laIdx + 1]
+      const gulfNeighbor = (s: string) => s === 'TX' || s === 'MS' || s === 'AR'
+      if (!(gulfNeighbor(prev) || gulfNeighbor(next))) {
+        const withoutLa = result.filter(s => s !== 'LA')
+        // Strip when trial is fully plausible, or LA itself is the bad link (neighbors non-gulf / non-adjacent).
+        if (
+          hasPlausibleTransitions(withoutLa) ||
+          (!hasPlausibleTransitions(result) &&
+            (!areAdjacent(prev, 'LA') || !areAdjacent('LA', next) || areAdjacent(prev, next)))
+        ) {
+          result.length = 0
+          result.push(...withoutLa)
+        }
+      }
+    }
+  }
+
+  // East-coast SC fill: only when NC and GA (or NC and FL with no GA) are *index neighbors*
+  // (avoids inland NC-TN-AL-FL + I-95 false positives). NC→FL also inserts GA for SC-FL adjacency.
+  // Final hasPlausibleTransitions guard reverts bad inserts (same as OK heuristics).
+  if (eastCoastHwy && !result.includes('SC')) {
+    const ncIdx = result.indexOf('NC')
+    if (ncIdx !== -1) {
+      const gaIdx = result.indexOf('GA')
+      const flIdx = result.indexOf('FL')
+      if (gaIdx !== -1 && Math.abs(gaIdx - ncIdx) === 1) {
+        if (ncIdx < gaIdx) result.splice(ncIdx + 1, 0, 'SC')
+        else result.splice(gaIdx + 1, 0, 'SC')
+      } else if (gaIdx === -1 && flIdx !== -1 && Math.abs(flIdx - ncIdx) === 1) {
+        if (ncIdx < flIdx) {
+          result.splice(ncIdx + 1, 0, 'SC')
+          if (!result.includes('GA')) {
+            const scIdx = result.indexOf('SC')
+            if (scIdx !== -1) result.splice(scIdx + 1, 0, 'GA')
+          }
+        } else {
+          result.splice(ncIdx, 0, 'SC')
+          if (!result.includes('GA')) {
+            const scIdx = result.indexOf('SC')
+            if (scIdx !== -1) result.splice(scIdx, 0, 'GA')
+          }
+        }
       }
     }
   }
