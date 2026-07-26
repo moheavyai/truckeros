@@ -23,7 +23,6 @@ import {
   computeRigEmptyWeightLbs,
   primaryTrailerDimensions,
   sortRigsForDisplay,
-  FUTURE_FEATURES,
 } from '@/types/equipment'
 import { formatDimensionDisplay, formatRigSummaryLine } from '@/lib/parse-dimension'
 import { formatLicensePlateDisplay } from '@/lib/license-plate'
@@ -74,11 +73,17 @@ const mutedTextClass = 'text-gray-600 sm:text-gray-500'
 const bodyTextClass = 'text-gray-700 sm:text-gray-600'
 const dividerBorderClass = 'border-gray-300 sm:border-gray-200'
 const checkboxClass = 'h-4 w-4 rounded accent-emerald-700 border-gray-500 sm:border-gray-300'
-const editorShellClass = 'mb-6 bg-white border border-emerald-300 sm:border-emerald-200 rounded-2xl p-5'
-const cardClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-2xl p-6'
+const editorShellClass =
+  'mb-6 bg-white border border-emerald-300 sm:border-emerald-200 rounded-2xl p-4 sm:p-5'
+const cardClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-2xl p-4 sm:p-5'
 const cardCompactClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-xl p-3 text-sm'
 const cardItemClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-xl p-4 text-sm'
-const cardPanelClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-2xl p-5'
+const cardPanelClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-2xl p-4 sm:p-5'
+/** Soft metric chips — visual hierarchy only, not a compliance engine */
+const metricChipClass =
+  'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-900 border border-emerald-200'
+const metricChipMutedClass =
+  'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700 border border-gray-300 sm:border-gray-200'
 
 export default function EquipmentPage() {
   const [user, setUser] = useState<any>(null)
@@ -1026,9 +1031,12 @@ export default function EquipmentPage() {
         {/* Header — New Analysis only; History lives in AppHeader when on this page */}
         <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
           <div className="min-w-0 flex-1">
-            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900">Equipment &amp; Rig Builder</h1>
-            <p className={`${bodyTextClass} mt-1 text-[15px]`}>
-              Build and save tractor + trailer profiles, then combine them into rigs for accurate OSOW dimensions.
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Equipment</p>
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900 mt-1">
+              Equipment &amp; Rig Builder
+            </h1>
+            <p className={`${bodyTextClass} mt-2 text-sm sm:text-[15px] max-w-2xl`}>
+              Save tractor and trailer profiles, then build rigs for OSOW dimensions.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 sm:gap-3 shrink-0">
@@ -1039,7 +1047,7 @@ export default function EquipmentPage() {
         {/* Axle Group Optimizer — primary entry for equipment-capable roles */}
         <a
           href="/axle-optimizer"
-          className={`${cardCompactClass} mb-6 min-h-[44px] flex items-center justify-between gap-3 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 transition-colors`}
+          className={`${cardClass} mb-6 min-h-[44px] flex items-center justify-between gap-3 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 transition-colors`}
         >
           <div className="min-w-0">
             <div className="font-semibold text-gray-900">Axle Group Optimizer</div>
@@ -1077,7 +1085,9 @@ export default function EquipmentPage() {
           <div className="space-y-6">
             <div className={cardClass}>
               <h2 className="font-semibold text-xl tracking-tight mb-1">Build a Combination</h2>
-              <p className={`text-sm ${bodyTextClass} mb-4`}>Pick one tractor + one or more trailers. We auto-calculate overall length and axle layout from 5th-wheel / kingpin alignment.</p>
+              <p className={`text-sm ${bodyTextClass} mb-4`}>
+                Pick a tractor and trailers — length and axle layout update from 5th-wheel / kingpin geometry.
+              </p>
 
               <div className="grid md:grid-cols-2 gap-4 mb-4">
                 {/* Tractor picker */}
@@ -1252,11 +1262,6 @@ export default function EquipmentPage() {
               </div>
               )}
             </div>
-
-            {/* Future placeholders */}
-            <div className={`text-[11px] ${mutedTextClass} bg-white border border-gray-300 sm:border-gray-200 rounded-xl p-3`}>
-              <strong>Coming soon:</strong> {FUTURE_FEATURES.vinDecoder} • {FUTURE_FEATURES.photos} • {FUTURE_FEATURES.bolImport}
-            </div>
           </div>
         )}
 
@@ -1272,7 +1277,7 @@ export default function EquipmentPage() {
 
             {editingTractor && !isServiceModeReadOnly && (
               <div className={editorShellClass}>
-                <div className="font-semibold mb-3">Tractor Profile</div>
+                <div className="font-semibold text-base tracking-tight mb-3">Tractor profile</div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                   {[
                     ['Profile Name *', 'profile_name', 'text'],
@@ -1378,30 +1383,37 @@ export default function EquipmentPage() {
 
             <div className="grid md:grid-cols-2 gap-3">
               {tractors.map((t) => (
-                <div key={t.id} className={`${cardCompactClass} flex flex-col`}>
-                  <div className="font-semibold text-base">{t.profile_name}</div>
-                  <div className={`${mutedTextClass} text-xs mb-1`}>{t.unit_number ? `#${t.unit_number} • ` : ''}{t.make} {t.model} {t.year || ''}</div>
+                <div key={t.id} className={`${cardItemClass} flex flex-col`}>
+                  <div className="font-semibold text-base tracking-tight text-gray-900">{t.profile_name}</div>
+                  <div className={`${mutedTextClass} text-xs mt-0.5 mb-2`}>
+                    {t.unit_number ? `#${t.unit_number} · ` : ''}
+                    {[t.make, t.model, t.year].filter(Boolean).join(' ') || 'Tractor'}
+                  </div>
 
-                  <div className={`text-[11px] ${bodyTextClass} space-y-0.5`}>
-                    <div>
-                      Length:{' '}
-                      <b>
-                        {t.overall_length_ft
-                          ? formatDimensionDisplay(Number(t.overall_length_ft))
-                          : '?'}
-                      </b>{' '}
-                      • Axles: <b>{t.num_axles || 3}</b>
-                    </div>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    <span className={metricChipClass}>
+                      {t.overall_length_ft
+                        ? formatDimensionDisplay(Number(t.overall_length_ft))
+                        : '?'}{' '}
+                      long
+                    </span>
+                    <span className={metricChipMutedClass}>{t.num_axles || 3} axles</span>
+                    {t.wheelbase_in ? (
+                      <span className={metricChipMutedClass}>WB {t.wheelbase_in} in</span>
+                    ) : null}
+                  </div>
+
+                  <div className={`${bodyTextClass} text-xs space-y-0.5`}>
                     <div className={fieldHintTinyClass}>
                       {formatAxleGroupSummaryLine(assignAxleGroups({ num_axles: t.num_axles || 3 }, []))}
                     </div>
-                    <div>5th: {t.fifth_wheel_from_rear_in || '?'} in • WB: {t.wheelbase_in || '?'} in</div>
+                    <div>5th wheel: {t.fifth_wheel_from_rear_in || '—'} in from rear</div>
                     {formatLicensePlateDisplay(t.license_plate, t.license_plate_state) && (
-                      <div>Plate: <span className="font-mono">{formatLicensePlateDisplay(t.license_plate, t.license_plate_state)}</span></div>
+                      <div>Plate: {formatLicensePlateDisplay(t.license_plate, t.license_plate_state)}</div>
                     )}
-                    {t.vin && <div>VIN: <span className="font-mono">{t.vin}</span></div>}
+                    {t.vin && <div>VIN: {t.vin}</div>}
                     {t.empty_weight_lbs ? (
-                      <div>Empty: <b>{Number(t.empty_weight_lbs).toLocaleString()} lbs</b></div>
+                      <div>Empty: {Number(t.empty_weight_lbs).toLocaleString()} lbs</div>
                     ) : null}
                   </div>
 
@@ -1439,7 +1451,7 @@ export default function EquipmentPage() {
 
             {editingTrailer && !isServiceModeReadOnly && (
               <div className={editorShellClass}>
-                <div className="font-semibold mb-3">Trailer Profile</div>
+                <div className="font-semibold text-base tracking-tight mb-3">Trailer profile</div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                   {(() => {
                     const rearPin = isRearPinTrailerType(editingTrailer.trailer_type)
@@ -1535,17 +1547,12 @@ export default function EquipmentPage() {
                         <option key={opt} value={opt} />
                       ))}
                     </datalist>
-                    {isRearPinTrailerType(editingTrailer.trailer_type) ||
-                    isKingpinBoosterTrailerType(editingTrailer.trailer_type) ? (
-                      <p className={`${fieldHintTinyClass} mt-1 leading-snug`}>{TRAILER_TYPE_COUPLING_HINT}</p>
-                    ) : (
-                      <p className={`${fieldHintTinyClass} mt-1 leading-snug`}>{TRAILER_TYPE_MAIN_HINT}</p>
-                    )}
-                    {isRearPinTrailerType(editingTrailer.trailer_type) && (
-                      <p className="text-[10px] text-pink-700 mt-0.5">
-                        Flip/stinger: pin to rear of RGN (not a kingpin/5th-wheel jeep). Kingpin fields above are optional geometry for v1 layout.
-                      </p>
-                    )}
+                    <p className={`${mutedTextClass} text-xs mt-1 leading-snug`}>
+                      {isRearPinTrailerType(editingTrailer.trailer_type) ||
+                      isKingpinBoosterTrailerType(editingTrailer.trailer_type)
+                        ? TRAILER_TYPE_COUPLING_HINT
+                        : TRAILER_TYPE_MAIN_HINT}
+                    </p>
                   </div>
                   <div className="flex items-center gap-4 pt-5 text-sm md:col-span-2">
                     <label className="flex items-center gap-1.5 cursor-pointer">
@@ -1598,40 +1605,56 @@ export default function EquipmentPage() {
             <div className="grid md:grid-cols-2 gap-3">
               {trailers.map((tr) => (
                 <div key={tr.id} className={cardItemClass}>
-                  <div className="font-semibold">{tr.profile_name}</div>
-                  <div className={`text-xs ${mutedTextClass}`}>
-                    {tr.trailer_type || 'Trailer'} •{' '}
-                    {tr.overall_length_ft
-                      ? formatDimensionDisplay(Number(tr.overall_length_ft))
-                      : '?'}{' '}
-                    • {tr.num_axles || 2} axles
+                  <div className="font-semibold text-base tracking-tight text-gray-900">{tr.profile_name}</div>
+                  <div className={`text-xs ${mutedTextClass} mt-0.5 mb-2`}>
+                    {tr.trailer_type || 'Trailer'}
                   </div>
-                  <div className={`${fieldHintTinyClass} mt-0.5`}>
-                    {formatAxleGroupSummaryLine(
-                      assignAxleGroups(null, [
-                        { num_axles: tr.num_axles || 2, trailer_type: tr.trailer_type },
-                      ])
-                    )}
+
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    <span className={metricChipClass}>
+                      {tr.overall_length_ft
+                        ? formatDimensionDisplay(Number(tr.overall_length_ft))
+                        : '?'}{' '}
+                      long
+                    </span>
+                    <span className={metricChipMutedClass}>{tr.num_axles || 2} axles</span>
+                    {tr.has_lift_axle ? (
+                      <span className={metricChipMutedClass}>Lift axle</span>
+                    ) : null}
+                    {tr.is_extendable ? (
+                      <span className={metricChipMutedClass}>
+                        Extendable{tr.extendable_extra_ft ? ` +${tr.extendable_extra_ft} ft` : ''}
+                      </span>
+                    ) : null}
                   </div>
-                  <div className={`text-[12px] mt-1 ${bodyTextClass} space-y-0.5`}>
+
+                  <div className={`${bodyTextClass} text-xs space-y-0.5`}>
+                    <div className={fieldHintTinyClass}>
+                      {formatAxleGroupSummaryLine(
+                        assignAxleGroups(null, [
+                          { num_axles: tr.num_axles || 2, trailer_type: tr.trailer_type },
+                        ])
+                      )}
+                    </div>
                     <div>
                       {isRearPinTrailerType(tr.trailer_type) ? (
-                        <>Pin / nose: {tr.kingpin_distance_from_front_in || '—'} in • Pin→axle: {tr.kingpin_to_first_axle_in || '—'} in</>
+                        <>Pin / nose: {tr.kingpin_distance_from_front_in || '—'} in · Pin→axle: {tr.kingpin_to_first_axle_in || '—'} in</>
                       ) : (
-                        <>Kingpin from nose: {tr.kingpin_distance_from_front_in || '?'} in • KP to axle: {tr.kingpin_to_first_axle_in || '?'} in</>
+                        <>Kingpin: {tr.kingpin_distance_from_front_in || '—'} in · KP→axle: {tr.kingpin_to_first_axle_in || '—'} in</>
                       )}
-                      {tr.has_lift_axle && ' • Lift axle'} {tr.is_extendable && ` • Extendable +${tr.extendable_extra_ft || 0} ft`}
                     </div>
                     {formatLicensePlateDisplay(tr.license_plate, tr.license_plate_state) && (
-                      <div>Plate: <span className="font-mono">{formatLicensePlateDisplay(tr.license_plate, tr.license_plate_state)}</span></div>
+                      <div>Plate: {formatLicensePlateDisplay(tr.license_plate, tr.license_plate_state)}</div>
                     )}
-                    {tr.vin && <div>VIN: <span className="font-mono">{tr.vin}</span></div>}
-                    {tr.empty_weight_lbs ? <div>Empty: <b>{Number(tr.empty_weight_lbs).toLocaleString()} lbs</b></div> : null}
+                    {tr.vin && <div>VIN: {tr.vin}</div>}
+                    {tr.empty_weight_lbs ? (
+                      <div>Empty: {Number(tr.empty_weight_lbs).toLocaleString()} lbs</div>
+                    ) : null}
                     {(tr.width_ft || tr.deck_height_ft) ? (
                       <div>
-                        {tr.width_ft ? <>Width: <b>{formatDimensionDisplay(Number(tr.width_ft))}</b></> : null}
-                        {tr.width_ft && tr.deck_height_ft ? ' • ' : null}
-                        {tr.deck_height_ft ? <>Deck: <b>{formatDimensionDisplay(Number(tr.deck_height_ft))}</b></> : null}
+                        {tr.width_ft ? <>Width: {formatDimensionDisplay(Number(tr.width_ft))}</> : null}
+                        {tr.width_ft && tr.deck_height_ft ? ' · ' : null}
+                        {tr.deck_height_ft ? <>Deck: {formatDimensionDisplay(Number(tr.deck_height_ft))}</> : null}
                       </div>
                     ) : null}
                   </div>
@@ -1687,54 +1710,86 @@ export default function EquipmentPage() {
                 })
                 return (
                   <div key={rig.id} className={cardPanelClass}>
-                    <div className="flex justify-between">
-                      <div>
+                    <div className="flex justify-between gap-2">
+                      <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <div className="font-semibold text-lg tracking-tight">{rig.rig_name}</div>
+                          <div className="font-semibold text-lg tracking-tight text-gray-900">{rig.rig_name}</div>
                           {rig.is_default && (
                             <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
                               Default
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-emerald-700">
-                          {rig.computed_total_length_ft
-                            ? formatDimensionDisplay(Number(rig.computed_total_length_ft))
-                            : '?'}{' '}
-                          total • {rig.computed_total_axles || '?'} axles
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          <span className={metricChipClass}>
+                            {rig.computed_total_length_ft
+                              ? formatDimensionDisplay(Number(rig.computed_total_length_ft))
+                              : '?'}{' '}
+                            total
+                          </span>
+                          <span className={metricChipMutedClass}>
+                            {rig.computed_total_axles || '?'} axles
+                          </span>
+                          {(rig.trailer_ids || []).length > 0 ? (
+                            <span className={metricChipMutedClass}>
+                              {(rig.trailer_ids || []).length} trailer
+                              {(rig.trailer_ids || []).length === 1 ? '' : 's'}
+                            </span>
+                          ) : null}
+                          {rigTrailers.some((t) => t.has_lift_axle) ? (
+                            <span className={metricChipMutedClass}>Lift axle</span>
+                          ) : null}
                         </div>
-                        <div className={`${fieldHintTinyClass} mt-0.5 text-emerald-800`}>
+                        <div className={`${fieldHintTinyClass} mt-1.5`}>
                           {formatAxleGroupSummaryLine(assignAxleGroups(tr || null, rigTrailers))}
                         </div>
                       </div>
                       {!isServiceModeReadOnly && (
-                        <button onClick={() => deleteRig(rig.id)} className="text-xs text-red-600 self-start">Delete</button>
+                        <button onClick={() => deleteRig(rig.id)} className="text-xs text-red-600 self-start shrink-0">Delete</button>
                       )}
                     </div>
 
-                    <div className="mt-2 text-[11px] font-mono text-gray-900 bg-gray-50 border border-gray-300 sm:border-gray-200 rounded-lg px-2 py-1.5">
-                      {summaryLine}
-                    </div>
-
                     <div className={`mt-3 text-sm ${bodyTextClass}`}>
-                      Tractor: <span className="font-medium text-gray-900">{tr?.profile_name || 'Unknown'}</span><br />
-                      Trailers: {(rig.trailer_ids || []).length}
-                      {rigTrailers.some((t) => t.has_lift_axle) ? (
-                        <span className="text-amber-800"> · Lift axle</span>
+                      <span className="font-medium text-gray-900">{tr?.profile_name || 'Unknown tractor'}</span>
+                      {rigTrailers.length > 0 ? (
+                        <span className={mutedTextClass}>
+                          {' '}
+                          + {rigTrailers.map((t) => t.profile_name).filter(Boolean).join(', ') || 'trailer'}
+                        </span>
                       ) : null}
                     </div>
 
-                    <div className={`mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] ${bodyTextClass}`}>
-                      <div>Tractor plate: <span className="font-mono text-gray-900">{formatLicensePlateDisplay(tr?.license_plate, tr?.license_plate_state) || '—'}</span></div>
-                      <div>Trailer plate: <span className="font-mono text-gray-900">{formatLicensePlateDisplay(primaryTrailer.licensePlate, primaryTrailer.licensePlateState) || '—'}</span></div>
-                      <div>Tractor VIN: <span className="font-mono text-gray-900">{tr?.vin || '—'}</span></div>
-                      <div>Trailer VIN: <span className="font-mono text-gray-900">{primaryTrailer.vin || '—'}</span></div>
-                      <div>Tractor empty: <b>{tr?.empty_weight_lbs ? `${Number(tr.empty_weight_lbs).toLocaleString()} lbs` : '—'}</b></div>
-                      <div>Trailer empty: <b>{primaryTrailer.emptyWeightLbs ? `${Number(primaryTrailer.emptyWeightLbs).toLocaleString()} lbs` : '—'}</b></div>
-                      <div>Rig empty: <b>{rigEmptyWt ? `${rigEmptyWt.toLocaleString()} lbs` : '—'}</b></div>
-                      <div>Trailer width: <b>{primaryTrailer.widthFt ? formatDimensionDisplay(Number(primaryTrailer.widthFt)) : '—'}</b></div>
-                      <div>Deck height: <b>{primaryTrailer.deckHeightFt ? formatDimensionDisplay(Number(primaryTrailer.deckHeightFt)) : '—'}</b></div>
-                      <div>Rig length: <b>{rig.computed_total_length_ft ? `${Number(rig.computed_total_length_ft).toFixed(1)} ft` : '—'}</b></div>
+                    <div className={`${bodyTextClass} text-xs mt-2 space-y-0.5`}>
+                      {formatLicensePlateDisplay(tr?.license_plate, tr?.license_plate_state) ||
+                      formatLicensePlateDisplay(primaryTrailer.licensePlate, primaryTrailer.licensePlateState) ? (
+                        <div>
+                          Plates:{' '}
+                          {formatLicensePlateDisplay(tr?.license_plate, tr?.license_plate_state) || '—'}
+                          {' / '}
+                          {formatLicensePlateDisplay(primaryTrailer.licensePlate, primaryTrailer.licensePlateState) || '—'}
+                        </div>
+                      ) : null}
+                      {(tr?.vin || primaryTrailer.vin) ? (
+                        <div>
+                          VIN: {tr?.vin || '—'}
+                          {primaryTrailer.vin ? ` / ${primaryTrailer.vin}` : ''}
+                        </div>
+                      ) : null}
+                      {rigEmptyWt ? (
+                        <div>Empty: {rigEmptyWt.toLocaleString()} lbs</div>
+                      ) : null}
+                      {(primaryTrailer.widthFt || primaryTrailer.deckHeightFt) ? (
+                        <div>
+                          {primaryTrailer.widthFt
+                            ? `Width ${formatDimensionDisplay(Number(primaryTrailer.widthFt))}`
+                            : null}
+                          {primaryTrailer.widthFt && primaryTrailer.deckHeightFt ? ' · ' : null}
+                          {primaryTrailer.deckHeightFt
+                            ? `Deck ${formatDimensionDisplay(Number(primaryTrailer.deckHeightFt))}`
+                            : null}
+                        </div>
+                      ) : null}
+                      <div className={fieldHintTinyClass}>{summaryLine}</div>
                     </div>
 
                     {/* Compact graphic preview of the full rig */}
@@ -1778,8 +1833,8 @@ export default function EquipmentPage() {
         )}
 
         {/* Footer help */}
-        <p className={`mt-10 text-[11px] ${mutedTextClass} text-center`}>
-          All measurements are stored privately for your account only. Accurate 5th-wheel / kingpin data produces better OSOW length and axle-group predictions.
+        <p className={`mt-10 text-xs ${mutedTextClass} text-center`}>
+          Private to your account — accurate 5th-wheel / kingpin data improves OSOW predictions.
         </p>
       </main>
     </div>

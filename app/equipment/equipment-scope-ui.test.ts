@@ -141,6 +141,11 @@ describe('Equipment page — mobile contrast classes', () => {
     expect(source).toContain('const cardCompactClass =')
     expect(source).toContain('const cardItemClass =')
     expect(source).toContain('const cardPanelClass =')
+    expect(source).toContain('const metricChipClass =')
+    expect(source).toContain('const metricChipMutedClass =')
+    // D2 axle-optimizer card padding parity
+    expect(source).toMatch(/cardClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-2xl p-4 sm:p-5'/)
+    expect(source).toMatch(/editorShellClass =[\s\S]*?p-4 sm:p-5/)
 
     expect(source).toMatch(/border-gray-500 sm:border-gray-300/)
     expect(source).toMatch(/text-gray-900/)
@@ -164,6 +169,9 @@ describe('Equipment page — mobile contrast classes', () => {
 
   it('page header links New Analysis only (History lives in AppHeader; no Dashboard)', () => {
     const source = readEquipmentSource()
+    // Eyebrow + H1 match axle-optimizer visual language
+    expect(source).toContain('>Equipment</p>')
+    expect(source).toMatch(/text-xs font-semibold uppercase tracking-wide text-gray-500/)
     const headerStart = source.indexOf('Equipment &amp; Rig Builder')
     expect(headerStart).toBeGreaterThan(-1)
     const headerSlice = source.slice(headerStart, headerStart + 700)
@@ -190,10 +198,24 @@ describe('Equipment page — mobile contrast classes', () => {
     expect(titleIdx).toBeGreaterThan(-1)
     expect(axleIdx).toBeGreaterThan(titleIdx)
     expect(tabsIdx).toBeGreaterThan(axleIdx)
-    expect(source).toMatch(/cardCompactClass.*mb-6|mb-6.*cardCompactClass/)
+    // D2: entry card uses shared cardClass padding (axle-optimizer parity)
+    expect(source).toMatch(/cardClass.*mb-6|mb-6.*cardClass/)
     // Touch target + keyboard focus parity with hover
     expect(source).toMatch(/axle-optimizer[\s\S]{0,200}min-h-\[44px\]/)
     expect(source).toMatch(/axle-optimizer[\s\S]{0,250}focus-visible:ring-2/)
+  })
+
+  it('keeps sparse hints and drops Coming soon / pink rear-pin essays', () => {
+    const source = readEquipmentSource()
+    expect(source).not.toContain('Coming soon')
+    expect(source).not.toContain('FUTURE_FEATURES')
+    expect(source).not.toMatch(/text-pink-700/)
+    // Trailer type: single muted hint line (coupling OR main), not both + essay
+    expect(source).toContain('TRAILER_TYPE_COUPLING_HINT')
+    expect(source).toContain('TRAILER_TYPE_MAIN_HINT')
+    expect(source).toContain('Tractor profile')
+    expect(source).toContain('Trailer profile')
+    expect(source).toContain('metricChipClass')
   })
 
   it('wires form controls and cards to shared contrast classes', () => {
