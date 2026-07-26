@@ -5,6 +5,7 @@ from app.services.ortools_solver import (
     _normalize_hwy_token,
     highway_token_present,
     assess_preference_enforcement,
+    format_missing_pref_warning,
 )
 
 
@@ -174,3 +175,16 @@ class TestAssessPreferenceEnforcement:
         )
         assert h["enforced"] is True
         assert h["partial"] is False
+
+    def test_missing_pref_honesty_copy_when_via_seeded(self):
+        """When prefer-via injection applied, do not claim 'not injected'."""
+        msg = format_missing_pref_warning(
+            "US 136",
+            avoided=["IA"],
+            special_text="avoid IA. use US136 from Rock Port, MO to enter NE",
+            origin_state="MO",
+            dest_state="NE",
+        )
+        assert "via seeded" in msg
+        assert "not realized in geometry" in msg
+        assert "not injected" not in msg
