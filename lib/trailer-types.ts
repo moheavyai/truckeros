@@ -26,11 +26,11 @@ export const MAX_CUSTOM_TRAILER_TYPES = 50
 
 /** Short UI hint: flip/stinger vs jeep coupling (show for booster/rear-pin roles). */
 export const TRAILER_TYPE_COUPLING_HINT =
-  'Jeep / booster / dolly: kingpin / 5th wheel. Flip and stinger pin onto the rear of an RGN — they do not kingpin like a jeep.'
+  'Jeep/booster: kingpin. Flip/stinger: pins to rear of an RGN.'
 
 /** Compact hint for main-deck types only. */
 export const TRAILER_TYPE_MAIN_HINT =
-  'Deck trailer types use kingpin / 5th-wheel geometry. For jeep or flip/stinger, see role-specific coupling notes.'
+  'Deck types use kingpin / 5th-wheel geometry.'
 
 export type TrailerRole = 'main' | 'jeep' | 'flip' | 'stinger' | 'unknown'
 
