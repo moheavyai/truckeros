@@ -903,6 +903,78 @@ def assess_preference_enforcement(
     }
 
 
+# Preferred highway → CITY_MAP key used as a real VRP via so OSRM geometry can follow the hwy.
+# Without an injected via, preferred is only noted ("not injected") and often never appears on corridor.
+PREFERRED_HWY_VIA_ANCHORS: dict[str, str] = {
+    "US 136": "rock port",
+    "I-40": "oklahoma city",
+}
+
+
+def _via_coord_dup(candidate: dict[str, Any], existing: list[dict[str, Any]]) -> bool:
+    """True if candidate lat/lon already present (rounded ~0.05°)."""
+    try:
+        clat, clon = float(candidate["lat"]), float(candidate["lon"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    for v in existing:
+        try:
+            if abs(float(v["lat"]) - clat) < 0.05 and abs(float(v["lon"]) - clon) < 0.05:
+                return True
+        except (KeyError, TypeError, ValueError):
+            continue
+    return False
+
+
+def seed_preferred_hwy_vias(
+    preferred: list[str] | None,
+    avoided: list[str] | None,
+    special_text: str | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Seed real via stops for preferred highways (and CITY_MAP cities named near prefer clauses).
+
+    Only injects when:
+    - preferred list contains a mapped highway (or text names a CITY_MAP city near from/near/via/...), AND
+    - anchor state is not avoided, AND
+    - not a coord duplicate of an earlier seed.
+    """
+    vias: list[dict[str, Any]] = []
+    av_set = {str(a).upper().strip() for a in (avoided or []) if a}
+    pref_norm = [_normalize_hwy_token(p) for p in (preferred or []) if p]
+
+    for pref in pref_norm:
+        city_key = PREFERRED_HWY_VIA_ANCHORS.get(pref)
+        if not city_key or city_key not in CITY_MAP:
+            continue
+        lat, lon, st = CITY_MAP[city_key]
+        if st in av_set:
+            continue
+        via = {"name": city_key.title(), "lat": lat, "lon": lon, "state": st}
+        if not _via_coord_dup(via, vias):
+            vias.append(via)
+
+    # Cities named near prefer-related prepositions (e.g. "use US136 from Rock Port, MO")
+    t = (special_text or "").lower()
+    if t:
+        # Longest city keys first so "rock port" wins over a hypothetical "rock"
+        city_keys = sorted(CITY_MAP.keys(), key=len, reverse=True)
+        for city_key in city_keys:
+            if not re.search(
+                rf"(?:from|near|through|via|enter|include|including)\s+{re.escape(city_key)}\b",
+                t,
+            ):
+                continue
+            lat, lon, st = CITY_MAP[city_key]
+            if st in av_set:
+                continue
+            via = {"name": city_key.title(), "lat": lat, "lon": lon, "state": st}
+            if not _via_coord_dup(via, vias):
+                vias.append(via)
+
+    return vias
+
+
 def parse_special_instructions(
     text: str | None,
     origin_state: str | None = None,
@@ -1128,6 +1200,7 @@ def build_stops_from_load(
     parsed = parse_special_instructions(special, o_state, d_state)
     avoided = parsed.get("avoided", [])
     included = list(parsed.get("included", []))
+    preferred_hwys: list[str] = list(parsed.get("preferred") or [])
 
     # v0.3 World-Class: auto-suggest practical OSOW vias (hard-avoid aware) when specialInstructions present.
     # User "include" + manualRoute take precedence (suggested only augment when no explicit manual).
@@ -1141,7 +1214,7 @@ def build_stops_from_load(
         manual = load.get("manualRoute") or load.get("manual_route")
 
     if manual and isinstance(manual, list) and len(manual) > 0:
-        # manual wins completely for vias (change-route explicit)
+        # manual wins completely for vias (change-route explicit) — do not override with prefer anchors
         forced: list[dict[str, Any]] = []
         for tok in manual:
             t = str(tok).strip()
@@ -1163,12 +1236,15 @@ def build_stops_from_load(
                         forced.append({"name": t.title(), "lat": lat, "lon": lon, "state": st, "is_via": True})
         vias = forced
     else:
+        # Prefer-via injection: seed highway anchors (US 136→Rock Port, I-40→OKC) + cities near prefer clauses.
+        # Respects avoided states; coord-deduped against user includes.
+        for seed in seed_preferred_hwy_vias(preferred_hwys, avoided, special):
+            if not _via_coord_dup(seed, included):
+                included.append(seed)
         # suggest + merge user includes (suggest respects avoided)
         suggested = suggest_practical_vias(o_state_for_suggest, d_state_for_suggest, avoided, special)
         for sv in suggested:
-            if not any(
-                abs(iv["lat"] - sv["lat"]) < 0.05 and abs(iv["lon"] - sv["lon"]) < 0.05 for iv in included
-            ):
+            if not _via_coord_dup(sv, included):
                 included.append(sv)
         vias = included
 
@@ -1919,13 +1995,13 @@ def suggest_practical_vias(
                 if st not in av_set and not any(v["state"] == st for v in vias):
                     vias.append({"name": key.title(), "lat": lat, "lon": lon, "state": st})
 
-    hwy_m = re.search(r"(?:^|[\s,.(]|\b)(I-?\d+|US\s*\d+)\b", t, re.IGNORECASE)
-    if hwy_m:
-        pref = hwy_m.group(1).upper().replace("US", "US ").strip()
-        if "40" in pref and "OK" not in av_set and "oklahoma city" in CITY_MAP:
-            lat, lon, st = CITY_MAP["oklahoma city"]
-            if not any(v["state"] == st for v in vias):
-                vias.append({"name": "Oklahoma City", "lat": lat, "lon": lon, "state": st})
+    # Preferred-highway anchors (US 136 → Rock Port, I-40 → Oklahoma City) so geometry can follow.
+    # Uses parse preferred list (not bare "avoid I-40"); respects avoided + coord dedupe.
+    if special_text:
+        pref_list = list(parse_special_instructions(special_text).get("preferred") or [])
+        for seed in seed_preferred_hwy_vias(pref_list, list(av_set), special_text):
+            if not _via_coord_dup(seed, vias):
+                vias.append(seed)
 
     # "stay on interstates" handled implicitly by using major CITY_MAP hubs on I-*
 
