@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildGeocodeSearchVariants,
   expandInterstateNames,
+  extractStateHighwayRoute,
   insertCommasInUnstructuredQuery,
   normalizeGeocodeQuery,
   normalizeHighwayTokens,
@@ -125,10 +126,153 @@ describe('buildGeocodeSearchVariants', () => {
     expect(queries.some((q) => /1915 US Highway 2/i.test(q) && /Minot/i.test(q))).toBe(true)
   })
 
+  it('adds MO-123 / MO 123 variants for State Hwy (strips compass)', () => {
+    const variants = buildGeocodeSearchVariants({
+      q: '6851 N State Hwy 123, Willard, MO',
+      street: '6851 N State Hwy 123',
+      city: 'Willard',
+      state: 'MO',
+    })
+    const queries = variants.map((v) => v.query)
+    // Original raw form retained
+    expect(queries.some((q) => /6851 N State Hwy 123/i.test(q))).toBe(true)
+    // Both Nominatim-friendly state-route forms with house number
+    expect(queries.some((q) => /\b6851\s+MO-123\b/i.test(q))).toBe(true)
+    expect(queries.some((q) => /\b6851\s+MO\s+123\b/i.test(q))).toBe(true)
+    // Compass must not sit immediately before the state route
+    expect(queries.some((q) => /\b6851\s+N\s+MO-123\b/i.test(q))).toBe(false)
+    expect(queries.some((q) => /\b6851\s+N\s+MO\s+123\b/i.test(q))).toBe(false)
+  })
+
+  it('adds state-route variants for SH / SR forms', () => {
+    const sh = buildGeocodeSearchVariants({
+      street: '100 SH 45',
+      city: 'Springfield',
+      state: 'MO',
+    })
+    const shQueries = sh.map((v) => v.query)
+    expect(shQueries.some((q) => /\b100\s+MO-45\b/i.test(q))).toBe(true)
+    expect(shQueries.some((q) => /\b100\s+MO\s+45\b/i.test(q))).toBe(true)
+
+    const sr = buildGeocodeSearchVariants({
+      street: '200 SR 12',
+      city: 'Columbia',
+      state: 'MO',
+    })
+    const srQueries = sr.map((v) => v.query)
+    expect(srQueries.some((q) => /\b200\s+MO-12\b/i.test(q))).toBe(true)
+  })
+
+  it('free-text multi-digit SH without house yields MO-45 variants', () => {
+    const variants = buildGeocodeSearchVariants({
+      q: 'SH 45, Springfield, MO',
+    })
+    const queries = variants.map((v) => v.query)
+    // looksLikeStreet must recognize multi-digit SH so street is parsed
+    expect(variants.some((v) => /SH\s+45/i.test(v.street) || /SH\s+45/i.test(v.context.street))).toBe(
+      true
+    )
+    expect(queries.some((q) => /\bMO-45\b/i.test(q))).toBe(true)
+    expect(queries.some((q) => /\bMO\s+45\b/i.test(q))).toBe(true)
+  })
+
+  it('adds state-route variants for bare Hwy when state is known', () => {
+    const variants = buildGeocodeSearchVariants({
+      street: '6851 Hwy 123',
+      city: 'Willard',
+      state: 'MO',
+    })
+    const queries = variants.map((v) => v.query)
+    expect(queries.some((q) => /\b6851\s+MO-123\b/i.test(q))).toBe(true)
+    expect(queries.some((q) => /\b6851\s+MO\s+123\b/i.test(q))).toBe(true)
+  })
+
+  it('adds state-route variants without house number', () => {
+    const variants = buildGeocodeSearchVariants({
+      street: 'State Hwy 123',
+      city: 'Willard',
+      state: 'MO',
+    })
+    const queries = variants.map((v) => v.query)
+    expect(queries.some((q) => /\bMO-123\b/i.test(q))).toBe(true)
+    expect(queries.some((q) => /\bMO\s+123\b/i.test(q))).toBe(true)
+  })
+
+  it('does not invent state-route codes when state is omitted', () => {
+    const variants = buildGeocodeSearchVariants({
+      street: '6851 N State Hwy 123',
+      city: 'Willard',
+    })
+    const queries = variants.map((v) => v.query)
+    expect(queries.some((q) => /\bMO-123\b/i.test(q) || /\bMO\s+123\b/i.test(q))).toBe(false)
+  })
+
+  it('does not invent state routes from unnormalized US Hwy', () => {
+    const variants = buildGeocodeSearchVariants({
+      street: '1915 US Hwy 2',
+      city: 'Minot',
+      state: 'ND',
+    })
+    const queries = variants.map((v) => v.query)
+    expect(queries.some((q) => /\bND-2\b/i.test(q) || /\bND\s+2\b/.test(q))).toBe(false)
+  })
+
+  it('does not invent state routes from County Hwy', () => {
+    const variants = buildGeocodeSearchVariants({
+      street: '500 County Hwy 12',
+      city: 'Willard',
+      state: 'MO',
+    })
+    const queries = variants.map((v) => v.query)
+    expect(queries.some((q) => /\bMO-12\b/i.test(q) || /\bMO\s+12\b/.test(q))).toBe(false)
+  })
+
+  it('still produces I-/Interstate variants for interstate-only addresses', () => {
+    const variants = buildGeocodeSearchVariants({
+      q: '3484 I-94 Business Loop East, Dickinson, ND',
+      street: '3484 I-94 Business Loop East',
+      city: 'Dickinson',
+      state: 'ND',
+    })
+    const queries = variants.map((v) => v.query)
+    expect(queries.some((q) => /\bI-94\b/i.test(q))).toBe(true)
+    expect(queries.some((q) => /Interstate 94/i.test(q))).toBe(true)
+    // Must not invent ND-94 from interstate
+    expect(queries.some((q) => /\bND-94\b/i.test(q) || /\bND\s+94\b/.test(q))).toBe(false)
+  })
+
   it('deduplicates identical variants', () => {
     const variants = buildGeocodeSearchVariants({ q: 'Minot, ND' })
     const keys = variants.map((v) => v.query)
     expect(new Set(keys).size).toBe(keys.length)
+  })
+})
+
+describe('extractStateHighwayRoute', () => {
+  it('detects State Hwy / State Highway / State Route', () => {
+    expect(extractStateHighwayRoute('6851 N State Hwy 123')).toBe('123')
+    expect(extractStateHighwayRoute('State Highway 45')).toBe('45')
+    expect(extractStateHighwayRoute('State Route 7')).toBe('7')
+    expect(extractStateHighwayRoute('State Road 9')).toBe('9')
+  })
+
+  it('detects SH and SR', () => {
+    expect(extractStateHighwayRoute('100 SH 45')).toBe('45')
+    expect(extractStateHighwayRoute('200 SR 12')).toBe('12')
+  })
+
+  it('detects bare Hwy when not US/County', () => {
+    expect(extractStateHighwayRoute('6851 Hwy 123')).toBe('123')
+  })
+
+  it('rejects US Hwy raw forms and County Hwy', () => {
+    expect(extractStateHighwayRoute('1915 US Hwy 2')).toBeNull()
+    expect(extractStateHighwayRoute('1915 U.S. Highway 2')).toBeNull()
+    expect(extractStateHighwayRoute('1915 US-2')).toBeNull()
+    expect(extractStateHighwayRoute('1915 US Highway 2')).toBeNull()
+    expect(extractStateHighwayRoute('500 County Hwy 12')).toBeNull()
+    expect(extractStateHighwayRoute('500 Co Hwy 12')).toBeNull()
+    expect(extractStateHighwayRoute('3484 I-94')).toBeNull()
   })
 })
 

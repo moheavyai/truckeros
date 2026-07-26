@@ -57,6 +57,50 @@ const STREET_SEGMENT_PATTERNS = [
 const HOUSE_STREET_RE =
   /^(\d{1,6})\s+(.+)$/i
 
+/**
+ * State highway forms Nominatim often fails on as written, but resolves as
+ * "{STATE}-{num}" / "{STATE} {num}" (e.g. MO-123, MO 123).
+ * Explicit: State Hwy/Highway/Route/Road/Rte, SH, SR.
+ * Bare Hwy/Highway only when not US / Interstate / County.
+ */
+const STATE_HIGHWAY_EXPLICIT_RE =
+  /\b(?:State\s+(?:Hwy|Highway|Rte|Route|Road)|S[HR])\s*#?\s*(\d{1,4}[A-Za-z]?)\b/i
+
+const STATE_HIGHWAY_BARE_RE =
+  /\b(?:Hwy|Highway)\s*#?\s*(\d{1,4}[A-Za-z]?)\b/i
+
+/**
+ * US / Interstate / County forms (raw or normalized) that must not become state-route variants.
+ * Structured `street` may skip normalizeHighwayTokens, so raw "US Hwy" / "U.S. Highway" are included.
+ */
+function isNonStateHighwayStreet(street: string): boolean {
+  // Interstate: I-94, I 94, I94, Interstate 94
+  if (/\b(?:I[-\s]?\d{1,3}|Interstate\s+\d{1,3})\b/i.test(street)) return true
+  // US highway raw + normalized: US-2, US 2, US Hwy 2, U.S. Highway 2, US Highway 2
+  if (/\bU\.?\s?S\.?\s*(?:H(?:wy|ighway)?\.?\s*)?\d{1,3}\b/i.test(street)) return true
+  if (/\bUS[-\s]?\d{1,3}\b/i.test(street)) return true
+  // County roads: County Hwy, Co Hwy, County Road, Co. Rd
+  if (/\b(?:County|Co\.?)\s+(?:Hwy|Highway|Rd|Road|Rte|Route)\b/i.test(street)) return true
+  return false
+}
+
+/** Extract state-route number from a street string, or null if none / US / Interstate / County. */
+export function extractStateHighwayRoute(street: string): string | null {
+  if (!street) return null
+
+  // Explicit "State Hwy" / SH / SR always wins (even if other highway tokens appear).
+  const explicit = street.match(STATE_HIGHWAY_EXPLICIT_RE)
+  if (explicit) return explicit[1]
+
+  // Do not invent STATE-num from bare Hwy on US / Interstate / County streets.
+  if (isNonStateHighwayStreet(street)) return null
+
+  // Bare Hwy/Highway N (e.g. "6851 Hwy 123") — treat as state route when state is known upstream.
+  const bare = street.match(STATE_HIGHWAY_BARE_RE)
+  if (bare) return bare[1]
+  return null
+}
+
 /** Normalize highway tokens for better Nominatim matching. */
 export function normalizeHighwayTokens(text: string): string {
   let out = text
@@ -376,11 +420,13 @@ function inferStateFromCity(city: string): string | null {
 function looksLikeStreet(text: string): boolean {
   return (
     /^\d{1,6}\s/.test(text) ||
-    /\b(?:I-\d{1,3}|Interstate|US Highway|Business Loop|Highway)\b/i.test(text)
+    /\b(?:I-\d{1,3}|Interstate|US\s*Highway|Business Loop|Highway|Hwy|State\s+(?:Hwy|Highway|Rte|Route|Road)|S[HR]\s+\d{1,4})\b/i.test(
+      text
+    )
   )
 }
 
-function streetVariants(street: string): string[] {
+function streetVariants(street: string, state?: string | null): string[] {
   if (!street) return []
   const variants = new Set<string>()
   variants.add(street)
@@ -396,6 +442,24 @@ function streetVariants(street: string): string[] {
     variants.add(rest)
   } else if (/\b(?:I-\d|Interstate|US Highway)/i.test(street)) {
     variants.add(expandInterstateNames(street))
+  }
+
+  // State routes: Nominatim resolves "6851 MO-123" / "6851 MO 123" but not
+  // "6851 N State Hwy 123". Strip leading compass before the route phrase.
+  const stateCode = state?.trim().toUpperCase()
+  if (stateCode && stateCode.length === 2 && US_STATE_CODES.has(stateCode)) {
+    const routeNum = extractStateHighwayRoute(street)
+    if (routeNum) {
+      if (houseMatch) {
+        const house = houseMatch[1]
+        // Prefer house + STATE-num without N/S/E/W (Nominatim fails on "6851 N MO-123")
+        variants.add(`${house} ${stateCode}-${routeNum}`)
+        variants.add(`${house} ${stateCode} ${routeNum}`)
+      } else {
+        variants.add(`${stateCode}-${routeNum}`)
+        variants.add(`${stateCode} ${routeNum}`)
+      }
+    }
   }
 
   return [...variants].filter(Boolean)
@@ -450,7 +514,7 @@ export function buildGeocodeSearchVariants(input: {
     }
   }
 
-  for (const sv of streetVariants(street)) {
+  for (const sv of streetVariants(street, state)) {
     if (city && stateName) {
       variants.push({ id: 'street-city-state', query: `${sv}, ${city}, ${state}`, city, street: sv })
       variants.push({
