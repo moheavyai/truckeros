@@ -178,11 +178,7 @@ class TestEastCoastCorridorNjFl:
             ["NJ", "DE", "MD", "VA", "NC", "GA", "FL"],
             ["I-95", "I-85"],
         )
-        assert "SC" in corridor
-        assert "LA" not in corridor
-        assert corridor[0] == "NJ"
-        assert corridor[-1] == "FL"
-        assert corridor.index("NC") < corridor.index("SC") < corridor.index("GA")
+        assert corridor == ["NJ", "DE", "MD", "VA", "NC", "SC", "GA", "FL"]
         assert has_plausible_transitions(corridor)
 
     def test_sc_and_ga_fill_for_nc_fl_gap(self):
@@ -190,11 +186,8 @@ class TestEastCoastCorridorNjFl:
             ["NJ", "DE", "MD", "VA", "NC", "FL"],
             ["I-95"],
         )
-        assert "SC" in corridor
-        assert "GA" in corridor
-        assert "LA" not in corridor
-        assert corridor[0] == "NJ"
-        assert corridor[-1] == "FL"
+        assert corridor == ["NJ", "DE", "MD", "VA", "NC", "SC", "GA", "FL"]
+        assert corridor.index("NC") < corridor.index("SC") < corridor.index("GA") < corridor.index("FL")
         assert has_plausible_transitions(corridor)
 
     def test_no_sc_when_inland_between_nc_fl(self):
@@ -218,8 +211,7 @@ class TestEastCoastCorridorNjFl:
             ["NJ", "DE", "MD", "VA", "NC", "LA", "GA", "FL"],
             ["I-95", "I-10"],
         )
-        assert "LA" not in corridor
-        assert "SC" in corridor
+        assert corridor == ["NJ", "DE", "MD", "VA", "NC", "SC", "GA", "FL"]
         assert has_plausible_transitions(corridor)
 
     def test_strip_la_even_with_distant_ms(self):
@@ -229,9 +221,8 @@ class TestEastCoastCorridorNjFl:
             ["I-95", "I-10"],
         )
         assert "LA" not in corridor
-        assert "SC" in corridor
-        assert "MS" in corridor
         assert corridor.index("NC") < corridor.index("SC") < corridor.index("GA")
+        assert "MS" in corridor
         assert has_plausible_transitions(corridor)
 
     def test_never_strip_la_bookend(self):
@@ -247,12 +238,32 @@ class TestEastCoastCorridorNjFl:
         )
         assert origin_la[0] == "LA"
 
+    def test_mid_and_dest_la_keeps_dest_bookend(self):
+        """Mid LA may strip; dest bookend LA must never be removed."""
+        corridor = complete_corridor_with_highways(
+            ["NJ", "DE", "MD", "VA", "NC", "LA", "GA", "FL", "LA"],
+            ["I-95", "I-10"],
+        )
+        assert corridor[-1] == "LA"
+        # Mid strip + SC fill leaves NC-SC-GA-FL-LA; FL-LA is not adjacent → final
+        # has_plausible guard reverts (dest LA still present either way).
+        assert corridor.count("LA") >= 1
+
+    def test_va_la_fl_keeps_la_when_strip_implausible(self):
+        """VA→LA→FL + I-95: strip would leave VA→FL (non-adjacent); keep LA via final revert."""
+        corridor = complete_corridor_with_highways(
+            ["VA", "LA", "FL"],
+            ["I-95"],
+        )
+        assert "LA" in corridor
+        assert corridor == ["VA", "LA", "FL"]
+
     def test_keep_la_on_gulf_i10_path(self):
         corridor = complete_corridor_with_highways(
             ["TX", "LA", "MS", "AL", "FL"],
             ["I-10", "I-95"],
         )
-        assert "LA" in corridor
+        assert corridor == ["TX", "LA", "MS", "AL", "FL"]
         assert corridor.index("TX") < corridor.index("LA") < corridor.index("MS")
 
     def test_reverse_fl_nj_inserts_sc(self):
@@ -260,10 +271,7 @@ class TestEastCoastCorridorNjFl:
             ["FL", "GA", "NC", "VA", "MD", "DE", "NJ"],
             ["I-95"],
         )
-        assert "SC" in corridor
-        assert corridor[0] == "FL"
-        assert corridor[-1] == "NJ"
-        assert corridor.index("GA") < corridor.index("SC") < corridor.index("NC")
+        assert corridor == ["FL", "GA", "SC", "NC", "VA", "MD", "DE", "NJ"]
         assert has_plausible_transitions(corridor)
 
     def test_bare_i10_does_not_inject_la(self):
@@ -277,7 +285,7 @@ class TestEastCoastCorridorNjFl:
         assert "LA" not in corridor
         completed = complete_corridor_with_highways(corridor, ["I-95", "I-10"])
         assert "LA" not in completed
-        assert "SC" in completed
+        assert completed.index("NC") < completed.index("SC") < completed.index("GA") < completed.index("FL")
         assert has_plausible_transitions(completed)
 
     def test_ga_la_fl_on_east_coast_strips_la_fills_sc(self):
@@ -285,6 +293,5 @@ class TestEastCoastCorridorNjFl:
             ["NJ", "DE", "MD", "VA", "NC", "GA", "LA", "FL"],
             ["I-95", "I-10"],
         )
-        assert "LA" not in corridor
-        assert "SC" in corridor
+        assert corridor == ["NJ", "DE", "MD", "VA", "NC", "SC", "GA", "FL"]
         assert has_plausible_transitions(corridor)
