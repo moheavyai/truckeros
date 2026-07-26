@@ -38,10 +38,12 @@ describe('History page UI cleanup', () => {
     )
   })
 
-  it('shows only View in table row actions (no row-level Portal Assist)', () => {
+  it('shows View and Delete in table row actions (no row-level Portal Assist)', () => {
     const rowActions = tableRowActionsSlice(readHistorySource())
 
     expect(rowActions).toContain('View')
+    expect(rowActions).toContain('Delete')
+    expect(rowActions).toContain('handleDeleteOne')
     expect(rowActions).not.toContain('Portal Assist')
     expect(rowActions).not.toContain('/portal-assist?requestId=')
   })
@@ -55,5 +57,49 @@ describe('History page UI cleanup', () => {
     expect(modal).toContain('bg-emerald-600')
     expect(modal).toContain('border border-gray-300')
     expect(modal).toMatch(/flex-col sm:flex-row/)
+  })
+})
+
+describe('History page delete actions', () => {
+  it('confirms single and delete-all with irreversible warnings', () => {
+    const source = readHistorySource()
+
+    expect(source).toContain("Delete this analysis? This cannot be undone.")
+    expect(source).toContain('Delete ALL ${requests.length} analyses? This cannot be undone.')
+    expect(source).toContain('window.confirm')
+  })
+
+  it('scopes single-delete by id and user_id', () => {
+    const source = readHistorySource()
+
+    expect(source).toContain('handleDeleteOne')
+    expect(source).toMatch(/\.from\('permit_requests'\)[\s\S]*?\.delete\(\)[\s\S]*?\.eq\('id',\s*id\)[\s\S]*?\.eq\('user_id',\s*user\.id\)/)
+  })
+
+  it('scopes delete-all by user_id only', () => {
+    const source = readHistorySource()
+
+    expect(source).toContain('handleDeleteAll')
+    expect(source).toContain('Delete all')
+    // delete-all must filter by user_id (not wipe other users)
+    expect(source).toMatch(
+      /handleDeleteAll[\s\S]*?\.from\('permit_requests'\)[\s\S]*?\.delete\(\)[\s\S]*?\.eq\('user_id',\s*user\.id\)/
+    )
+  })
+
+  it('disables delete controls while deleting and surfaces delete errors', () => {
+    const source = readHistorySource()
+
+    expect(source).toContain('disabled={deleting}')
+    expect(source).toContain('setDeleteError')
+    expect(source).toContain('deleteError')
+    expect(source).toContain('role="alert"')
+  })
+
+  it('exposes delete in the details modal footer', () => {
+    const modal = modalFooterSlice(readHistorySource())
+
+    expect(modal).toContain('handleDeleteOne(selectedRequest.id)')
+    expect(modal).toContain('Delete')
   })
 })
