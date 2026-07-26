@@ -1194,7 +1194,10 @@ def build_stops_from_load(
     dest_coords: tuple[float, float] | None,
 ) -> list[dict[str, Any]]:
     """
-    Build VRP stops: [origin, ...vias from include/manual..., destination]
+    Build VRP stops: [origin, ...prefer/include/manual vias..., destination]
+    or with explicit drops: [origin, ...vias..., ...ordered drops...].
+    Prefer/include vias are always considered even when drops exist (permit-test
+    often sends destination as is_drop); only coord-dupes vs O/D/drops are skipped.
     manualRoute list (from change-route or form) forces via order when cities match CITY_MAP.
     """
     stops: list[dict[str, Any]] = []
@@ -1224,7 +1227,8 @@ def build_stops_from_load(
         o_stop["state"] = o_state
     stops.append(o_stop)
 
-    # Explicit multi-stop drops (ordered delivery stops from permit-test form)
+    # Explicit multi-stop drops (ordered delivery stops from permit-test form).
+    # Collect first; append after vias so prefer/include anchors sit between O and first drop.
     explicit_drops: list[dict[str, Any]] = []
     if isinstance(load, dict):
         raw_drops = load.get("drops") or []
@@ -1237,6 +1241,7 @@ def build_stops_from_load(
         ]
 
     has_explicit_drops = False
+    drop_stops: list[dict[str, Any]] = []
     if explicit_drops:
         for i, drop in enumerate(explicit_drops):
             lat_raw = drop.get("lat")
@@ -1271,7 +1276,7 @@ def build_stops_from_load(
         dst = drop.get("state")
         if dst:
             d_stop["state"] = str(dst).upper().strip()
-        stops.append(d_stop)
+        drop_stops.append(d_stop)
 
     # special instructions
     special = None
@@ -1295,6 +1300,14 @@ def build_stops_from_load(
         manual = load.get_manual_route()
     elif isinstance(load, dict):
         manual = load.get("manualRoute") or load.get("manual_route")
+
+    # O/D + drop coords for seed/final dedupe (avoid double destination / via-on-drop)
+    od_refs: list[dict[str, Any]] = [
+        {"lat": o_lat, "lon": o_lon},
+        {"lat": d_lat, "lon": d_lon},
+    ]
+    for ds in drop_stops:
+        od_refs.append({"lat": ds["lat"], "lon": ds["lon"]})
 
     if manual and isinstance(manual, list) and len(manual) > 0:
         # manual wins completely for vias (change-route explicit) — do not override with prefer anchors
@@ -1321,11 +1334,8 @@ def build_stops_from_load(
     else:
         # Prefer-via injection (single ownership here — not also in suggest_practical_vias):
         # seed highway anchors (US 136→Rock Port, I-40→OKC) + cities inside prefer/use clauses.
-        # Respects avoided states, geo gate, and coord-dedupe vs includes + O/D.
-        od_refs: list[dict[str, Any]] = [
-            {"lat": o_lat, "lon": o_lon},
-            {"lat": d_lat, "lon": d_lon},
-        ]
+        # Respects avoided states, geo gate, and coord-dedupe vs includes + O/D + drops.
+        # Still runs when has_explicit_drops so permit-test dest-as-drop keeps prefer anchors.
         for seed in seed_preferred_hwy_vias(
             preferred_hwys,
             avoided,
@@ -1343,27 +1353,29 @@ def build_stops_from_load(
                 included.append(sv)
         vias = included
 
-    # dedupe vias by rounded coord (skip when explicit drops define the route); also skip O/D coincidence
-    if not has_explicit_drops:
-        seen_keys: set[str] = set()
-        od_refs_final: list[dict[str, Any]] = [
-            {"lat": o_lat, "lon": o_lon},
-            {"lat": d_lat, "lon": d_lon},
-        ]
-        for v in vias:
-            if _via_coord_dup(v, od_refs_final):
-                continue
-            k = f"{round(v['lat'], 2)},{round(v['lon'], 2)}"
-            if k not in seen_keys:
-                seen_keys.add(k)
-                v["is_via"] = True
-                stops.append(v)
+    # Append vias after origin (before drops/destination). Dedupe by rounded coord; skip O/D/drop coincidence.
+    seen_keys: set[str] = set()
+    for v in vias:
+        if _via_coord_dup(v, od_refs):
+            continue
+        k = f"{round(v['lat'], 2)},{round(v['lon'], 2)}"
+        if k not in seen_keys:
+            seen_keys.add(k)
+            v["is_via"] = True
+            stops.append(v)
 
-    if not has_explicit_drops:
-        d_stop: dict[str, Any] = {"name": "destination", "lat": d_lat, "lon": d_lon, "is_via": False}
+    if has_explicit_drops:
+        stops.extend(drop_stops)
+    else:
+        d_stop_final: dict[str, Any] = {
+            "name": "destination",
+            "lat": d_lat,
+            "lon": d_lon,
+            "is_via": False,
+        }
         if d_state:
-            d_stop["state"] = d_state
-        stops.append(d_stop)
+            d_stop_final["state"] = d_state
+        stops.append(d_stop_final)
     return stops
 
 

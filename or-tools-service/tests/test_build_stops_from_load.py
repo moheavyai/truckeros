@@ -35,7 +35,8 @@ def test_build_stops_fixed_order_with_explicit_drops():
     assert stops[-1]["lat"] == pytest.approx(46.879)
 
 
-def test_build_stops_skips_vias_when_explicit_drops():
+def test_build_stops_includes_vias_with_explicit_drops():
+    """Include/prefer vias still append when permit-test sends destination as drops."""
     load = {
         **_load_with_drops(
             [{"query": "Minot", "lat": 48.232, "lon": -101.296, "state": "ND"}]
@@ -43,8 +44,14 @@ def test_build_stops_skips_vias_when_explicit_drops():
         "specialInstructions": "include Memphis, TN",
     }
     stops = build_stops_from_load(load, (40.926, -98.342), (46.879, -102.789))
-    assert len(stops) == 2
-    assert all(not s.get("is_via") for s in stops)
+    assert len(stops) >= 3
+    assert stops[0]["name"] == "origin"
+    vias = [s for s in stops if s.get("is_via")]
+    assert any("memphis" in v["name"].lower() for v in vias)
+    via_idx = next(i for i, s in enumerate(stops) if s.get("is_via"))
+    drop_idx = next(i for i, s in enumerate(stops) if s.get("is_drop"))
+    assert via_idx < drop_idx
+    assert stops[-1].get("is_drop") is True
 
 
 def test_build_stops_raises_when_drop_missing_coords():
@@ -227,6 +234,58 @@ def test_od_coord_dedupe_skips_via_at_origin():
     stops = build_stops_from_load(load, (rp_lat, rp_lon), (40.8136, -96.7026))
     vias = [s for s in stops if s.get("is_via")]
     assert not any("rock" in v["name"].lower() for v in vias)
+
+
+def test_prefer_us136_seeds_rock_port_with_explicit_drops():
+    """prefer US136 + destination-as-drop still injects Rock Port via (num_stops >= 3)."""
+    load = {
+        "origin": {"city": "Kansas City", "state": "MO"},
+        "destination": {"city": "Lincoln", "state": "NE"},
+        "specialInstructions": "avoid IA. use US136 from Rock Port, MO to enter NE",
+        "drops": [
+            {"query": "Lincoln", "lat": 40.8136, "lon": -96.7026, "state": "NE"},
+        ],
+    }
+    stops = build_stops_from_load(load, (39.0997, -94.5786), (40.8136, -96.7026))
+    assert len(stops) >= 3
+    assert stops[0]["name"] == "origin"
+    vias = [s for s in stops if s.get("is_via")]
+    rock = next((v for v in vias if "rock" in v["name"].lower()), None)
+    assert rock is not None, f"Rock Port via missing; stops={[s.get('name') for s in stops]}"
+    assert rock["state"] == "MO"
+    assert rock["lat"] == pytest.approx(40.4122, abs=0.01)
+    assert rock["lon"] == pytest.approx(-95.5169, abs=0.01)
+    rock_idx = next(
+        i for i, s in enumerate(stops) if s.get("is_via") and "rock" in s["name"].lower()
+    )
+    drop_idx = next(i for i, s in enumerate(stops) if s.get("is_drop"))
+    assert rock_idx < drop_idx
+    assert stops[-1].get("is_drop") is True
+    assert stops[-1]["lat"] == pytest.approx(40.8136, abs=0.01)
+
+
+def test_prefer_via_before_multi_drops_order():
+    """Multi-drop order: origin, vias…, drop1, drop2…"""
+    load = {
+        "origin": {"city": "Kansas City", "state": "MO"},
+        "destination": {"city": "Dickinson", "state": "ND"},
+        "specialInstructions": "prefer US 136",
+        "drops": [
+            {"query": "Minot", "lat": 48.232, "lon": -101.296, "state": "ND"},
+            {"query": "Dickinson", "lat": 46.879, "lon": -102.789, "state": "ND"},
+        ],
+    }
+    stops = build_stops_from_load(load, (39.0997, -94.5786), (46.879, -102.789))
+    assert stops[0]["name"] == "origin"
+    via_idxs = [i for i, s in enumerate(stops) if s.get("is_via")]
+    drop_idxs = [i for i, s in enumerate(stops) if s.get("is_drop")]
+    assert via_idxs, "expected prefer-US-136 via"
+    assert len(drop_idxs) == 2
+    assert max(via_idxs) < min(drop_idxs)
+    assert drop_idxs == sorted(drop_idxs)
+    assert stops[drop_idxs[0]]["name"] == "Minot"
+    assert stops[drop_idxs[1]]["name"] == "Dickinson"
+    assert any("rock" in stops[i]["name"].lower() for i in via_idxs)
 
 
 def test_honesty_copy_via_seeded_vs_not_injected():
