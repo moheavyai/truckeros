@@ -437,13 +437,17 @@ function getStateAbbreviation(stateName: string): string | null {
 const HIGHWAY_STATE_HINTS: Record<string, string> = {
   'I-65': 'AL', 'I-70': 'MO', 'I-80': 'NE',
   'I-55': 'MS', 'I-57': 'MO', 'I-44': 'MO', 'I-24': 'TN', 'I-22': 'MS',
-  'I-85': 'GA', 'I-20': 'AL', 'I-10': 'LA', 'I-35': 'OK', 'I-29': 'MO',
+  // I-10 / I-20 / I-85 / I-95 etc. are multi-state — never single-state hint (see MULTI_STATE_HWYS).
+  'I-35': 'OK', 'I-29': 'MO',
   'I-64': 'MO', 'I-72': 'IL', 'I-75': 'GA', 'I-4': 'FL',
   'I-90': 'SD', 'I-25': 'WY', 'US 81': 'NE', 'US 83': 'NE',
 }
 
-/** Multi-state interstates: do not use hint when ref/name already has state codes. */
-const MULTI_STATE_HWYS = new Set(['I-35', 'I-40', 'I-44', 'I-55', 'I-57', 'I-70', 'I-75', 'I-80', 'I-90', 'I-29', 'I-25', 'US 81'])
+/** Multi-state interstates: do not use single-state HIGHWAY_STATE_HINTS (bare I-10 ≠ LA, etc.). */
+const MULTI_STATE_HWYS = new Set([
+  'I-10', 'I-20', 'I-25', 'I-29', 'I-35', 'I-40', 'I-44', 'I-55', 'I-57',
+  'I-70', 'I-75', 'I-80', 'I-81', 'I-85', 'I-90', 'I-95', 'US 81',
+])
 
 const COMPASS_SUFFIX_CODES = new Set(['NE', 'NW', 'SE', 'SW'])
 
@@ -1033,6 +1037,62 @@ export function completeCorridorWithHighways(states: string[], highways: string[
       if (!result.includes('SD') && result.includes('NE')) {
         const neIdx = result.indexOf('NE')
         if (neIdx !== -1) result.splice(neIdx + 1, 0, 'SD')
+      }
+    }
+  }
+
+  // I-95 / I-85 seaboard family (I-81 stays MULTI_STATE only — not a seaboard SC-fill trigger).
+  const eastCoastHwy = plainHwys.has('I-95') || plainHwys.has('I-85')
+
+  // Safety strip first: clear spurious mid-corridor LA so NC|GA become adjacent for SC fill.
+  // Never strip bookend LA (first/last). Keep LA only when prev/next is a local gulf neighbor (TX/MS/AR)
+  // — distant TX/MS/AR elsewhere in the corridor must not block strip.
+  if (result.includes('LA') && eastCoastHwy) {
+    const laIdx = result.indexOf('LA')
+    if (laIdx > 0 && laIdx < result.length - 1) {
+      const prev = result[laIdx - 1]
+      const next = result[laIdx + 1]
+      const gulfNeighbor = (s: string) => s === 'TX' || s === 'MS' || s === 'AR'
+      if (!(gulfNeighbor(prev) || gulfNeighbor(next))) {
+        const withoutLa = result.filter(s => s !== 'LA')
+        // Strip when trial is fully plausible, or LA itself is the bad link (neighbors non-gulf / non-adjacent).
+        if (
+          hasPlausibleTransitions(withoutLa) ||
+          (!hasPlausibleTransitions(result) &&
+            (!areAdjacent(prev, 'LA') || !areAdjacent('LA', next) || areAdjacent(prev, next)))
+        ) {
+          result.length = 0
+          result.push(...withoutLa)
+        }
+      }
+    }
+  }
+
+  // East-coast SC fill: only when NC and GA (or NC and FL with no GA) are *index neighbors*
+  // (avoids inland NC-TN-AL-FL + I-95 false positives). NC→FL also inserts GA for SC-FL adjacency.
+  // Final hasPlausibleTransitions guard reverts bad inserts (same as OK heuristics).
+  if (eastCoastHwy && !result.includes('SC')) {
+    const ncIdx = result.indexOf('NC')
+    if (ncIdx !== -1) {
+      const gaIdx = result.indexOf('GA')
+      const flIdx = result.indexOf('FL')
+      if (gaIdx !== -1 && Math.abs(gaIdx - ncIdx) === 1) {
+        if (ncIdx < gaIdx) result.splice(ncIdx + 1, 0, 'SC')
+        else result.splice(gaIdx + 1, 0, 'SC')
+      } else if (gaIdx === -1 && flIdx !== -1 && Math.abs(flIdx - ncIdx) === 1) {
+        if (ncIdx < flIdx) {
+          result.splice(ncIdx + 1, 0, 'SC')
+          if (!result.includes('GA')) {
+            const scIdx = result.indexOf('SC')
+            if (scIdx !== -1) result.splice(scIdx + 1, 0, 'GA')
+          }
+        } else {
+          result.splice(ncIdx, 0, 'SC')
+          if (!result.includes('GA')) {
+            const scIdx = result.indexOf('SC')
+            if (scIdx !== -1) result.splice(scIdx, 0, 'GA')
+          }
+        }
       }
     }
   }

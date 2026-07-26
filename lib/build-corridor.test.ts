@@ -111,6 +111,155 @@ describe('completeCorridorWithHighways Calvert AL->NE', () => {
   })
 })
 
+/**
+ * Plausible mid-Atlantic NJ→FL step chain with explicit state route codes so intermediates
+ * are retained (not collapsed to bookends). Trailing bare I-10 must not inject LA.
+ */
+const njFlI95Steps = [
+  { ref: 'NJ 42' },
+  { ref: 'I 95;DE 1' },
+  { ref: 'I 95;MD 295' },
+  { ref: 'I 95;VA 3' },
+  { ref: 'I 95;NC 49' },
+  { ref: 'I 95;GA 400' },
+  { ref: 'I 95;FL 9' },
+  // Bare multi-state I-10 must not force LA via HIGHWAY_STATE_HINTS
+  { ref: 'I 10' },
+]
+
+describe('east-coast corridor NJ→FL I-95', () => {
+  it('completeCorridorWithHighways inserts SC when NC+GA are index neighbors on I-95', () => {
+    const corridor = completeCorridorWithHighways(
+      ['NJ', 'DE', 'MD', 'VA', 'NC', 'GA', 'FL'],
+      ['I-95', 'I-85'],
+    )
+    expect(corridor).toContain('SC')
+    expect(corridor).not.toContain('LA')
+    expect(corridor[0]).toBe('NJ')
+    expect(corridor[corridor.length - 1]).toBe('FL')
+    const ncIdx = corridor.indexOf('NC')
+    const scIdx = corridor.indexOf('SC')
+    const gaIdx = corridor.indexOf('GA')
+    expect(ncIdx).toBeLessThan(scIdx)
+    expect(scIdx).toBeLessThan(gaIdx)
+    expect(hasPlausibleTransitions(corridor)).toBe(true)
+  })
+
+  it('completeCorridorWithHighways inserts SC (and GA) for adjacent NC→FL gap without GA', () => {
+    const corridor = completeCorridorWithHighways(
+      ['NJ', 'DE', 'MD', 'VA', 'NC', 'FL'],
+      ['I-95'],
+    )
+    expect(corridor).toContain('SC')
+    expect(corridor).toContain('GA')
+    expect(corridor).not.toContain('LA')
+    expect(corridor[0]).toBe('NJ')
+    expect(corridor[corridor.length - 1]).toBe('FL')
+    expect(hasPlausibleTransitions(corridor)).toBe(true)
+  })
+
+  it('does not insert SC when inland states sit between NC and FL', () => {
+    const corridor = completeCorridorWithHighways(
+      ['NC', 'TN', 'AL', 'FL'],
+      ['I-95'],
+    )
+    expect(corridor).not.toContain('SC')
+    expect(corridor).toEqual(['NC', 'TN', 'AL', 'FL'])
+  })
+
+  it('I-81 alone does not trigger SC fill (seaboard is I-95/I-85 only)', () => {
+    const corridor = completeCorridorWithHighways(
+      ['VA', 'NC', 'GA', 'FL'],
+      ['I-81'],
+    )
+    expect(corridor).not.toContain('SC')
+    expect(corridor).toEqual(['VA', 'NC', 'GA', 'FL'])
+  })
+
+  it('strips spurious mid-corridor LA on I-95 then fills SC when NC|GA become adjacent', () => {
+    const corridor = completeCorridorWithHighways(
+      ['NJ', 'DE', 'MD', 'VA', 'NC', 'LA', 'GA', 'FL'],
+      ['I-95', 'I-10'],
+    )
+    expect(corridor).not.toContain('LA')
+    expect(corridor).toContain('SC')
+    expect(hasPlausibleTransitions(corridor)).toBe(true)
+  })
+
+  it('strips mid NC-LA-GA even with distant MS and I-10 present, then fills SC', () => {
+    // Global TX/MS/AR-anywhere must not block strip; only local gulf prev/next keeps LA.
+    // MS is far from LA (via FL→AL), so the old global MS gate wrongly blocked this case.
+    const corridor = completeCorridorWithHighways(
+      ['NJ', 'DE', 'MD', 'VA', 'NC', 'LA', 'GA', 'FL', 'AL', 'MS'],
+      ['I-95', 'I-10'],
+    )
+    expect(corridor).not.toContain('LA')
+    expect(corridor).toContain('SC')
+    expect(corridor).toContain('MS')
+    const ncIdx = corridor.indexOf('NC')
+    const scIdx = corridor.indexOf('SC')
+    const gaIdx = corridor.indexOf('GA')
+    expect(ncIdx).toBeLessThan(scIdx)
+    expect(scIdx).toBeLessThan(gaIdx)
+    expect(hasPlausibleTransitions(corridor)).toBe(true)
+  })
+
+  it('never strips LA when it is origin or dest bookend', () => {
+    const destLa = completeCorridorWithHighways(
+      ['TX', 'MS', 'AL', 'FL', 'LA'],
+      ['I-95', 'I-10'],
+    )
+    expect(destLa[destLa.length - 1]).toBe('LA')
+
+    const originLa = completeCorridorWithHighways(
+      ['LA', 'MS', 'AL', 'GA', 'NC'],
+      ['I-95'],
+    )
+    expect(originLa[0]).toBe('LA')
+  })
+
+  it('keeps LA on gulf I-10 path (TX-LA-MS)', () => {
+    const corridor = completeCorridorWithHighways(
+      ['TX', 'LA', 'MS', 'AL', 'FL'],
+      ['I-10', 'I-95'],
+    )
+    expect(corridor).toContain('LA')
+    expect(corridor.indexOf('TX')).toBeLessThan(corridor.indexOf('LA'))
+    expect(corridor.indexOf('LA')).toBeLessThan(corridor.indexOf('MS'))
+  })
+
+  it('reverse FL→NJ inserts SC between GA and NC preserving order', () => {
+    const corridor = completeCorridorWithHighways(
+      ['FL', 'GA', 'NC', 'VA', 'MD', 'DE', 'NJ'],
+      ['I-95'],
+    )
+    expect(corridor).toContain('SC')
+    expect(corridor[0]).toBe('FL')
+    expect(corridor[corridor.length - 1]).toBe('NJ')
+    const gaIdx = corridor.indexOf('GA')
+    const scIdx = corridor.indexOf('SC')
+    const ncIdx = corridor.indexOf('NC')
+    expect(gaIdx).toBeLessThan(scIdx)
+    expect(scIdx).toBeLessThan(ncIdx)
+    expect(hasPlausibleTransitions(corridor)).toBe(true)
+  })
+
+  it('plausible mid-Atlantic steps + bare I-10 retain intermediates and never inject LA', () => {
+    const corridor = buildCorridorFromSteps(njFlI95Steps, 'NJ', 'FL')
+    expect(corridor[0]).toBe('NJ')
+    expect(corridor[corridor.length - 1]).toBe('FL')
+    expect(corridor).toContain('MD')
+    expect(corridor).toContain('VA')
+    expect(corridor).toContain('NC')
+    expect(corridor).toContain('GA')
+    expect(corridor).not.toContain('LA')
+    const completed = completeCorridorWithHighways(corridor, ['I-95', 'I-10'])
+    expect(completed).not.toContain('LA')
+    expect(completed).toContain('SC')
+    expect(hasPlausibleTransitions(completed)).toBe(true)
+  })
+})
+
 describe('parseSpecialInstructions OD guard + avoid clause bound', () => {
   it('avoid IA. use US136 from Rock Port, MO to enter NE → only IA avoided, US 136 preferred, not MO/NE', () => {
     const parsed = parseSpecialInstructions(
