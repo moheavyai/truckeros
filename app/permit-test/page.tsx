@@ -260,6 +260,26 @@ function resolveRigBaseLengthFt(
   return Number(trailerLengthFt) || 0
 }
 
+/**
+ * Routing-envelope base length.
+ * Selected rig → equipment geometry (via resolveRigBaseLengthFt).
+ * No rig / custom dimensions → load length only (never trailer default 53).
+ */
+function resolveEnvelopeBaseLengthFt(
+  snap: {
+    tractor?: unknown
+    trailers?: unknown[] | null
+    overallLengthFt?: number | null
+  } | null | undefined,
+  trailerLengthFt?: number | string | null,
+  loadLengthFt?: number | string | null
+): number {
+  if (snap) {
+    return resolveRigBaseLengthFt(snap, trailerLengthFt)
+  }
+  return Number(loadLengthFt) || 0
+}
+
 /** Unified gross for analyze / save / UI: prefer grossLoadedWeight when set. */
 function resolveSubmitWeightLbs(form: {
   grossLoadedWeight?: number | string | null
@@ -821,10 +841,12 @@ export default function PermitTestPage() {
         ? tractorWt + trailerWt
         : Number(formData.rigEmptyWeightLbs) || 0
     // Live recompute length from equipment when rich units available (not stale cache only).
-    // No-rig / custom dimensions: load length is the self-powered envelope base (taxi crane, etc.).
-    const rigBaseLength =
-      resolveRigBaseLengthFt(selectedRigSnapshot, formData.trailerLengthFt) ||
-      (!selectedRigSnapshot ? Number(formData.loadLengthFt) || 0 : 0)
+    // No-rig / custom dimensions: load length only — never trailer default 53.
+    const rigBaseLength = resolveEnvelopeBaseLengthFt(
+      selectedRigSnapshot,
+      formData.trailerLengthFt,
+      formData.loadLengthFt
+    )
     const envelope = computeRoutingEnvelope({
       rigLengthFt: rigBaseLength,
       loadOverhangFrontFt,
@@ -1120,9 +1142,11 @@ export default function PermitTestPage() {
       tractorWt > 0 && trailerWt > 0
         ? tractorWt + trailerWt
         : Number(formData.rigEmptyWeightLbs) || 0
-    const rigBaseLength =
-      resolveRigBaseLengthFt(selectedRigSnapshot, formData.trailerLengthFt) ||
-      (!selectedRigSnapshot ? Number(formData.loadLengthFt) || 0 : 0)
+    const rigBaseLength = resolveEnvelopeBaseLengthFt(
+      selectedRigSnapshot,
+      formData.trailerLengthFt,
+      formData.loadLengthFt
+    )
     const envelope = computeRoutingEnvelope({
       rigLengthFt: rigBaseLength,
       loadOverhangFrontFt,
@@ -3032,6 +3056,7 @@ export default function PermitTestPage() {
                 const id = e.target.value
                 if (!id) {
                   handleSelectRig(null)
+                  setShowRigPicker(false)
                   return
                 }
                 const rig = rigs.find((r: any) => r.id === id)
