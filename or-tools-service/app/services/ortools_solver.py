@@ -722,47 +722,192 @@ def _get_state_code(token: str, next_token: str | None = None) -> str | None:
     return None
 
 
-def parse_special_instructions(text: str | None) -> dict[str, Any]:
+def _normalize_hwy_token(raw: str) -> str:
+    """Normalize US136 / US-136 / US 136 / I29 / I-29 → 'US 136' / 'I-29'."""
+    u = re.sub(r"[\s.\-]+", "", (raw or "").upper())
+    if u.startswith("US") and u[2:].isdigit():
+        return f"US {u[2:]}"
+    if u.startswith("I") and u[1:].isdigit():
+        return f"I-{u[1:]}"
+    return (raw or "").upper().strip()
+
+
+def _coerce_state_code(s: str | None) -> str | None:
+    """Normalize full name or 2-letter to STATE_ABBR code (or None)."""
+    if not s:
+        return None
+    raw = str(s).strip()
+    if not raw:
+        return None
+    up = raw.upper()
+    if up in STATE_ABBR:
+        return up
+    return STATE_NAME_TO_CODE.get(raw.lower()) or None
+
+
+# City suffixes after a state name → do not treat name as avoid target ("Kansas City" ≠ Kansas).
+_CITY_SUFFIXES = frozenset({"city", "springs", "falls", "beach", "ville", "town", "port", "harbor", "harbour"})
+
+
+def _looks_like_state_token(tok: str) -> bool:
+    """True if token resolves to a US state (code or name)."""
+    return _get_state_code(tok, None) is not None
+
+
+def _state_codes_from_tokens(raw_tokens: list[str]) -> list[str]:
     """
-    Parse free-text. Returns avoided states, included city waypoints, notes.
+    Extract US state codes from avoid phrase tokens.
+    English conjunction skip: only natural-language "or" when flanked by state-like tokens
+    (e.g. "avoid CA or TX" → skip "or"). Does NOT drop real multi-state list codes
+    like OK/OR/IN in "avoid AR, OK, TX" or "avoid WA, OR".
+    """
+    out: list[str] = []
+    i = 0
+    while i < len(raw_tokens):
+        tok = raw_tokens[i]
+        nxt = raw_tokens[i + 1] if i + 1 < len(raw_tokens) else None
+        prev = raw_tokens[i - 1] if i > 0 else None
+        # "Kansas City" / "Colorado Springs" — do not treat as state Kansas/Colorado
+        if nxt and nxt.lower() in _CITY_SUFFIXES:
+            i += 2
+            continue
+        # Conjunction "or" only (not OK/OR/IN/OH as list members): skip when both neighbors are states
+        if tok.lower() == "or" and prev and nxt and _looks_like_state_token(prev) and _looks_like_state_token(nxt):
+            i += 1
+            continue
+        # Prefer 2-word name only when next is not a city suffix
+        code_two = _get_state_code(tok, nxt) if nxt else None
+        code_one = _get_state_code(tok, None)
+        if code_two and code_two != code_one:
+            if code_two not in out:
+                out.append(code_two)
+            i += 2
+            continue
+        if code_one and code_one not in out:
+            out.append(code_one)
+        i += 1
+    return out
+
+
+def highway_token_present(pref: str, hwys: list[str] | None) -> bool:
+    """
+    True if preferred highway is on the route list via normalized plain-token *equality*
+    (not substring: I-2 ≠ I-29, US13 ≠ US136). Strips enrichment ' (entry ...)'.
+    Match against the *full* highway list, not a curated top-N subset.
+    """
+    np = re.sub(r"[\s.\-]+", "", (pref or "").upper())
+    if not np:
+        return False
+    for h in hwys or []:
+        plain = str(h).split(" (")[0]
+        nh = re.sub(r"[\s.\-]+", "", plain.upper())
+        if nh == np:
+            return True
+    return False
+
+
+def assess_preference_enforcement(
+    avoided: list[str] | None,
+    preferred: list[str] | None,
+    route_corridor: list[str] | None,
+    highways: list[str] | None,
+    origin_state: str | None = None,
+    dest_state: str | None = None,
+) -> dict[str, Any]:
+    """
+    Pure honesty assessment for special-instructions vs primary geometry.
+    enforced is true only when every avoid is off-corridor (except o/d) AND every preferred hwy is present.
+    """
+    o = _coerce_state_code(origin_state)
+    d = _coerce_state_code(dest_state)
+    av = list(avoided or [])
+    pref = list(preferred or [])
+    states = list(route_corridor or [])
+    still_on = [a for a in av if a in states and a != o and a != d]
+    missing_pref = [p for p in pref if not highway_token_present(p, highways)]
+    has_pref_goal = bool(av) or bool(pref)
+    enforced = has_pref_goal and not still_on and not missing_pref
+    return {
+        "still_on": still_on,
+        "missing_pref": missing_pref,
+        "enforced": enforced,
+        "partial": bool(still_on or missing_pref),
+    }
+
+
+def parse_special_instructions(
+    text: str | None,
+    origin_state: str | None = None,
+    dest_state: str | None = None,
+) -> dict[str, Any]:
+    """
+    Parse free-text. Returns avoided states, included city waypoints, preferred highways, notes.
     Supports: avoid AR,IL ; include Corinth, MS, Memphis ; prefer I-40 southern ; bypass CA
+    Avoid clause stops at period or next directive verb (use|take|prefer|via|include|through|from|enter|to|...).
+    States that appear only inside prefer/use/from/enter clauses are not avoided.
+    origin_state / dest_state are always stripped from avoided (impossible o/d avoid).
+
+    Note on stop verb `to`: needed for "use US136 ... to enter NE" so NE is not avoided.
+    Tradeoff: "avoid CA to AZ" truncates at `to` (AZ not avoided). Prefer "avoid CA, AZ" or "avoid CA and AZ".
+    Preferred highways are taken *only* from use/take/prefer/via clauses (not bare "avoid I-40").
     """
     if not text or not text.strip():
-        return {"avoided": [], "included": [], "notes": [], "raw": text}
+        return {"avoided": [], "included": [], "preferred": [], "notes": [], "raw": text}
 
     t = text.lower()
-    # Pre-process punctuation (especially ";", ".", ",") so "avoid; AR, IL. Include Corinth, MS." is treated like "avoid AR IL Include Corinth MS"
-    # This makes the existing verb regex + lookahead reliably capture phrases for the exact user test strings.
-    t = re.sub(r'[:;,.]+', ' ', t)
+    # Normalize ;: to spaces but KEEP periods as avoid-clause terminators (fix: "avoid IA. use US136...").
+    # Commas kept so "avoid IA, KS" multi-state tokens still split cleanly.
+    t = re.sub(r"[:;]+", " ", t)
     avoided: list[str] = []
     included: list[dict[str, Any]] = []
+    preferred: list[str] = []
     applied: list[str] = []
 
-    # Avoid / bypass  (World-class: parity with TS applyUserPreferences; bypass treated as avoid; lookahead prevents slurping "include..." into avoid for "avoid AR, avoid IL, include Corinth MS")
-    # Tiny robust: [^\w]+ after prefix/verb to tolerate "avoid; AR, IL. Include Corinth, MS." exact test case (punct variants); follows existing re style + lookahead.
+    # Avoid / bypass: consume state tokens only until period OR next verb.
+    # Extra stop verbs (use|take|from|enter|to) prevent slurping prefer/use clauses into avoided
+    # (e.g. "avoid IA. use US136 from Rock Port, MO to enter NE" → avoided=['IA'] only).
+    # `to` tradeoff: "avoid CA to AZ" stops at `to` (use "avoid CA, AZ" instead).
+    _avoid_stop = (
+        r"use|take|prefer|via|include|including|through|from|enter|to|"
+        r"avoid|avoiding|no|skip|steer clear of|shun|bypass|near|"
+        r"southern|northern|interstate|stay on|avoid major"
+    )
     avoid_re = re.compile(
-        r"(?:^|[\s,.(]|\b)[^\w]*(avoid|avoiding|no|skip|steer clear of|shun|bypass)[^\w]+([a-z0-9,\s&\/]+?)(?=\s*(?:avoid|avoiding|no|skip|include|prefer|via|through|near|southern|northern|interstate|stay on|avoid major|$))",
+        rf"(?:^|[\s,.(]|\b)[^\w]*(avoid|avoiding|no|skip|steer clear of|shun|bypass)[^\w]+"
+        rf"([a-z0-9,\s&\/]+?)"
+        rf"(?=\s*(?:{_avoid_stop})\b|\s*\.|$)",
         re.IGNORECASE,
     )
     for m in avoid_re.finditer(t):
         phrase = m.group(2) or ""
+        # Period may still trail a phrase if lookahead used '$' after trimmed end — strip it.
+        phrase = re.split(r"\.", phrase, maxsplit=1)[0]
         raw_tokens = [x.strip() for x in re.split(r"[,&\s\/]+", phrase) if x.strip()]
-        for i, tok in enumerate(raw_tokens):
-            code = _get_state_code(tok, raw_tokens[i + 1] if i + 1 < len(raw_tokens) else None)
-            if code and code not in avoided:
+        for code in _state_codes_from_tokens(raw_tokens):
+            if code not in avoided:
                 avoided.append(code)
 
     # Include / via / near (only cities from CITY_MAP become real VRP stops)
-    # Tiny robust: [^\w]+ after prefix/verb to tolerate "avoid; AR, IL. Include Corinth, MS." exact test case (punct variants); follows existing re style + lookahead.
+    # Stop before prefer/use/from/enter/to so state tokens there are not treated as include targets.
+    _inc_stop = (
+        r"avoid|avoiding|no|skip|include|including|prefer|use|take|via|through|near|"
+        r"from|enter|to|southern|northern"
+    )
     inc_re = re.compile(
-        r"(?:^|[\s,.(]|\b)[^\w]*(include|including|via|through|near|go (?:by|via|through|near)|pass (?:by|near|through))[^\w]+([a-z0-9,\s&\/]+?)(?=\s*(?:avoid|include|prefer|via|through|near|southern|northern|$))",
+        rf"(?:^|[\s,.(]|\b)[^\w]*(include|including|via|through|near|go (?:by|via|through|near)|pass (?:by|near|through))[^\w]+"
+        rf"([a-z0-9,\s&\/]+?)"
+        rf"(?=\s*(?:{_inc_stop})\b|\s*\.|$)",
         re.IGNORECASE,
     )
     for m in inc_re.finditer(t):
         phrase = m.group(2) or ""
+        phrase = re.split(r"\.", phrase, maxsplit=1)[0]
         raw_tokens = [x.strip() for x in re.split(r"[,&\s\/]+", phrase) if x.strip()]
         for i, tok in enumerate(raw_tokens):
-            code = _get_state_code(tok, raw_tokens[i + 1] if i + 1 < len(raw_tokens) else None)
+            nxt = raw_tokens[i + 1] if i + 1 < len(raw_tokens) else None
+            if nxt and nxt.lower() in _CITY_SUFFIXES:
+                continue
+            code = _get_state_code(tok, nxt if nxt and nxt.lower() not in _CITY_SUFFIXES else None)
             if code:
                 continue  # state-only include does not force a precise stop for MVP
             key = tok.lower()
@@ -772,6 +917,20 @@ def parse_special_instructions(text: str | None) -> dict[str, Any]:
                 if not any(x["name"].lower() == inc["name"].lower() for x in included):
                     included.append(inc)
 
+    # Prefer/use/take/via clauses ONLY → extract highways (no bare-text fallback: "avoid I-40" must not prefer I-40)
+    prefer_clause_re = re.compile(
+        r"(?:^|[\s,.(]|\b)[^\w]*(use|take|prefer|via)[^\w]+([a-z0-9,\s&\-\/]+?)"
+        r"(?=\s*(?:avoid|use|take|prefer|via|include|through|from|enter|to|southern|northern|interstate|stay on)\b|\s*\.|$)",
+        re.IGNORECASE,
+    )
+    hwy_token_re = re.compile(r"\b(I-?\d+|US[-\s]?\d+)\b", re.IGNORECASE)
+    for m in prefer_clause_re.finditer(t):
+        phrase = m.group(2) or ""
+        for hm in hwy_token_re.finditer(phrase):
+            pref = _normalize_hwy_token(hm.group(1))
+            if pref and pref not in preferred:
+                preferred.append(pref)
+
     # Preferences for notes
     if re.search(r"(southern|south|go south|prefer south)", t):
         applied.append("favored southern routing")
@@ -779,10 +938,14 @@ def parse_special_instructions(text: str | None) -> dict[str, Any]:
         applied.append("favored northern routing")
     if re.search(r"(stay on interstates?|interstates? only|prefer (interstates?|major highways?|truck (routes?|corridors?)))", t):
         applied.append("favored staying on interstates / major truck corridors")
-    hwy_m = re.search(r"(?:^|[\s,.(]|\b)(I-?\d+|US\s*\d+)\b", t, re.IGNORECASE)
-    if hwy_m:
-        pref = hwy_m.group(1).upper().replace("US", "US ").strip()
+    for pref in preferred:
         applied.append(f"preferred {pref}")
+
+    # OD guard: never treat origin/dest as avoided (impossible / geometry-required); coerce full names → codes
+    o = _coerce_state_code(origin_state)
+    d = _coerce_state_code(dest_state)
+    if o or d:
+        avoided = [a for a in avoided if a != o and a != d]
 
     if avoided:
         applied.append(f"avoided {', '.join(avoided)}")
@@ -793,7 +956,13 @@ def parse_special_instructions(text: str | None) -> dict[str, Any]:
     if applied:
         notes.append("User preference applied: " + "; ".join(applied))
 
-    return {"avoided": avoided, "included": included, "notes": notes, "raw": text}
+    return {
+        "avoided": avoided,
+        "included": included,
+        "preferred": preferred,
+        "notes": notes,
+        "raw": text,
+    }
 
 
 def build_stops_from_load(
@@ -888,7 +1057,7 @@ def build_stops_from_load(
     elif isinstance(load, dict):
         special = load.get("specialInstructions") or load.get("special_instructions")
 
-    parsed = parse_special_instructions(special)
+    parsed = parse_special_instructions(special, o_state, d_state)
     avoided = parsed.get("avoided", [])
     included = list(parsed.get("included", []))
 
@@ -1798,8 +1967,17 @@ async def _build_route_info_from_order(
     # New for border upgrade + overhaul: collect *all* steps in sequential visit order across legs for border crossing walk + corridor seq walk.
     # (steps concat preserves travel order so state changes = real consecutive borders from actual geometry)
     all_steps: list[dict[str, Any]] = []
+    o_state_for_parse = stops[0].get("state") if stops else None
+    d_state_for_parse = stops[-1].get("state") if stops else None
+    if isinstance(load, dict):
+        if not o_state_for_parse:
+            o_state_for_parse = (load.get("origin") or {}).get("state") or load.get("originState")
+        if not d_state_for_parse:
+            d_state_for_parse = (load.get("destination") or {}).get("state") or load.get("destinationState")
     parsed_instr = parse_special_instructions(
-        load.get("specialInstructions") or load.get("special_instructions")
+        load.get("specialInstructions") or load.get("special_instructions"),
+        o_state_for_parse,
+        d_state_for_parse,
     )
     avoided_states: list[str] = parsed_instr.get("avoided", [])
 
@@ -1925,15 +2103,28 @@ async def _build_route_info_from_order(
 
     # No further post-walk mutation (purity of the geometry-derived corridor). The d bookend is already handled inside build_corridor_from_steps.
 
-    # avoided leakage warning (now rare thanks to hard matrix enforcement + practical vias)
-    # only surface if truly forced (o/d or geometry left no choice)
+    # avoided / preferred honesty (do not claim full success when geometry still violates prefs)
+    # Preferred match uses *full* uniq_hw list (not curated final_highways which may drop US 136).
     parsed = parse_special_instructions(
-        (load.get("specialInstructions") or load.get("special_instructions"))
+        (load.get("specialInstructions") or load.get("special_instructions")),
+        o_st,
+        d_st,
     )
     avoided = parsed.get("avoided", [])
-    for av in avoided:
-        if av in states:
-            all_warnings.append(f"Avoided state {av} appears in derived corridor (verify geometry or use manual override)")
+    preferred_hwys: list[str] = list(parsed.get("preferred") or [])
+    honesty = assess_preference_enforcement(
+        avoided, preferred_hwys, states, uniq_hw, o_st, d_st
+    )
+    still_on: list[str] = list(honesty["still_on"])
+    missing_pref: list[str] = list(honesty["missing_pref"])
+    for av in still_on:
+        all_warnings.append(
+            f"Avoided state {av} still on primary corridor (no alternate geometry)"
+        )
+    for p in missing_pref:
+        all_warnings.append(
+            f"Preferred highway {p} not on primary route (noted, not injected)"
+        )
 
     if o_st and o_st in STATE_ABBR:
         states = [s for s in states if s != o_st]
@@ -1968,19 +2159,61 @@ async def _build_route_info_from_order(
 
     # cost uses states as permit proxy (conservative)
     permit_states_for_cost = states[:]
-    cost = calculate_estimated_cost(permit_states_for_cost, load, None, parsed.get("notes", []))
+    notes_out: list[str] = list(parsed.get("notes") or [])
+    # Rewrite preference notes when enforcement is incomplete (no silent full-success claim).
+    if still_on or missing_pref:
+        notes_out = [n for n in notes_out if not str(n).startswith("User preference applied:")]
+        parts: list[str] = []
+        if avoided:
+            parts.append(f"requested avoid {', '.join(avoided)}")
+        if preferred_hwys:
+            parts.append(f"preferred {', '.join(preferred_hwys)}")
+        if still_on:
+            parts.append(
+                f"Avoided state {', '.join(still_on)} still on primary corridor (no alternate geometry)"
+            )
+        if missing_pref:
+            parts.append(
+                "; ".join(
+                    f"Preferred highway {p} not on primary route (noted, not injected)"
+                    for p in missing_pref
+                )
+            )
+        if parts:
+            notes_out.insert(0, "User preference partial: " + "; ".join(parts))
+
+    cost = calculate_estimated_cost(permit_states_for_cost, load, None, notes_out)
 
     distance_miles = round(total_dist_m / 1609.34, 1) if total_dist_m else 0
     duration_hours = round(total_dur_s / 3600, 1) if total_dur_s else 0
 
     # v0.3 World-Class: high quality actionable fields for permit filing + FE display.
     # specialInstructionsEnforced etc added as optional (backward compat: existing consumers ignore extras).
-    enforced = bool(avoided)
-    rationale = (
-        "Hard avoid enforcement (matrix) + practical OSOW vias (suggest_practical_vias) + "
-        "robust step-ref state extraction; primary satisfies avoids/includes where geometrically possible. "
-        f"Avoided: {avoided or []}. Uses major interstates (I-40/I-55/I-65/I-70/I-80 etc)."
-    ) if (avoided or parsed.get("included")) else None
+    # Honest: full success only when every avoid is off primary AND every preferred hwy is present.
+    enforced = bool(honesty["enforced"])
+    if avoided or parsed.get("included") or preferred_hwys:
+        if still_on:
+            rationale = (
+                f"Partial special-instructions: requested avoid {avoided}; "
+                f"{', '.join(still_on)} still on primary corridor (no alternate geometry). "
+                f"Preferred: {preferred_hwys or []}."
+            )
+        elif missing_pref:
+            rationale = (
+                f"Avoids enforced for {avoided or []}; "
+                f"preferred {', '.join(missing_pref)} not found on primary highways "
+                f"(noted, not injected). "
+                "Hard avoid enforcement (matrix) + practical OSOW vias where available."
+            )
+        else:
+            rationale = (
+                "Hard avoid enforcement (matrix) + practical OSOW vias (suggest_practical_vias) + "
+                "robust step-ref state extraction; primary satisfies avoids/includes where geometrically possible. "
+                f"Avoided: {avoided or []}. Preferred: {preferred_hwys or []}. "
+                "Uses major interstates (I-40/I-55/I-65/I-70/I-80 etc)."
+            )
+    else:
+        rationale = None
 
     return {
         "stops": [stops[i] for i in order],
@@ -2001,7 +2234,7 @@ async def _build_route_info_from_order(
         "costBreakdown": cost,
         "permitWarnings": all_warnings,
         "permitReady": permit_ready,
-        "notes": parsed.get("notes", []),
+        "notes": notes_out,
         "routingEngine": "or-tools+osrm",
         # New for v0.3 (FE can surface "Avoids enforced: AR, IL", "Corridor rationale...")
         "specialInstructionsEnforced": enforced,
@@ -2067,16 +2300,23 @@ async def optimize_route(load_details: Any, max_alts: int = MAX_ALTS) -> dict[st
     coords = [(s["lat"], s["lon"]) for s in stops]
 
     # v0.3: pass avoided so matrix applies hard crossing penalties before VRP solve
+    o_state_matrix = stops[0].get("state") if stops else None
+    d_state_matrix = stops[-1].get("state") if stops else None
+    if isinstance(load, dict):
+        if not o_state_matrix:
+            o_state_matrix = (load.get("origin") or {}).get("state") or load.get("originState")
+        if not d_state_matrix:
+            d_state_matrix = (load.get("destination") or {}).get("state") or load.get("destinationState")
     parsed_for_matrix = parse_special_instructions(
-        (load.get("specialInstructions") or load.get("special_instructions"))
+        (load.get("specialInstructions") or load.get("special_instructions")),
+        o_state_matrix,
+        d_state_matrix,
     )
     avoided_parsed = parsed_for_matrix.get("avoided", [])
     included_parsed = parsed_for_matrix.get("included", [])
     print(f"[ORT] {time.time():.3f} optimize_route parsed avoided={avoided_parsed} included={len(included_parsed)} num_stops={n}")
     logger.info("[ORT] optimize_route parsed avoided=%s included=%d num_stops=%d", avoided_parsed, len(included_parsed), n)
     try:
-        o_state_matrix = stops[0].get("state") if stops else None
-        d_state_matrix = stops[-1].get("state") if stops else None
         dist_matrix, used_real_matrix = await _build_distance_matrix(
             coords, avoided_parsed, o_state_matrix, d_state_matrix
         )

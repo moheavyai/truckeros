@@ -3,6 +3,7 @@
 import { getRoute, type RoutingEngine } from './routing'
 import { sampleRoutePoints } from './route-utils'
 import { reverseGeocode } from './geocoding'
+import { US_STATE_CODES, US_STATE_NAME_TO_CODE } from './us-states'
 
 /** Point on the route used for portal border entry/exit fields. */
 export interface BorderPoint {
@@ -29,6 +30,8 @@ export interface BorderCrossing {
 export interface CorridorResult {
   routeCorridor: string[]          // List of states (e.g. ["AL", "TN", "AR"])
   highways?: string[]              // List of major highways with realistic entry/exit points from OSRM step geometry (e.g. ["I-40 (entry 34.85,-86.62 exit 35.12,-90.05)", "US 64"])
+  /** Full pre-curate highway list (parity with OR-Tools uniq_hw) for preferred-hwy presence checks. */
+  highwaysAll?: string[]
   /** Structured border crossings aligned with this corridor's geometry (empty for single-state). */
   borderCrossings?: BorderCrossing[]
   distanceMeters?: number
@@ -211,6 +214,7 @@ export async function buildIntelligentCorridor(
     corridors.push({
       routeCorridor: states,
       highways,
+      highwaysAll: rawHighways.length > 0 ? rawHighways : highways,
       borderCrossings,
       distanceMeters: route.distance,
       durationSeconds: route.duration,
@@ -245,7 +249,7 @@ export async function buildIntelligentCorridor(
 
   // Apply (optional) user preferences as final lightweight bias on top of engine + quality ranking.
   // Keeps OSOW-friendly (interstate bias + GH) + respects "avoid X", "southern", "prefer I-XX".
-  corridors = applyUserPreferences(corridors, specialInstructions)
+  corridors = applyUserPreferences(corridors, specialInstructions, originState, destState)
 
   // Post-apply MVP enhancement (tiny, after all prior for stable input): inline rough flat projection haversine (no new fn/helper, duplicates coord/Number patterns from extractHighways) for single-route (common) + any primary detour awareness + permitReady + warnings[] derived from enriched hwys (reuses /^I- / ^US filter style from calculate).
   // Approx nature: rough flat projection (dPhi/dLambda + hypot * R) for ratio flagging only; US-centric long-haul error 2-10%+ possible (curvature, E-W, lat variance); threshold loose at 1.6x (safe for common single case; accounts for approx + real OSOW detours). Makes CorridorResult directly usable for real permit applications (structured warnings actionable for filing, flag for quick UI gating). Backward compat 100% (optionals + spread).
@@ -428,14 +432,6 @@ function getStateAbbreviation(stateName: string): string | null {
   return map[stateName] || null
 }
 
-
-/** US state codes for step attribution (matches extractStateHintsFromSteps valid set). */
-const US_STATE_CODES = new Set([
-  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
-  'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
-  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT',
-  'VA','WA','WV','WI','WY',
-])
 
 /** Fallback state when step ref lacks explicit code (only when no ref candidates). */
 const HIGHWAY_STATE_HINTS: Record<string, string> = {
@@ -1224,67 +1220,274 @@ export function hasPlausibleTransitions(states: string[]): boolean {
  *
  * All 7 prior + 9 issues from this [Tests] review (1948e321) now resolved or justified in this file (the only source edited). Both [General] reviewers reported 0 issues (correctness, parser lookahead separation for combos, include bias post-avoid precedence, unconditional primary force-exclude guarantee, o/d guard + note preservation, exact idiom reuse/dupe, contract safety, edge robustness on "avoid AR, avoid IL, include Corinth, MS" + variants, minimality all passed). Core logic changes (2 replaces in applyUserPreferences) + all contracts/shapes/callers/downstream 100% untouched by these comment-only enhancements. tsc --noEmit + targeted lint + git read-only (only intended minimal doc changes) re-verified clean before declaring done. The manual rig + exact repro + parser sims + tsc/git + this permanent in-file doc is the appropriate verification per pre-existing project state, prior precedent on this exact file, and task constraints. This doc serves as the permanent mitigation record for the special-instructions reliability improvements.
  */
-function applyUserPreferences(corridors: CorridorResult[], instructions?: string): CorridorResult[] {
+
+/** Normalized special-instructions parse result (shared with OR-Tools notes + applyUserPreferences). */
+export interface ParsedSpecialInstructions {
+  avoided: string[]
+  included: string[]
+  preferred: string[]
+}
+
+export interface PreferenceEnforcement {
+  stillOn: string[]
+  missingPref: string[]
+  enforced: boolean
+  partial: boolean
+}
+
+function normalizeHwyToken(raw: string): string {
+  const u = (raw || '').toUpperCase().replace(/[\s.\-]+/g, '')
+  if (/^US\d+$/.test(u)) return `US ${u.slice(2)}`
+  if (/^I\d+$/.test(u)) return `I-${u.slice(1)}`
+  return (raw || '').toUpperCase().trim()
+}
+
+/** Coerce full name or 2-letter to US state code (parity with Python _coerce_state_code). */
+function coerceStateCode(s?: string): string | undefined {
+  if (!s || !s.trim()) return undefined
+  const up = s.trim().toUpperCase()
+  if (US_STATE_CODES.has(up)) return up
+  const byName = US_STATE_NAME_TO_CODE[s.trim().toLowerCase()]
+  return byName || undefined
+}
+
+const CITY_SUFFIXES = new Set([
+  'city', 'springs', 'falls', 'beach', 'ville', 'town', 'port', 'harbor', 'harbour',
+])
+
+function looksLikeStateToken(tok: string): boolean {
+  const u = tok.toUpperCase()
+  if (/^[A-Z]{2}$/.test(u) && US_STATE_CODES.has(u)) return true
+  const titled = tok.toLowerCase().replace(/\b\w/g, (mm: string) => mm.toUpperCase())
+  return !!getStateAbbreviation(titled)
+}
+
+/**
+ * Preferred hwy presence: normalized plain-token *equality* (I-2 ≠ I-29), strip enrichment.
+ * Match against the full highways list (highwaysAll / pre-curate), not a curated top-N subset.
+ */
+export function highwayTokenPresent(pref: string, hwys?: string[]): boolean {
+  const normP = (pref || '').replace(/[-.\s]/g, '').toUpperCase()
+  if (!normP) return false
+  return (hwys || []).some(h => {
+    const plain = String(h).split(' (')[0]
+    const normH = plain.replace(/[-.\s]/g, '').toUpperCase()
+    return normH === normP
+  })
+}
+
+/** Pure honesty assessment (parity with Python assess_preference_enforcement). */
+export function assessPreferenceEnforcement(
+  avoided: string[],
+  preferred: string[],
+  routeCorridor: string[],
+  highways: string[],
+  originState?: string,
+  destState?: string,
+): PreferenceEnforcement {
+  const o = coerceStateCode(originState)
+  const d = coerceStateCode(destState)
+  const stillOn = (avoided || []).filter(a => routeCorridor.includes(a) && a !== o && a !== d)
+  const missingPref = (preferred || []).filter(p => !highwayTokenPresent(p, highways))
+  const hasGoal = (avoided && avoided.length > 0) || (preferred && preferred.length > 0)
+  const enforced = hasGoal && stillOn.length === 0 && missingPref.length === 0
+  return {
+    stillOn,
+    missingPref,
+    enforced,
+    partial: stillOn.length > 0 || missingPref.length > 0,
+  }
+}
+
+function stateCodesFromTokens(rawTokens: string[]): string[] {
+  const out: string[] = []
+  let i = 0
+  while (i < rawTokens.length) {
+    const t = rawTokens[i]
+    const nxt = i + 1 < rawTokens.length ? rawTokens[i + 1] : undefined
+    const prev = i > 0 ? rawTokens[i - 1] : undefined
+    if (nxt && CITY_SUFFIXES.has(nxt.toLowerCase())) {
+      i += 2
+      continue
+    }
+    // Conjunction "or" only when flanked by state-like tokens ("avoid CA or TX").
+    // Does NOT drop OK/OR/IN in comma lists: "avoid AR, OK, TX" / "avoid WA, OR".
+    if (
+      t.toLowerCase() === 'or' &&
+      prev &&
+      nxt &&
+      looksLikeStateToken(prev) &&
+      looksLikeStateToken(nxt)
+    ) {
+      i++
+      continue
+    }
+    const u = t.toUpperCase()
+    // Allowlist 2-letter codes (parity with Python STATE_ABBR) — reject "ON", random pairs
+    if (/^[A-Z]{2}$/.test(u) && US_STATE_CODES.has(u)) {
+      if (!out.includes(u)) out.push(u)
+      i++
+      continue
+    }
+    const titled = t.toLowerCase().replace(/\b\w/g, (mm: string) => mm.toUpperCase())
+    let code = getStateAbbreviation(titled)
+    if (code) {
+      if (!out.includes(code)) out.push(code)
+      i++
+      continue
+    }
+    if (nxt) {
+      const titled2 = nxt.toLowerCase().replace(/\b\w/g, (mm: string) => mm.toUpperCase())
+      code = getStateAbbreviation(`${titled} ${titled2}`)
+      if (code) {
+        if (!out.includes(code)) out.push(code)
+        i += 2
+        continue
+      }
+    }
+    i++
+  }
+  return out
+}
+
+/**
+ * Pure special-instructions parser.
+ * Avoid clause stops at period or next verb (use|take|prefer|via|include|through|from|enter|to|...).
+ * Prefer/use clauses extract highways (US136, US-136, US 136, I-29) — not bare "avoid I-40".
+ * originState/destState are always removed from avoidedStates (full names coerced to codes).
+ *
+ * Note on stop verb `to`: needed for "use US136 ... to enter NE" so NE is not avoided.
+ * Tradeoff: "avoid CA to AZ" truncates at `to` — prefer "avoid CA, AZ".
+ */
+export function parseSpecialInstructions(
+  instructions?: string,
+  originState?: string,
+  destState?: string,
+): ParsedSpecialInstructions {
+  if (!instructions || !instructions.trim()) {
+    return { avoided: [], included: [], preferred: [] }
+  }
+
+  // Keep periods as avoid-clause terminators (parity with OR-Tools). Soft-normalize ;: only.
+  const text = instructions.toLowerCase().replace(/[:;]+/g, ' ')
+  let avoided: string[] = []
+  let included: string[] = []
+  const preferred: string[] = []
+  let m: RegExpExecArray | null = null
+
+  // Avoid: stop at period OR next directive verb so "avoid IA. use US136 from Rock Port, MO to enter NE"
+  // does not slurp MO/NE into avoidedStates. `to` tradeoff: "avoid CA to AZ" → only CA (use "avoid CA, AZ").
+  const avoidVerbRe =
+    /(?:^|[\s,.(]|\b)(avoid|avoiding|no|skip|steer clear of|shun|bypass)\s+([a-z0-9,\s&\/]+?)(?=\s*(?:use|take|prefer|via|include|including|through|from|enter|to|avoid|avoiding|no|skip|steer clear of|shun|bypass|near|southern|northern|interstate|stay on|avoid major)\b|\s*\.|$)/gi
+  const avoidPhrases: string[] = []
+  while ((m = avoidVerbRe.exec(text)) !== null) {
+    if (m[2]) avoidPhrases.push(m[2].split('.')[0])
+  }
+  for (const phrase of avoidPhrases) {
+    const rawTokens = phrase.split(/[,&\s\/]+/).map(s => s.trim()).filter(Boolean)
+    for (const code of stateCodesFromTokens(rawTokens)) {
+      if (!avoided.includes(code)) avoided.push(code)
+    }
+  }
+
+  const includeVerbRe =
+    /(?:^|[\s,.(]|\b)(include|including|via|through|near|go (?:by|via|through|near)|pass (?:by|near|through))\s+([a-z0-9,\s&\/]+?)(?=\s*(?:avoid|avoiding|no|skip|include|prefer|use|take|via|through|near|from|enter|to|southern|northern|interstate|stay on)\b|\s*\.|$)/gi
+  const includePhrases: string[] = []
+  while ((m = includeVerbRe.exec(text)) !== null) {
+    if (m[2]) includePhrases.push(m[2].split('.')[0])
+  }
+  for (const phrase of includePhrases) {
+    const rawTokens = phrase.split(/[,&\s\/]+/).map(s => s.trim()).filter(Boolean)
+    for (let i = 0; i < rawTokens.length; i++) {
+      const t = rawTokens[i]
+      const nxt = i + 1 < rawTokens.length ? rawTokens[i + 1] : undefined
+      if (nxt && CITY_SUFFIXES.has(nxt.toLowerCase())) {
+        i++
+        continue
+      }
+      const u = t.toUpperCase()
+      if (/^[A-Z]{2}$/.test(u) && US_STATE_CODES.has(u)) {
+        if (!included.includes(u)) included.push(u)
+        continue
+      }
+      const titled = t.toLowerCase().replace(/\b\w/g, (mm: string) => mm.toUpperCase())
+      let code = getStateAbbreviation(titled)
+      if (code) {
+        if (!included.includes(code)) included.push(code)
+        continue
+      }
+      if (nxt) {
+        const titled2 = nxt.toLowerCase().replace(/\b\w/g, (mm: string) => mm.toUpperCase())
+        code = getStateAbbreviation(`${titled} ${titled2}`)
+        if (code) {
+          if (!included.includes(code)) included.push(code)
+          i++
+          continue
+        }
+      }
+    }
+  }
+
+  // Prefer/use/take/via ONLY — no bare-text fallback ("avoid I-40" must not prefer I-40)
+  const preferClauseRe =
+    /(?:^|[\s,.(]|\b)(use|take|prefer|via)\s+([a-z0-9,\s&\-\/]+?)(?=\s*(?:avoid|use|take|prefer|via|include|through|from|enter|to|southern|northern|interstate|stay on)\b|\s*\.|$)/gi
+  const hwyTokenRe = /\b(I-?\d+|US[-\s]?\d+)\b/gi
+  while ((m = preferClauseRe.exec(text)) !== null) {
+    const phrase = m[2] || ''
+    let hm: RegExpExecArray | null
+    const localHwy = new RegExp(hwyTokenRe.source, 'gi')
+    while ((hm = localHwy.exec(phrase)) !== null) {
+      const pref = normalizeHwyToken(hm[1])
+      if (pref && !preferred.includes(pref)) preferred.push(pref)
+    }
+  }
+
+  // OD guard: never avoid origin/dest (coerce full names → codes)
+  const o = coerceStateCode(originState)
+  const d = coerceStateCode(destState)
+  if (o || d) {
+    avoided = avoided.filter(a => a !== o && a !== d)
+  }
+
+  return { avoided, included, preferred }
+}
+
+function applyUserPreferences(
+  corridors: CorridorResult[],
+  instructions?: string,
+  originState?: string,
+  destState?: string,
+): CorridorResult[] {
   if (!instructions || !instructions.trim() || corridors.length === 0) return corridors
 
   const text = instructions.toLowerCase()
   let result = [...corridors]
   const applied: string[] = []
-  let avoided: string[] = []
-  let included: string[] = []
-  let m: RegExpExecArray | null = null
 
-  // Robust multi-directive parser (avoids slurping "include..." into avoids for combos like "avoid AR, avoid IL, include Corinth, MS"; lookahead stops at next verb). Reuses *exact* token/2-letter/getStateAbbreviation/2-word loop pattern + dedupe.
-  // MVP: added "bypass" to avoidVerbRe only (includeVerbRe omits for clean notes on mixed cases e.g. "bypass AR, include MS" -- no "included AR" pollution; "bypass" treated avoid-equivalent). Minimal string edit only.
-  const avoidVerbRe = /(?:^|[\s,.(]|\b)(avoid|avoiding|no|skip|steer clear of|shun|bypass)\s+([a-z0-9,\s&\/]+?)(?=\s*(?:avoid|avoiding|no|skip|include|prefer|via|through|near|southern|northern|interstate|stay on|avoid major|$))/gi
-  const avoidPhrases: string[] = []
-  while ((m = avoidVerbRe.exec(text)) !== null) { if (m[2]) avoidPhrases.push(m[2]) }
-  for (const phrase of avoidPhrases) {
-    const rawTokens = phrase.split(/[,&\s\/]+/).map(s => s.trim()).filter(Boolean)
-    for (let i = 0; i < rawTokens.length; i++) {
-      let t = rawTokens[i]; let u = t.toUpperCase()
-      if (/^[A-Z]{2}$/.test(u)) { avoided.push(u); continue }
-      let titled = t.toLowerCase().replace(/\b\w/g, (mm: string) => mm.toUpperCase())
-      let code = getStateAbbreviation(titled)
-      if (code) { avoided.push(code); continue }
-      if (i + 1 < rawTokens.length) {
-        const t2 = rawTokens[i + 1]; const titled2 = t2.toLowerCase().replace(/\b\w/g, (mm: string) => mm.toUpperCase())
-        const phrase2 = `${titled} ${titled2}`
-        code = getStateAbbreviation(phrase2)
-        if (code) { avoided.push(code); i++; continue }
-      }
-    }
-  }
-  { const seen = new Set<string>(); avoided = avoided.filter(a => (seen.has(a) ? false : (seen.add(a), true))) }
+  // Derive o/d from args or primary corridor bookends for OD guard (coerce full names)
+  const odOrigin =
+    coerceStateCode(originState) ||
+    corridors[0]?.routeCorridor?.[0] ||
+    undefined
+  const odDest =
+    coerceStateCode(destState) ||
+    (corridors[0]?.routeCorridor?.length
+      ? corridors[0].routeCorridor[corridors[0].routeCorridor.length - 1]
+      : undefined)
 
-  const includeVerbRe = /(?:^|[\s,.(]|\b)(include|including|via|through|near|go (?:by|via|through|near)|pass (?:by|near|through))\s+([a-z0-9,\s&\/]+?)(?=\s*(?:avoid|avoiding|no|skip|include|prefer|via|through|near|southern|northern|interstate|stay on|$))/gi
-  includeVerbRe.lastIndex = 0
-  const includePhrases: string[] = []
-  while ((m = includeVerbRe.exec(text)) !== null) { if (m[2]) includePhrases.push(m[2]) }
-  for (const phrase of includePhrases) {
-    const rawTokens = phrase.split(/[,&\s\/]+/).map(s => s.trim()).filter(Boolean)
-    for (let i = 0; i < rawTokens.length; i++) {
-      let t = rawTokens[i]; let u = t.toUpperCase()
-      if (/^[A-Z]{2}$/.test(u)) { included.push(u); continue }
-      let titled = t.toLowerCase().replace(/\b\w/g, (mm: string) => mm.toUpperCase())
-      let code = getStateAbbreviation(titled)
-      if (code) { included.push(code); continue }
-      if (i + 1 < rawTokens.length) {
-        const t2 = rawTokens[i + 1]; const titled2 = t2.toLowerCase().replace(/\b\w/g, (mm: string) => mm.toUpperCase())
-        const phrase2 = `${titled} ${titled2}`
-        code = getStateAbbreviation(phrase2)
-        if (code) { included.push(code); i++; continue }
-      }
-    }
-  }
-  { const seen = new Set<string>(); included = included.filter(a => (seen.has(a) ? false : (seen.add(a), true))) }
+  const parsed = parseSpecialInstructions(instructions, odOrigin, odDest)
+  const avoided = parsed.avoided
+  const included = parsed.included
+  const preferredList = parsed.preferred
+  let avoidFilterSucceeded = false
 
   if (avoided.length > 0) {
     const beforeLen = result.length
     result = result.filter(c => !avoided.some(av => c.routeCorridor.includes(av)))
     if (result.length === 0) {
-      result = [...corridors] // graceful fallback
+      result = [...corridors] // graceful fallback — do not claim full avoid success
     } else if (result.length < beforeLen) {
+      avoidFilterSucceeded = true
       applied.push(`avoided ${avoided.join(', ')}`)
       // Re-evaluate remaining (post avoid filter) for directness/reasonableness using OSRM geometry:
       // local shortest + calculateRouteQualityScore (dist ratio + highway patterns from steps) picks
@@ -1296,6 +1499,10 @@ function applyUserPreferences(corridors: CorridorResult[], instructions?: string
           .sort((a, b) => a.score - b.score)
           .map(item => item.corridor)
       }
+    } else {
+      // All corridors already free of avoided states
+      avoidFilterSucceeded = true
+      applied.push(`avoided ${avoided.join(', ')}`)
     }
   }
 
@@ -1339,23 +1546,19 @@ function applyUserPreferences(corridors: CorridorResult[], instructions?: string
     applied.push('favored northern routing')
   }
 
-  // Prefer specific highway mentioned (e.g. "prefer I-40", "I-40", "via I 40", "US 40", bare "i-40 is best", "I40 south")
-  // Regex strengthened for leading/bare/punct cases (Issue 1 fix); normalization handles I40/I-40/US40 variants (Issue 2 fix)
-  const hwyMatch = text.match(/(?:^|[\s,.(]|\b)(I-?\d+|US\s*\d+)\b/i)
-  if (hwyMatch) {
-    let pref = (hwyMatch[1] || '').toUpperCase().replace(/^US(\d+)/, 'US $1').trim()
-    if (pref) {
-      const hasPref = (c: CorridorResult) => (c.highways || []).some(h => {
-        const normH = h.replace(/[-.\s]/g, '').toUpperCase()
-        const normP = pref.replace(/[-.\s]/g, '')
-        return normH.includes(normP) || normP.includes(normH)
-      })
-      const withIt = result.filter(hasPref)
-      const without = result.filter(c => !hasPref(c))
-      if (withIt.length > 0) {
-        result = [...withIt, ...without]
-        applied.push(`preferred ${pref}`)
-      }
+  // Prefer specific highway(s) from parser (use/prefer/take/via only) — equality match on full/raw list
+  const hwysForPref = (c: CorridorResult) => c.highwaysAll || c.highways || []
+  for (const pref of preferredList) {
+    if (!pref) continue
+    const hasPref = (c: CorridorResult) => highwayTokenPresent(pref, hwysForPref(c))
+    const withIt = result.filter(hasPref)
+    const without = result.filter(c => !hasPref(c))
+    if (withIt.length > 0) {
+      result = [...withIt, ...without]
+      applied.push(`preferred ${pref}`)
+    } else {
+      // Honesty: preferred noted but not present — wording aligned with OR-Tools
+      applied.push(`Preferred highway ${pref} not on primary route (noted, not injected)`)
     }
   }
 
@@ -1382,14 +1585,47 @@ function applyUserPreferences(corridors: CorridorResult[], instructions?: string
     applied.push('avoided major metros (state-level post-proc note; verify city routing)')
   }
 
+  // Honesty: residual avoid and/or preferred missing → partial (not full success)
+  if (result.length > 0) {
+    const primary = result[0]
+    const honesty = assessPreferenceEnforcement(
+      avoided,
+      preferredList,
+      primary.routeCorridor,
+      primary.highwaysAll || primary.highways || [],
+      primary.routeCorridor[0],
+      primary.routeCorridor[primary.routeCorridor.length - 1],
+    )
+    for (const av of honesty.stillOn) {
+      if (!applied.some(a => a.includes(`Avoided state ${av} still on`))) {
+        applied.push(`Avoided state ${av} still on primary corridor (no alternate geometry)`)
+      }
+    }
+    // Downgrade a prior full "avoided X" claim when filter fell back / residual remains
+    if (honesty.stillOn.length > 0 && !avoidFilterSucceeded) {
+      const idx = applied.findIndex(a => a.startsWith('avoided '))
+      if (idx >= 0) applied.splice(idx, 1)
+    }
+  }
+
   if (applied.length > 0) {
-    const note = `User preference applied: ${applied.join('; ')}`
+    const hasPartial =
+      applied.some(
+        a =>
+          a.includes('still on primary corridor') ||
+          a.includes('not on primary route') ||
+          a.includes('not on available corridors'),
+      )
+    const note = hasPartial
+      ? `User preference partial: ${applied.join('; ')}`
+      : `User preference applied: ${applied.join('; ')}`
     // Non-mutating: produce new objects for the note (addresses minor purity smell while preserving all refs downstream)
     result = result.map(c => ({ ...c, userPreferenceNote: note }))
   }
 
-  // Post-process primary (strengthened for reliability): *always* force-exclude any avoided from final primary.routeCorridor (o/d guard preserved). Stronger than prior fallback-only hasAvoided check; guarantees "avoid X" completely removes state from primary even after all re-ranks, include bias, completion/heuristics. (Avoid wins over include by filter precedence.)
-  if (avoided.length > 0 && result.length > 0) {
+  // Post-process primary: force-exclude avoided from reported corridor when filter succeeded.
+  // When residual avoided remain (fallback path), keep geometry-truth corridor and honest note above.
+  if (avoided.length > 0 && result.length > 0 && avoidFilterSucceeded) {
     let primary = result[0]
     const o = primary.routeCorridor[0]
     const d = primary.routeCorridor[primary.routeCorridor.length - 1] || ''
