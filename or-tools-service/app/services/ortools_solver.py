@@ -147,8 +147,8 @@ async def get_table_matrix(
 
 
 MULTI_STATE_HWYS: set[str] = {
-    "I-35", "I-40", "I-44", "I-55", "I-57", "I-70", "I-75", "I-80", "I-90", "I-29", "I-25",
-    "US 81",
+    "I-10", "I-20", "I-25", "I-29", "I-35", "I-40", "I-44", "I-55", "I-57",
+    "I-70", "I-75", "I-80", "I-81", "I-85", "I-90", "I-95", "US 81",
 }
 
 
@@ -168,7 +168,8 @@ def _ok_mt_corridor_profile(plain_hwys: set[str]) -> str | None:
 
 
 def complete_corridor_with_highways(states: list[str], highways: list[str]) -> list[str]:
-    """Port of lib/build-corridor.ts completeCorridorWithHighways (southern + OK→MT heuristics)."""
+    """Port of lib/build-corridor.ts completeCorridorWithHighways
+    (southern + OK→MT + east-coast SC fill / LA strip)."""
     result = list(states)
     plain_hwys = {h.split(" (")[0] for h in (highways or [])}
 
@@ -209,6 +210,73 @@ def complete_corridor_with_highways(states: list[str], highways: list[str]) -> l
                 result.insert(result.index(anchor) + 1, "NE")
             if "SD" not in result and "NE" in result:
                 result.insert(result.index("NE") + 1, "SD")
+
+    # I-95 / I-85 seaboard family (I-81 is MULTI_STATE only — not a seaboard SC-fill trigger).
+    east_coast_hwy = bool(plain_hwys & {"I-95", "I-85"})
+
+    # Safety strip first: clear spurious mid-corridor LA so NC|GA become adjacent for SC fill.
+    # Never strip bookend LA (first/last position) — only remove mid indices. Keep mid LA when
+    # prev/next is a local gulf neighbor (TX/MS/AR); distant TX/MS/AR elsewhere must not block strip.
+    if east_coast_hwy:
+        n = len(result)
+        mid_la_idxs = [i for i in range(1, n - 1) if result[i] == "LA"]
+        if mid_la_idxs:
+            la_idx = mid_la_idxs[0]
+            prev = result[la_idx - 1]
+            next_s = result[la_idx + 1]
+
+            def _gulf_neighbor(s: str) -> bool:
+                return s in ("TX", "MS", "AR")
+
+            if not (_gulf_neighbor(prev) or _gulf_neighbor(next_s)):
+                # Strip mid LAs only — preserve origin/dest bookend LA.
+                without_la = [
+                    s for i, s in enumerate(result)
+                    if not (s == "LA" and 0 < i < n - 1)
+                ]
+                if has_plausible_transitions(without_la) or (
+                    not has_plausible_transitions(result)
+                    and (
+                        not are_adjacent(prev, "LA")
+                        or not are_adjacent("LA", next_s)
+                        or are_adjacent(prev, next_s)
+                    )
+                ):
+                    result = without_la
+
+    # East-coast SC fill: only when NC and GA (or NC and FL with no GA) are *index neighbors*
+    # (avoids inland NC-TN-AL-FL + I-95 false positives). NC→FL also inserts GA for SC-FL adjacency.
+    # Final has_plausible_transitions guard reverts bad inserts (same as OK heuristics).
+    if east_coast_hwy and "SC" not in result:
+        try:
+            nc_idx = result.index("NC")
+        except ValueError:
+            nc_idx = -1
+        if nc_idx != -1:
+            try:
+                ga_idx = result.index("GA")
+            except ValueError:
+                ga_idx = -1
+            try:
+                fl_idx = result.index("FL")
+            except ValueError:
+                fl_idx = -1
+            if ga_idx != -1 and abs(ga_idx - nc_idx) == 1:
+                if nc_idx < ga_idx:
+                    result.insert(nc_idx + 1, "SC")
+                else:
+                    result.insert(ga_idx + 1, "SC")
+            elif ga_idx == -1 and fl_idx != -1 and abs(fl_idx - nc_idx) == 1:
+                if nc_idx < fl_idx:
+                    result.insert(nc_idx + 1, "SC")
+                    if "GA" not in result:
+                        sc_idx = result.index("SC")
+                        result.insert(sc_idx + 1, "GA")
+                else:
+                    result.insert(nc_idx, "SC")
+                    if "GA" not in result:
+                        sc_idx = result.index("SC")
+                        result.insert(sc_idx, "GA")
 
     seen: set[str] = set()
     deduped = [s for s in result if not (s in seen or seen.add(s))]
@@ -1250,7 +1318,8 @@ def extract_states_from_highways_or_stops(
     hwy_state_hints = HIGHWAY_STATE_HINTS  # v0.3: use expanded config (was minimal 4)
     for h in highways:
         plain = h.split(" (")[0]
-        if plain in hwy_state_hints:
+        # Skip multi-state interstates (bare I-10 ≠ LA); same rule as _get_primary_state_for_step.
+        if plain in hwy_state_hints and plain not in MULTI_STATE_HWYS:
             s = hwy_state_hints[plain]
             if s not in states:
                 states.append(s)
@@ -1594,10 +1663,9 @@ def extract_border_crossings(steps: list[dict[str, Any]]) -> list[dict[str, Any]
 
 
 def are_adjacent(a: str, b: str) -> bool:
-    """Minimal port of lib/build-corridor.ts:areAdjacent + hasPlausible (for validation + derive on crossings).
-    Permissive for unknown; focused table ensures no AL->MO jumps etc in *border crossing points* derivation.
-    Used for validation (log non-adj in geometry seq) and derive (for borderCrossings list); *not* applied to prune
-    the direct geometry walk for primary routeCorridor (to guarantee no skipped states from actual steps).
+    """Port of lib/build-corridor.ts:areAdjacent + hasPlausible (validation + corridor guards).
+    Permissive for unknown; known pairs reject non-borders (e.g. VA→FL, NC→LA) so east-coast
+    LA strip / SC fill / final has_plausible_transitions match TS spirit.
     """
     if not a or not b or a == b:
         return True
@@ -1618,6 +1686,20 @@ def are_adjacent(a: str, b: str) -> bool:
         "ND": ["MN", "MT", "SD"],
         "CO": ["AZ", "KS", "NE", "NM", "OK", "UT", "WY"],
         "ID": ["MT", "NV", "OR", "UT", "WA", "WY"],
+        # Gulf + east-coast seaboard (parity with TS areAdjacent for I-95/I-85 corridors)
+        "TX": ["AR", "LA", "NM", "OK"],
+        "LA": ["AR", "MS", "TX"],
+        "NJ": ["DE", "NY", "PA"],
+        "DE": ["MD", "NJ", "PA"],
+        "MD": ["DE", "PA", "VA", "WV"],
+        "VA": ["KY", "MD", "NC", "TN", "WV"],
+        "NC": ["GA", "SC", "TN", "VA"],
+        "SC": ["GA", "NC"],
+        "GA": ["AL", "FL", "NC", "SC", "TN"],
+        "FL": ["AL", "GA"],
+        "PA": ["DE", "MD", "NJ", "NY", "OH", "WV"],
+        "WV": ["KY", "MD", "OH", "PA", "VA"],
+        "NY": ["CT", "MA", "NJ", "PA", "VT"],
     }
     aN = known.get(a)
     if not aN:
