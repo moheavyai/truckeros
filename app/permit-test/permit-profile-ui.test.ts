@@ -307,11 +307,17 @@ describe('Permit test page — routing envelope form string→number coercion', 
     const source = readPermitPageSource()
     const slices = computeRoutingEnvelopeCallSlices(source)
 
-    // Envelope useEffect + formatRigSummaryLine
-    expect(slices).toHaveLength(2)
+    // Envelope useEffect + formatRigSummaryLine + handleSelectRig(null) clear path
+    expect(slices).toHaveLength(3)
     expect(source).toContain('function formatRigSummaryLine()')
+    expect(source).toContain('function handleSelectRig(rig: RigConfiguration | null)')
 
-    for (const slice of slices) {
+    const formDataSlices = slices.filter((s) => s.includes('formData.loadWidthFt'))
+    const clearPathSlices = slices.filter((s) => s.includes('next.loadWidthFt'))
+    expect(formDataSlices).toHaveLength(2)
+    expect(clearPathSlices).toHaveLength(1)
+
+    for (const slice of formDataSlices) {
       for (const field of coercedFields) {
         expect(slice).toContain(field)
       }
@@ -322,6 +328,15 @@ describe('Permit test page — routing envelope form string→number coercion', 
       expect(slice).not.toContain('loadHeightFt: formData.loadHeightFt,')
       expect(slice).not.toContain('loadWeightLbs: formData.loadWeightLbs,')
     }
+
+    // Custom-dimensions clear path: load-only numbers via Number(next.*) / literals
+    const clearSlice = clearPathSlices[0]
+    expect(clearSlice).toContain('loadWidthFt: Number(next.loadWidthFt) || 0')
+    expect(clearSlice).toContain('loadHeightFt: Number(next.loadHeightFt) || 0')
+    expect(clearSlice).toContain('loadWeightLbs: Number(next.loadWeightLbs) || 0')
+    expect(clearSlice).toContain('trailerWidthFt: 0')
+    expect(clearSlice).toContain('deckHeightFt: 0')
+    expect(clearSlice).toContain('rigEmptyWeightLbs: 0')
   })
 
   it('defaults gross width to legal 8.5 ft (not inflated 9.67 / 9\'8") when no load details', () => {

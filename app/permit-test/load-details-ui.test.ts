@@ -289,4 +289,48 @@ describe('Permit test page — axle weight distribution', () => {
     expect(source).toContain('axleCountMismatch')
     expect(source).toContain('weightChanged || axleCountMismatch')
   })
+
+  it('clears residual rig envelope when switching to custom dimensions (no rig)', () => {
+    const source = readPermitPageSource()
+    const start = source.indexOf('function handleSelectRig(rig: RigConfiguration | null)')
+    const end = source.indexOf('// Safety net: if user selected a rig before the async', start)
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    const handler = source.slice(start, end)
+
+    // Null path clears selection + snapshot
+    expect(handler).toContain('if (!rig)')
+    expect(handler).toContain('setSelectedRigId(null)')
+    expect(handler).toContain('setSelectedRigSnapshot(null)')
+
+    // Clears rig-derived equipment fields so residual envelope cannot stick
+    expect(handler).toContain("tractorEmptyWeightLbs: ''")
+    expect(handler).toContain("trailerEmptyWeightLbs: ''")
+    expect(handler).toContain("rigEmptyWeightLbs: ''")
+    expect(handler).toContain("trailerWidthFt: ''")
+    expect(handler).toContain("trailerDeckHeightFt: ''")
+    expect(handler).toContain("trailerLengthFt: ''")
+    expect(handler).toContain('kingpinSettingIn: 36')
+    expect(handler).toContain('axles: 5')
+
+    // Recomputes load-only envelope (self-powered / taxi-crane case)
+    expect(handler).toContain('computeRoutingEnvelope')
+    expect(handler).toContain('rigLengthFt: Number(next.loadLengthFt) || 0')
+    expect(handler).toContain('rigEmptyWeightLbs: 0')
+    expect(handler).toContain('resolvePermitAxleLayout(next.axles, null)')
+    expect(handler).toContain('distributeWeightSteerFirst')
+
+    // Must not wipe pure load detail fields
+    expect(handler).not.toContain("loadWeightLbs: ''")
+    expect(handler).not.toContain("loadLengthFt: ''")
+    expect(handler).not.toContain("loadWidthFt: ''")
+    expect(handler).not.toContain("loadHeightFt: ''")
+
+    // UI wires empty select value to handleSelectRig(null)
+    expect(source).toContain('handleSelectRig(null)')
+    expect(source).toContain('— Custom dimensions —')
+
+    // Live envelope uses load length when no rig snapshot
+    expect(source).toContain('!selectedRigSnapshot ? Number(formData.loadLengthFt) || 0')
+  })
 })
