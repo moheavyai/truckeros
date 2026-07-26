@@ -56,6 +56,8 @@ export default function HistoryPage() {
   const [submissions, setSubmissions] = useState<PortalSubmission[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedRequest, setSelectedRequest] = useState<PermitRequest | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const router = useRouter()
 
   /**
@@ -123,6 +125,79 @@ export default function HistoryPage() {
     )
   }
 
+  /**
+   * Delete a single analysis. portal_submissions cascade via FK ON DELETE CASCADE.
+   * Still scopes delete by user_id for defense-in-depth (RLS also enforces ownership).
+   */
+  const handleDeleteOne = async (id: string) => {
+    if (!user?.id || deleting) return
+    if (!window.confirm('Delete this analysis? This cannot be undone.')) return
+
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('permit_requests')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id)
+
+      if (error) {
+        setDeleteError(error.message || 'Failed to delete analysis.')
+        return
+      }
+
+      setRequests((prev) => prev.filter((r) => r.id !== id))
+      setSubmissions((prev) => prev.filter((s) => s.permit_request_id !== id))
+      if (selectedRequest?.id === id) {
+        setSelectedRequest(null)
+      }
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Failed to delete analysis.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  /**
+   * Delete the currently loaded analyses only (matches confirm N).
+   * Scoped by loaded ids + user_id so we never wipe rows beyond the displayed list
+   * (fetch uses .limit(100)). Related portal_submissions cascade via FK ON DELETE CASCADE.
+   */
+  const handleDeleteAll = async () => {
+    if (!user?.id || deleting || requests.length === 0) return
+    const ids = requests.map((r) => r.id)
+    if (!window.confirm(`Delete ALL ${ids.length} analyses? This cannot be undone.`)) return
+
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('permit_requests')
+        .delete()
+        .in('id', ids)
+        .eq('user_id', user.id)
+
+      if (error) {
+        setDeleteError(error.message || 'Failed to delete analyses.')
+        return
+      }
+
+      const idSet = new Set(ids)
+      setRequests((prev) => prev.filter((r) => !idSet.has(r.id)))
+      setSubmissions((prev) => prev.filter((s) => !idSet.has(s.permit_request_id)))
+      if (selectedRequest && idSet.has(selectedRequest.id)) {
+        setSelectedRequest(null)
+      }
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Failed to delete analyses.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString(undefined, {
       month: 'short',
@@ -172,10 +247,28 @@ export default function HistoryPage() {
       <AppHeader user={user} />
 
       <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6 sm:py-10 min-w-0">
-        <div className="mb-8">
-          <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Analysis History</h1>
-          <p className="text-gray-600 mt-1.5">All your previous OSOW permit analyses</p>
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Analysis History</h1>
+            <p className="text-gray-600 mt-1.5">All your previous OSOW permit analyses</p>
+          </div>
+          {requests.length > 0 && (
+            <button
+              type="button"
+              onClick={handleDeleteAll}
+              disabled={deleting}
+              className="shrink-0 self-start px-4 py-2 text-sm font-medium text-red-700 border border-red-200 bg-red-50 hover:bg-red-100 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {deleting ? 'Deleting...' : 'Delete all'}
+            </button>
+          )}
         </div>
+
+        {deleteError && (
+          <div className="mb-4 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-sm text-red-700" role="alert">
+            {deleteError}
+          </div>
+        )}
 
         {/* Main Content */}
         <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
@@ -204,7 +297,7 @@ export default function HistoryPage() {
                     <th className="text-left px-6 py-4 font-semibold text-gray-700">Corridor</th>
                     <th className="text-left px-6 py-4 font-semibold text-gray-700">Status</th>
                     <th className="text-right px-6 py-4 font-semibold text-gray-700">Est. Cost</th>
-                    <th className="w-20"></th>
+                    <th className="w-40"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -260,12 +353,23 @@ export default function HistoryPage() {
                           {req.estimated_cost ? `$${req.estimated_cost}` : '—'}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <button
-                            onClick={() => setSelectedRequest(req)}
-                            className="text-sm px-3 py-1.5 border border-gray-300 hover:bg-gray-100 rounded-lg text-gray-700 transition"
-                          >
-                            View
-                          </button>
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedRequest(req)}
+                              className="text-sm px-3 py-1.5 border border-gray-300 hover:bg-gray-100 rounded-lg text-gray-700 transition"
+                            >
+                              View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOne(req.id)}
+                              disabled={deleting}
+                              className="text-sm px-3 py-1.5 border border-red-200 text-red-700 hover:bg-red-50 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {deleting ? 'Deleting...' : 'Delete'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -481,6 +585,15 @@ export default function HistoryPage() {
 
             <div className="border-t px-6 py-4 flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-3">
               <button
+                type="button"
+                onClick={() => handleDeleteOne(selectedRequest.id)}
+                disabled={deleting}
+                className="w-full sm:w-auto px-5 py-2 text-sm border border-red-200 text-red-700 rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+              <button
+                type="button"
                 onClick={() => setSelectedRequest(null)}
                 className="w-full sm:w-auto px-5 py-2 text-sm border rounded-lg hover:bg-gray-50"
               >
