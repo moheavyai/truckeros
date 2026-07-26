@@ -186,6 +186,24 @@ describe('east-coast corridor NJ→FL I-95', () => {
     expect(hasPlausibleTransitions(corridor)).toBe(true)
   })
 
+  it('strips mid NC-LA-GA even with distant MS and I-10 present, then fills SC', () => {
+    // Global TX/MS/AR-anywhere must not block strip; only local gulf prev/next keeps LA.
+    // MS is far from LA (via FL→AL), so the old global MS gate wrongly blocked this case.
+    const corridor = completeCorridorWithHighways(
+      ['NJ', 'DE', 'MD', 'VA', 'NC', 'LA', 'GA', 'FL', 'AL', 'MS'],
+      ['I-95', 'I-10'],
+    )
+    expect(corridor).not.toContain('LA')
+    expect(corridor).toContain('SC')
+    expect(corridor).toContain('MS')
+    const ncIdx = corridor.indexOf('NC')
+    const scIdx = corridor.indexOf('SC')
+    const gaIdx = corridor.indexOf('GA')
+    expect(ncIdx).toBeLessThan(scIdx)
+    expect(scIdx).toBeLessThan(gaIdx)
+    expect(hasPlausibleTransitions(corridor)).toBe(true)
+  })
+
   it('never strips LA when it is origin or dest bookend', () => {
     const destLa = completeCorridorWithHighways(
       ['TX', 'MS', 'AL', 'FL', 'LA'],

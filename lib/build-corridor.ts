@@ -1045,15 +1045,9 @@ export function completeCorridorWithHighways(states: string[], highways: string[
   const eastCoastHwy = plainHwys.has('I-95') || plainHwys.has('I-85')
 
   // Safety strip first: clear spurious mid-corridor LA so NC|GA become adjacent for SC fill.
-  // Never strip LA when it is origin/dest bookend (first/last). Gulf I-10 paths (TX/MS/AR) kept.
-  if (
-    result.includes('LA') &&
-    eastCoastHwy &&
-    !(
-      plainHwys.has('I-10') &&
-      (result.includes('TX') || result.includes('MS') || result.includes('AR'))
-    )
-  ) {
+  // Never strip bookend LA (first/last). Keep LA only when prev/next is a local gulf neighbor (TX/MS/AR)
+  // — distant TX/MS/AR elsewhere in the corridor must not block strip.
+  if (result.includes('LA') && eastCoastHwy) {
     const laIdx = result.indexOf('LA')
     if (laIdx > 0 && laIdx < result.length - 1) {
       const prev = result[laIdx - 1]
