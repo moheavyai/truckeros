@@ -415,6 +415,9 @@ export function getVisibleDashboardTools(
   }
 
   // Spacing-based federal/state group planner (not equipment role groups).
+  // Primary UI entry is Equipment for roles with equipment access. Dashboard welcome
+  // CTAs exclude axle when Equipment nav is available; permit-only roles may still
+  // see it as a secondary welcome tool. Direct /axle-optimizer always works.
   if (canAccessArea('permit_agent', permissions) || shouldShowEquipmentNav(actor)) {
     tools.push({
       id: 'axle_optimizer',

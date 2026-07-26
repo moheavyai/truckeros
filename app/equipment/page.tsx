@@ -1036,6 +1036,20 @@ export default function EquipmentPage() {
           </div>
         </div>
 
+        {/* Axle Group Optimizer — primary entry for equipment-capable roles */}
+        <a
+          href="/axle-optimizer"
+          className={`${cardCompactClass} mb-6 min-h-[44px] flex items-center justify-between gap-3 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 transition-colors`}
+        >
+          <div className="min-w-0">
+            <div className="font-semibold text-gray-900">Axle Group Optimizer</div>
+            <p className={`${mutedTextClass} text-xs mt-0.5`}>
+              Tune axle spacing for tandem, spread, and tridem legal groups.
+            </p>
+          </div>
+          <span className="shrink-0 text-sm font-medium text-gray-900">Open →</span>
+        </a>
+
         {/* Tabs */}
         <div className={`flex gap-1 border-b ${dividerBorderClass} mb-6`}>
           {([
