@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import VehicleDiagram from '@/components/VehicleDiagram'
@@ -37,6 +37,8 @@ import OverhangFeetInput from '@/components/OverhangFeetInput'
 import LocationStopInput from '@/components/LocationStopInput'
 import ActiveCarrierBanner from '@/components/ActiveCarrierBanner'
 import CarrierContextBar from '@/components/CarrierContextBar'
+import { RouteMapCard, buildRouteMapModel } from '@/components/route-map'
+import type { RouteMapStatus } from '@/components/route-map'
 import {
   buildOrganizationTeamMemberList,
   buildTeamMemberList,
@@ -800,11 +802,10 @@ export default function PermitTestPage() {
 
   const LEGAL_GROSS_LBS = 80000
 
-  // NEW (Intake v2): equipment profile selector + Quick Route Glance state (declared early so helpers below can reference safely)
+  // NEW (Intake v2): equipment profile selector (declared early so helpers below can reference safely)
   const [equipmentProfiles, setEquipmentProfiles] = useState<any[]>([])
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   const [loadingProfiles, setLoadingProfiles] = useState(false)
-  const [glance, setGlance] = useState<any>(null)
 
   // NEW Smart Rig Builder integration (v3): separate tractors/trailers/rigs from /equipment
   const [rigs, setRigs] = useState<RigConfiguration[]>([])
@@ -1366,7 +1367,6 @@ export default function PermitTestPage() {
       trailerYear: profile.trailer_year != null ? String(profile.trailer_year) : '',
       trailerLengthFt: profile.trailer_length_ft || 53,
     }))
-    setGlance(null)
   }
 
   // NEW Smart Rig Selector handler (v3) — sets snapshot for clean display + submit payload
@@ -1422,7 +1422,6 @@ export default function PermitTestPage() {
         next.axleWeights = distributeWeightSteerFirst(n, gross, groups)
         return next
       })
-      setGlance(null)
       return
     }
     setSelectedRigId(rig.id)
@@ -1448,7 +1447,6 @@ export default function PermitTestPage() {
       next.axleWeights = distributeWeightSteerFirst(n, gross, groups)
       return next
     })
-    setGlance(null)
   }
 
   // Safety net: if user selected a rig before the async tractor/trailer load finished,
@@ -1525,31 +1523,6 @@ export default function PermitTestPage() {
     } catch (e: any) {
       alert('Failed to save profile: ' + (e?.message || e))
     }
-  }
-
-  function handleQuickGlance() {
-    const synced = syncDestinationFromDrops(formData)
-    const o = (synced.origin.state || '').toUpperCase()
-    const dropStates = synced.drops.map((d) => (d.state || '?').toUpperCase()).join(' → ')
-    const d = (synced.destination.state || '').toUpperCase()
-    const corridor = dropStates ? `${o || '?'} → ${dropStates}` : `${o || '?'} → ${d || '?'}`
-
-    // Heuristic major highways for the corridors used in this app (AL-NE demo + common long-haul). Matches History badge style.
-    let highways: string[] = ['I-40', 'I-80']
-    if ((o === 'AL' && d === 'NE') || (o === 'NE' && d === 'AL')) highways = ['I-65', 'I-70', 'I-80']
-    else if (o === 'CA' || d === 'CA') highways = ['I-5', 'I-10', 'I-40']
-    else if (o === 'TX' || d === 'TX') highways = ['I-10', 'I-20', 'I-35']
-
-    const w = Number(formData.weight) || 80000
-    const isLong = (Number(formData.length) || 60) > 60
-    const rough = Math.max(65, Math.round(((w - 80000) / 1500) * 11 + (isLong ? 55 : 0) + 50))
-
-    setGlance({
-      corridor,
-      highways,
-      roughFee: rough,
-      note: 'Preview only — rough corridor estimate. Full OR-Tools optimization runs automatically below with live DOT restrictions and accurate highways.',
-    })
   }
 
   // Ref for scrolling to results after submission
@@ -1792,6 +1765,66 @@ export default function PermitTestPage() {
 
   // Small helper for uniform primary derivation (addresses Issue 7 suggestion for maintainability across render/approve sites; no behavior change)
   const getPrimary = (ar: any, r: any) => ar?.options?.[0] || ar || r?.agent
+
+  /** Map v1 view model: form geocodes (idle) + OR-Tools option (ready) + routeProgress status. */
+  const routeMapModel = useMemo(() => {
+    const primary = getPrimary(agentResult, result)
+    const hasRouteOption = !!(
+      primary &&
+      (primary.stops?.length || primary.routeCorridor?.length || primary.distanceMiles)
+    )
+    const mapStatus: RouteMapStatus =
+      routeProgress === 'error'
+        ? 'error'
+        : routeProgress === 'calculating' || routeProgress === 'geocoding'
+          ? 'calculating'
+          : routeProgress === 'ready' || hasRouteOption
+            ? 'ready'
+            : 'idle'
+
+    const formSynced = syncDestinationFromDrops(formData)
+    const originLabel =
+      [formSynced.origin.city, formSynced.origin.state].filter(Boolean).join(', ') ||
+      formSynced.origin.query ||
+      'Origin'
+    const destLabel =
+      [formSynced.destination.city, formSynced.destination.state].filter(Boolean).join(', ') ||
+      formSynced.destination.query ||
+      'Destination'
+
+    return buildRouteMapModel({
+      status: mapStatus,
+      message:
+        routeProgress === 'error'
+          ? routeProgressDetail || 'Route calculation failed'
+          : routeProgress === 'geocoding'
+            ? routeProgressDetail || 'Resolving addresses…'
+            : routeProgress === 'calculating'
+              ? routeProgressDetail || 'Calculating best route…'
+              : undefined,
+      option: primary || null,
+      formStops: {
+        origin: {
+          name: originLabel,
+          lat: formSynced.originLat ?? null,
+          lon: formSynced.originLon ?? null,
+        },
+        drops: (formSynced.drops || []).map((d, i) => ({
+          name:
+            [d.city, d.state].filter(Boolean).join(', ') ||
+            d.query ||
+            `Drop ${i + 1}`,
+          lat: d.lat ?? null,
+          lon: d.lon ?? null,
+        })),
+        destination: {
+          name: destLabel,
+          lat: formSynced.destinationLat ?? null,
+          lon: formSynced.destinationLon ?? null,
+        },
+      },
+    })
+  }, [agentResult, result, routeProgress, routeProgressDetail, formData])
 
   /** Map /api/optimize-route JSON to the agentResult shape (including OSRM fallback). */
   function normalizeOrToolsToAgentData(optData: any) {
@@ -3836,55 +3869,8 @@ export default function PermitTestPage() {
           <p className="text-red-500 text-sm">{errors['geocode']}</p>
         )}
 
-        {(routeProgress !== 'idle' || loading) && (
-          <div className={`rounded-2xl p-4 border flex items-center gap-3 ${
-            routeProgress === 'error' ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'
-          }`}>
-            {loading && routeProgress !== 'error' && (
-              <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
-            )}
-            <div className="min-w-0">
-              <p className={`text-sm font-medium ${routeProgress === 'error' ? 'text-red-800' : 'text-blue-900'}`}>
-                {routeProgress === 'error' ? 'Route calculation failed' : routeProgressDetail || 'Calculating best route…'}
-              </p>
-              {routeProgress === 'calculating' && (
-                <p className="text-xs text-blue-700 mt-0.5">Best route and permit analysis run automatically when addresses are complete</p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Quick Route Glance — optional corridor preview (after addresses; needs origin/dest) */}
-        <div className="p-4 border-2 border-blue-100 bg-blue-50 rounded-xl">
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold text-blue-900 text-sm">Quick Route Glance</div>
-            <button
-              type="button"
-              onClick={handleQuickGlance}
-              className="text-xs px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Preview Corridor &amp; Fee
-            </button>
-          </div>
-          <p className="text-xs text-blue-700 mb-2">Rough corridor/fee preview. Full optimization runs when addresses geocode and load dimensions are set.</p>
-
-          {glance && (
-            <div className="space-y-2 text-sm">
-              <div><span className="font-medium text-blue-900">Corridor:</span> <span className="font-mono">{glance.corridor}</span></div>
-              <div>
-                <span className="font-medium text-blue-900">Est. Major Highways:</span>
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {glance.highways.map((h: string, i: number) => (
-                    <span key={i} className="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium border bg-white text-blue-800 border-blue-200">{formatHighwayForDisplay(h)}</span>
-                  ))}
-                </div>
-              </div>
-              <div><span className="font-medium text-blue-900">Rough Fee Estimate:</span> <span className="font-semibold">${glance.roughFee}</span> <span className="text-xs text-blue-600">(varies by exact route &amp; permits)</span></div>
-              <div className="text-[10px] text-blue-600 italic">{glance.note}</div>
-            </div>
-          )}
-          {!glance && <div className="text-xs text-blue-600">Preview corridor, or wait for auto-optimization when addresses geocode and load dimensions are set.</div>}
-        </div>
+        {/* Map v1: single Route card (replaces tall progress hero + long corridor preview chrome). */}
+        <RouteMapCard model={routeMapModel} />
         </div> {/* End form card */}
       </form>
 
