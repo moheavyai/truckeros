@@ -11,6 +11,19 @@ function readSource(filePath: string) {
 }
 
 describe('Portal Assist page UX', () => {
+  it('ships shortened polish intro and helper copy', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('Secure prefill and assisted submission for state DOT OSOW portals.')
+    expect(source).toContain('Add a state: one entry in')
+    expect(source).toContain('No request loaded. Use Load Demo, or open from')
+    expect(source).toContain('Confirm carrier, driver, load, and equipment before portal entry.')
+    expect(source).toContain(
+      'Logged as [portal-assist]. Credentials encrypted server-side. Approval required before human_approved submissions.'
+    )
+    expect(source).toContain('No PDFs yet — upload after portal response.')
+    expect(source).toContain('49 states (except HI). Click to expand; selection updates the right panel.')
+  })
+
   it('pre-loads first corridor state via resolveInitialPortalState on real request load', () => {
     const source = readSource(pagePath)
     expect(source).toContain('resolveInitialPortalState')
@@ -195,12 +208,19 @@ describe('Portal Assist mobile contrast classes', () => {
     expect(source).toContain('const cardClass =')
     expect(source).toContain('const cardMetaClass =')
 
-    // Labels share hint contrast (composed, not duplicated string)
-    expect(source).toMatch(/const fieldLabelClass = fieldHintClass/)
+    // Labels stay slightly stronger than pure gray-500 hints
+    expect(source).toMatch(
+      /fieldLabelClass = 'text-xs text-gray-600 sm:text-gray-500'/
+    )
+    expect(source).not.toMatch(/const fieldLabelClass = fieldHintClass/)
 
     expect(source).toMatch(/border-gray-500 sm:border-gray-300/)
     expect(source).toMatch(/text-gray-900/)
     expect(source).toMatch(/placeholder:text-gray-500/)
+    // Hints are soft gray-500 (tone token); labels/section chrome keep gray-600 sm:gray-500
+    expect(source).toMatch(/fieldHintToneClass = 'text-gray-500'/)
+    expect(source).toMatch(/fieldHintClass = `text-xs \$\{fieldHintToneClass\}`/)
+    expect(source).toMatch(/fieldHintTinyClass = `text-\[10px\] \$\{fieldHintToneClass\}`/)
     expect(source).toMatch(/text-gray-600 sm:text-gray-500/)
     expect(source).toMatch(/text-gray-700 sm:text-gray-600/)
     expect(source).toMatch(/border-gray-300 sm:border-gray-200/)
@@ -224,7 +244,11 @@ describe('Portal Assist mobile contrast classes', () => {
     expect(source).toContain('className={`inline-block px-4 py-2 ${buttonSuccessClass} rounded-lg mb-3 ml-2`}')
     expect(source).toContain('className={cardClass}')
     expect(source).toContain('className={cardMetaClass}')
-    expect(source).toContain('className={`${fieldHintClass} text-[11px] mt-1`}')
+    expect(source).toContain('className={`${fieldHintTinyClass} mt-1`}')
+    // text-sm body/meta uses tone only — no text-sm + text-xs stack
+    expect(source).toContain('className={`text-sm ${fieldHintToneClass}`}')
+    expect(source).toContain('className={`text-sm italic ${fieldHintToneClass}`}')
+    expect(source).not.toMatch(/text-sm \$\{fieldHintClass\}/)
 
     // Credential inputs must not use bare border-only class strings
     expect(source).not.toMatch(/className="flex-1 border rounded-lg px-3 py-2 text-sm"/)

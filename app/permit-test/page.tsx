@@ -2747,113 +2747,131 @@ export default function PermitTestPage() {
       <CarrierContextBar ownOrganizationId={ownOrganizationId} />
       <ActiveCarrierBanner ownOrganizationId={ownOrganizationId} />
 
-      <div className="mb-8">
+      <div className="mb-6">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">New Route Analysis</h1>
-          <p className="text-sm text-gray-700 sm:text-gray-600 mt-1.5 leading-relaxed">
-            Work top to bottom: choose driver and rig, enter load details, optional route preferences, then pickup and drops.
-            Routing and permits run automatically once addresses geocode.
+          <p className="text-sm text-gray-700 sm:text-gray-600 mt-1">
+            Choose driver and rig, enter load details, optional route preferences, then pickup and drops — routing runs when addresses geocode and load dimensions are set.
           </p>
         </div>
 
         {/* OR-Tools Service Connection Status — dev-only debug chrome (hidden in production) */}
         {isDevEnvironment() && (() => {
           const isOrToolsChecking = checkingOrToolsHealth || ortoolsHealth === null
+          const isUnreachable = !isOrToolsChecking && ortoolsHealth?.status === 'unreachable'
           const isHealthProbeTimeout = ortoolsHealth?.message?.toLowerCase().includes('timed out') ?? false
+          const unreachableTitle = isHealthProbeTimeout
+            ? 'Quick 5s health probe timed out — service may still be running; full optimization can take several minutes. Route analysis may fall back to OSRM.'
+            : 'Health probe could not reach OR-Tools — ensure the service is running on port 8000. Route analysis may fall back to OSRM.'
+          const bannerTitle = isUnreachable
+            ? unreachableTitle
+            : ortoolsHealth?.message || undefined
           return (
-            <div
-              className={`mt-4 p-4 rounded-xl border flex flex-wrap items-center gap-3 ${
-                isOrToolsChecking
-                  ? 'bg-gray-50 border-gray-200 text-gray-700'
-                  : ortoolsHealth?.connected
-                    ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-                    : ortoolsHealth?.status === 'unreachable'
-                      ? 'bg-amber-50 border-amber-300 text-amber-900'
-                      : 'bg-gray-50 border-gray-200 text-gray-700'
-              }`}
-            >
-              <div className="flex flex-col gap-1 flex-1 min-w-[200px]">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-3 h-3 rounded-full shrink-0 ${
-                      isOrToolsChecking
-                        ? 'bg-gray-400 animate-pulse'
-                        : ortoolsHealth?.connected
-                          ? 'bg-emerald-500'
-                          : ortoolsHealth?.status === 'unreachable'
-                            ? 'bg-amber-500'
-                            : 'bg-gray-400'
-                    }`}
-                  />
-                  <span className="font-semibold">
-                    {isOrToolsChecking
-                      ? 'OR-Tools: Checking…'
+            <div className="mt-3 space-y-1">
+              <div
+                className={`px-3 py-1.5 rounded-lg border flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm ${
+                  isOrToolsChecking
+                    ? 'bg-gray-50 border-gray-200 text-gray-700'
+                    : ortoolsHealth?.connected
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                      : isUnreachable
+                        ? 'bg-amber-50 border-amber-300 text-amber-900'
+                        : 'bg-gray-50 border-gray-200 text-gray-700'
+                }`}
+                title={bannerTitle}
+              >
+                <div
+                  className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                    isOrToolsChecking
+                      ? 'bg-gray-400 animate-pulse'
                       : ortoolsHealth?.connected
-                        ? 'OR-Tools: Connected'
-                        : ortoolsHealth?.status === 'unreachable'
-                          ? 'OR-Tools: Unreachable'
-                          : 'OR-Tools: Checking…'}
-                  </span>
-                  {ortoolsHealth?.message && !isOrToolsChecking && (
-                    <span className="text-xs opacity-80">— {ortoolsHealth.message}</span>
-                  )}
-                </div>
-                {!isOrToolsChecking && ortoolsHealth?.connected && (ortoolsHealth.version || ortoolsHealth.buildId) && (
-                  <p className="text-xs opacity-80 pl-5 font-mono">
-                    v{ortoolsHealth.version || '?'}
-                    {ortoolsHealth.buildId ? ` · build ${ortoolsHealth.buildId}` : ''}
-                  </p>
-                )}
-                {!isOrToolsChecking && ortoolsHealth?.status === 'unreachable' && (
-                  <div className="text-xs opacity-80 pl-5 space-y-0.5">
-                    <p>
-                      {isHealthProbeTimeout
-                        ? 'Quick 5s health probe timed out — the service may still be running but busy; full optimization can take several minutes.'
-                        : 'Health probe could not reach OR-Tools — ensure the service is running on port 8000.'}
-                    </p>
-                    <p>Route analysis may still fall back to OSRM corridor routing.</p>
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => checkOrToolsHealth({ manual: true })}
-                  disabled={isOrToolsChecking || healthCheckCooldownRemaining > 0 || restartingOrTools}
-                  className="text-xs px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg disabled:opacity-50 font-medium transition-colors"
-                >
+                        ? 'bg-emerald-500'
+                        : isUnreachable
+                          ? 'bg-amber-500'
+                          : 'bg-gray-400'
+                  }`}
+                />
+                <span className="font-medium shrink-0">
                   {isOrToolsChecking
-                    ? 'Testing…'
-                    : healthCheckCooldownRemaining > 0
-                      ? 'Wait 10s'
-                      : 'Test Connection'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void restartOrToolsService()}
-                  disabled={restartingOrTools || isOrToolsChecking}
-                  className="text-sm px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50 font-semibold shadow-sm transition-colors"
-                  title="Kill hung OR-Tools on port 8000 and start a fresh uvicorn process"
-                >
-                  {restartingOrTools ? 'Restarting…' : '🔄 Restart OR-Tools Service'}
-                </button>
+                    ? 'OR-Tools: Checking…'
+                    : ortoolsHealth?.connected
+                      ? 'OR-Tools: Connected'
+                      : isUnreachable
+                        ? 'OR-Tools: Unreachable'
+                        : 'OR-Tools: Checking…'}
+                </span>
+                {!isOrToolsChecking && ortoolsHealth?.connected && (ortoolsHealth.version || ortoolsHealth.buildId) && (
+                  <span className="text-xs text-emerald-800 font-mono truncate min-w-0 max-w-[8rem] sm:max-w-xs">
+                    v{ortoolsHealth.version || '?'}
+                    {ortoolsHealth.buildId ? (
+                      <span className="hidden sm:inline">{` · build ${ortoolsHealth.buildId}`}</span>
+                    ) : null}
+                  </span>
+                )}
+                {ortoolsHealth?.message && !isOrToolsChecking && !isUnreachable && (
+                  <span
+                    className="text-xs text-gray-600 truncate min-w-0 max-w-[12rem] sm:max-w-xs"
+                    title={ortoolsHealth.message}
+                  >
+                    — {ortoolsHealth.message}
+                  </span>
+                )}
+                {ortoolsHealth?.message && isUnreachable && (
+                  <span
+                    className="text-xs text-amber-800 truncate min-w-0 flex-1"
+                    title={ortoolsHealth.message}
+                  >
+                    — {ortoolsHealth.message}
+                  </span>
+                )}
+                <div className="flex flex-wrap items-center gap-1.5 ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => checkOrToolsHealth({ manual: true })}
+                    disabled={isOrToolsChecking || healthCheckCooldownRemaining > 0 || restartingOrTools}
+                    className="text-xs px-3 py-1.5 min-h-[36px] sm:min-h-0 bg-white border border-gray-300 hover:bg-gray-50 rounded-md disabled:opacity-50 font-medium transition-colors touch-manipulation"
+                  >
+                    {isOrToolsChecking
+                      ? 'Testing…'
+                      : healthCheckCooldownRemaining > 0
+                        ? 'Wait 10s'
+                        : 'Test Connection'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void restartOrToolsService()}
+                    disabled={restartingOrTools || isOrToolsChecking}
+                    className="text-xs sm:text-sm px-3 py-1.5 min-h-[36px] sm:min-h-0 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md disabled:opacity-50 font-semibold transition-colors touch-manipulation shadow-sm"
+                    title="Kill hung OR-Tools on port 8000 and start a fresh uvicorn process"
+                  >
+                    {restartingOrTools ? 'Restarting…' : '🔄 Restart OR-Tools Service'}
+                  </button>
+                </div>
               </div>
+              {isUnreachable && (
+                <p className="text-xs text-amber-800 px-1" title={unreachableTitle}>
+                  Port 8000 · may fall back to OSRM · use Restart
+                </p>
+              )}
             </div>
           )
         })()}
 
         {isDevEnvironment() && restartOrToolsMessage && (
-          <div className="mt-2 p-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-900 text-sm">
+          <div className="mt-1.5 px-3 py-1.5 rounded-md border border-indigo-200 bg-indigo-50 text-indigo-900 text-xs">
             {restartOrToolsMessage}
-            <span className="block mt-1 text-xs text-indigo-700">
-              Manual fallback: <code className="font-mono bg-white/70 px-1 rounded">npm run restart:ortools</code>
-            </span>
+            {!/back online/i.test(restartOrToolsMessage) &&
+              !restartOrToolsMessage.includes('restart:ortools') && (
+              <span className="text-indigo-700">
+                {' '}· fallback: <code className="font-mono bg-white/70 px-1 rounded">npm run restart:ortools</code>
+              </span>
+            )}
           </div>
         )}
 
         {/* Load Pilot Voice Agent Status */}
         {(voiceStatus || isListening) && (
-          <div className={`mt-4 p-3 rounded-xl text-sm flex items-center gap-3 border ${isListening ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
+          <div className={`mt-2 px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 border ${isListening ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
             <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-blue-500 animate-pulse' : 'bg-gray-400'}`} />
             <span className="font-medium">Load Pilot:</span> {voiceStatus || 'Ready for voice input'}
             {isListening && (
@@ -2865,7 +2883,7 @@ export default function PermitTestPage() {
         )}
 
         {/* Quick Voice Actions */}
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
           <span className="text-gray-500">Load Pilot:</span>
           <button
             type="button"
@@ -2897,7 +2915,7 @@ export default function PermitTestPage() {
           <div>
             <h2 className="text-lg font-semibold text-gray-900">1. Driver for this load</h2>
             <p className={`${fieldHintClass} mt-0.5`}>
-              Pick who is driving. Carrier details from their profile fill in for permit forms.
+              Select the driver — their profile fills permit fields.
             </p>
           </div>
 
@@ -3014,7 +3032,7 @@ export default function PermitTestPage() {
           <div>
             <h2 className="text-lg font-semibold text-gray-900">2. Rig</h2>
             <p className={`${fieldHintClass} mt-0.5`}>
-              Default rig loads when available. Change only if this load uses different equipment.
+              Default rig when available — change only for different equipment.
             </p>
           </div>
         <div className="flex items-center justify-between text-sm text-gray-600 py-1">
@@ -3136,7 +3154,7 @@ export default function PermitTestPage() {
             <button type="button" onClick={() => startVoiceInput('cargoDescription')} disabled={isListening} className="text-base p-1 hover:bg-gray-100 rounded" title="Speak cargo description">🎤</button>
           </h2>
           <p className={`${fieldHintClass} mb-2`}>
-            Describe the cargo, then enter pieces, arrangement, and axle weights. These drive oversize checks and the routing envelope below.
+            Cargo, pieces, arrangement, and axle weights for oversize checks.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <div className="md:col-span-2">
@@ -3625,13 +3643,13 @@ export default function PermitTestPage() {
               </details>
             )
           })()}
-          <p className={`${fieldHintTinyClass} mt-1`}>Auto-calc + distribute helpers match real carrier bridge-law workflows. Values are captured on save.</p>
+          <p className={`${fieldHintTinyClass} mt-1`}>Auto-calc / distribute for bridge-law; values captured on save.</p>
         </div>
 
         {/* Routing envelope — auto-calculated from rig + load; sent to routing/agent */}
         <div className="border border-emerald-200 bg-emerald-50/50 rounded-xl p-4">
           <h2 className="font-semibold mb-1 text-emerald-900">Routing envelope</h2>
-          <p className="text-xs text-emerald-800 mb-3">Auto-calculated from rig, overhangs, trailer, and cargo — used for oversize routing (not the load-details form step above).</p>
+          <p className="text-xs text-emerald-800 mb-2">Auto-calculated from rig + load for oversize routing.</p>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm mb-1 text-gray-800">Gross weight</label>
@@ -3694,17 +3712,18 @@ export default function PermitTestPage() {
             </button>
           </h2>
           <p className={`${fieldHintClass} mb-2`}>
-            Add avoid/prefer rules before addresses so the first optimization uses them
-            (e.g. avoid AR, prefer I-40 south). Prefer/include vias still apply with drops
-            (placed before the first drop); multi-drop skips automatic corridor via suggestions.
+            Optional avoid/prefer rules (e.g. avoid AR, prefer I-40) — applied on first optimization.
           </p>
           <textarea
             placeholder="E.g. avoid AR, avoid IL, include Corinth MS, prefer I-40 southern, stay on interstates..."
             value={manualRoute}
             onChange={(e) => setManualRoute(e.target.value)}
             className={textareaClass}
+            title="Prefer/include vias still apply with drops (placed before the first drop); multi-drop skips automatic corridor via suggestions."
           />
-          <p className={`${fieldHintTinyClass} mt-1`}>Enforced in OR-Tools routing. Type or use 🎤.</p>
+          <p className={`${fieldHintTinyClass} mt-1`}>
+            Enforced in OR-Tools. Prefer/include vias apply with drops; multi-drop skips auto corridor vias.
+          </p>
         </div>
 
         {/* Pickup */}
@@ -3755,7 +3774,7 @@ export default function PermitTestPage() {
             </button>
           </div>
           <p className={`${fieldHintClass} -mt-1`}>
-            Add each stop in delivery order. The last drop is the final destination. Business names or full street addresses both work.
+            Delivery order; last drop is final destination. Business name or full address.
           </p>
           {formData.drops.map((drop, idx) => {
             const key = dropStopKey(drop)
@@ -3847,7 +3866,7 @@ export default function PermitTestPage() {
               Preview Corridor &amp; Fee
             </button>
           </div>
-          <p className="text-xs text-blue-700 mb-2">Rough estimate from current origin/dest + load envelope. Full OR-Tools optimization runs automatically when addresses geocode; detailed highways and DOT restrictions appear in results below.</p>
+          <p className="text-xs text-blue-700 mb-2">Rough corridor/fee preview. Full optimization runs when addresses geocode and load dimensions are set.</p>
 
           {glance && (
             <div className="space-y-2 text-sm">
@@ -3864,7 +3883,7 @@ export default function PermitTestPage() {
               <div className="text-[10px] text-blue-600 italic">{glance.note}</div>
             </div>
           )}
-          {!glance && <div className="text-xs text-blue-600">Click for a quick corridor preview. Optimization starts automatically once pickup and all drops are geocoded.</div>}
+          {!glance && <div className="text-xs text-blue-600">Preview corridor, or wait for auto-optimization when addresses geocode and load dimensions are set.</div>}
         </div>
         </div> {/* End form card */}
       </form>

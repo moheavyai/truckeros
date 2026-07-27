@@ -113,7 +113,7 @@ describe('Permit test page — member profile autofill UI', () => {
     const section = carrierDriverSectionSlice(source)
 
     expect(section).toContain('Driver for this load')
-    expect(section).toContain('Carrier details from their profile fill in for permit forms')
+    expect(section).toContain('Select the driver — their profile fills permit fields.')
     expect(section).toContain('Select Driver')
     expect(section).toContain('Change Driver')
     expect(section).toContain('showDriverPicker')

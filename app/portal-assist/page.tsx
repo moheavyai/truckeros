@@ -78,23 +78,8 @@ interface PortalSubmission {
 }
 
 /**
- * Portal Assist Page — Full Production Implementation
- * 
- * Meets all requirements:
- * - Dedicated professional UI (consistent with history/permit-test: AppHeader, cards, BrandedLoader, ErrorDisplay, red/amber/emerald status)
- * - Dynamic state selector from STATE_PORTAL_CONFIGS (49 states (all except HI); adding state = 1 object)
- * - Secure creds (POST save encrypted; GET returns metadata only — never pw to client)
- * - Prefill from real saved request data (full fields + equipment/cargo)
- * - Output parse + compare (framework) with rich UI
- * - Per-state status pills (exact reuse of history logic: red=needed/no sub, yellow=applied/prefilled/submit, green=pdf/received/approved)
- * - PDF: upload to 'portal-pdfs' Supabase Storage (user/req/state path), store pdf_reference, list/download
- * - Human approval gate (prominent, explicit confirm before record submission with human_approved=true)
- * - Full ?requestId integration from History details modal "Launch Portal Assist" (real fetch via supabase RLS)
- * - Robust: try/catch + ErrorDisplay everywhere, loading states, graceful unsupported, logging [portal-assist]
- * - Config-driven + extensibility notes in UI + lib
- * - Backward compatible (demo still works, existing submissions schema/RLS untouched)
- * 
- * Flow sections: Request Details → Generated Prefill → Credentials (secure) → Human Approval Gate → Portal Actions → Output Paste & Analysis → PDF & Artifacts + status pills
+ * Portal Assist — prefill, credentials, approval gate, portal launch, output parse, PDF artifacts.
+ * State list is config-driven via STATE_PORTAL_CONFIGS (49 states; HI excluded).
  */
 
 /** Mobile-first contrast: stronger borders/text on small screens; softer from sm: up (matches permit-test). */
@@ -109,10 +94,13 @@ const buttonPrimaryClass =
 /** Success/approve CTAs — shared emerald so Approve + Load Demo stay in lockstep. */
 const buttonSuccessClass =
   'bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-medium disabled:bg-gray-500 disabled:text-white'
-const fieldHintClass = 'text-xs text-gray-600 sm:text-gray-500'
-const fieldHintTinyClass = 'text-[10px] text-gray-600 sm:text-gray-500'
-/** Labels share hint contrast so field chrome stays in lockstep. */
-const fieldLabelClass = fieldHintClass
+/** Soft muted tone for hints (size applied at call site or via fieldHintClass) */
+const fieldHintToneClass = 'text-gray-500'
+/** Hints/instructions: softer gray-500 so chrome does not compete with content */
+const fieldHintClass = `text-xs ${fieldHintToneClass}`
+const fieldHintTinyClass = `text-[10px] ${fieldHintToneClass}`
+/** Section field labels stay slightly stronger than pure hints (matches permit-test hierarchy) */
+const fieldLabelClass = 'text-xs text-gray-600 sm:text-gray-500'
 const fieldLabelTinyClass = 'text-[10px] uppercase tracking-wider text-gray-600 sm:text-gray-500'
 const sectionLabelClass = 'text-xs font-medium text-gray-600 sm:text-gray-500 tracking-wider'
 /** Body copy: darker on mobile for outdoor readability; softer from sm+. */
@@ -800,13 +788,13 @@ export default function PortalAssistPage() {
       <AppHeader user={user} />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
-        <div className="mb-8">
+        <div className="mb-6">
           <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Portal Assist</h1>
-          <p className={`${bodyTextClass} mt-1.5`}>
-            Secure prefill, human-approved assisted submission, output parsing, PDF storage, and per-state status tracking for DOT OSOW portals.
+          <p className={`${bodyTextClass} mt-1`}>
+            Secure prefill and assisted submission for state DOT OSOW portals.
           </p>
-          <p className={`${fieldHintClass} text-[11px] mt-1`}>
-            Config-driven: To add any of the remaining states (or the remaining 49; HI excluded by design), add one entry to <code>STATE_PORTAL_CONFIGS</code> in <code>lib/portal-assistant.ts</code>. Selector, prefill, status, and persistence update automatically. No other code changes required.
+          <p className={`${fieldHintTinyClass} mt-1`}>
+            Add a state: one entry in <code>STATE_PORTAL_CONFIGS</code> (<code>lib/portal-assistant.ts</code>).
           </p>
         </div>
 
@@ -862,7 +850,7 @@ export default function PortalAssistPage() {
                 onChange={(e) => setStateQuery(e.target.value)}
                 className={`mt-1 w-full max-w-xs ${fieldControlClass} rounded-xl px-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-gray-500 sm:focus:ring-1 sm:focus:ring-gray-400`}
                 placeholder="Type to filter (e.g. CA, New York, NY) — 49 states"
-                aria-label="Searchable state portal selector. Type to filter the visible list of all 49 states (except HI) with nice names. Click any entry to select via handleStateChange."
+                aria-label="Filter state portals by code or name. Click an entry to select it."
               />
               {/* Corridor-first ordered list (portalStatesForRequest), then remaining states A–Z; filter after order; muted non-corridor */}
               <div id="state-portal-list" className="mt-1 w-full max-w-xs border border-gray-500 sm:border-gray-300 rounded-xl bg-white shadow-sm max-h-52 overflow-y-auto text-xs text-gray-900">
@@ -909,7 +897,7 @@ export default function PortalAssistPage() {
                   <div className={`px-3 py-1 ${fieldHintClass}`}>No matches. Clear to see all 49.</div>
                 )}
               </div>
-              <div className="text-[10px] text-emerald-800 sm:text-emerald-700 mt-1">49 states supported (all except HI). Extensible with one object. Compact header by default — click or press Enter/Space to expand list (filter/scroll/click). Selection auto-collapses + updates right panel immediately.</div>
+              <div className={`${fieldHintTinyClass} mt-1`}>49 states (except HI). Click to expand; selection updates the right panel.</div>
             </>
           )}
         </div>
@@ -931,12 +919,12 @@ export default function PortalAssistPage() {
                 )}
               </div>
 
-              {requestLoading && <div className={`text-sm ${fieldHintClass}`}>Loading request…</div>}
+              {requestLoading && <div className={`text-sm ${fieldHintToneClass}`}>Loading request…</div>}
               {requestError && <ErrorDisplay message={requestError} variant="inline" onRetry={() => { /* re-trigger via url if wanted */ }} />}
 
               {!request ? (
                 <div className={`text-sm ${bodyTextClass}`}>
-                  No request loaded. Click "Load Rich Demo Request" above, or open this page from <a href="/history" className="underline text-gray-900">History</a> via View → Launch Portal Assist in the analysis details modal (passes ?requestId).
+                  No request loaded. Use Load Demo, or open from <a href="/history" className="underline text-gray-900">History</a> → Launch Portal Assist.
                 </div>
               ) : (
                 <div className="text-sm space-y-3">
@@ -990,10 +978,10 @@ export default function PortalAssistPage() {
                   </div>
 
                   {isRealRequest && (
-                    <div className="text-[10px] text-emerald-800 sm:text-emerald-700">Loaded from saved analysis (full snapshots available in final review below)</div>
+                    <div className="text-[10px] text-emerald-800 sm:text-emerald-700">Loaded from saved analysis</div>
                   )}
                   {!isRealRequest && request && (
-                    <div className="text-[10px] text-amber-800 sm:text-amber-700">Demo data — use final review below to verify prefill before portal entry</div>
+                    <div className="text-[10px] text-amber-800 sm:text-amber-700">Demo data — verify prefill in final review</div>
                   )}
                 </div>
               )}
@@ -1003,8 +991,8 @@ export default function PortalAssistPage() {
             {prefill && config && (
               <div className={cardClass}>
                 <h2 className="font-semibold text-gray-900">2. Final Review — Generated Prefill for {config.name}</h2>
-                <p className={`text-sm ${bodyTextClass} mt-1 mb-4`}>
-                  Last human review before portal submission. Confirm carrier, driver, load, and equipment match what you will enter in the state portal.
+                <p className={`${fieldHintClass} mt-1 mb-4`}>
+                  Confirm carrier, driver, load, and equipment before portal entry.
                 </p>
 
                 <div className="mb-4">
@@ -1019,7 +1007,7 @@ export default function PortalAssistPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className={`text-sm italic ${fieldHintClass}`}>No carrier info saved with this request.</div>
+                    <div className={`text-sm italic ${fieldHintToneClass}`}>No carrier info saved with this request.</div>
                   )}
                 </div>
 
@@ -1035,7 +1023,7 @@ export default function PortalAssistPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className={`text-sm italic ${fieldHintClass}`}>No driver info saved with this request.</div>
+                    <div className={`text-sm italic ${fieldHintToneClass}`}>No driver info saved with this request.</div>
                   )}
                 </div>
 
@@ -1220,7 +1208,7 @@ export default function PortalAssistPage() {
                       <ErrorDisplay message={credentialError} variant="inline" onRetry={() => setCredentialError(null)} />
                     </div>
                   )}
-                  <p className={`${fieldHintTinyClass} mt-1`}>Encrypted server-side with AES-256-GCM. Never sent or stored in plain text. GET returns metadata only.</p>
+                  <p className={`${fieldHintTinyClass} mt-1`}>Encrypted server-side; never stored in plain text.</p>
                 </div>
 
                 {/* Human approval gate + action row */}
@@ -1269,7 +1257,7 @@ export default function PortalAssistPage() {
                           <ErrorDisplay message={approvalError} variant="inline" onRetry={() => setApprovalError(null)} />
                         </div>
                       )}
-                      <div className="text-[10px] text-amber-800 sm:text-amber-700 mt-2">This sets human_approved=true and creates/updates the portal_submissions record (status prefilled/submitted). No automated submit occurs.</div>
+                      <div className="text-[10px] text-amber-800 sm:text-amber-700 mt-2">Sets human_approved=true on the submission record. No automated submit.</div>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -1323,7 +1311,7 @@ export default function PortalAssistPage() {
                     >
                       Launch all corridor portals ({portalStatesForRequest.length})
                     </button>
-                    <p id="launch-corridor-help" className={`mt-1.5 text-xs ${bodyTextClass}`}>
+                    <p id="launch-corridor-help" className={`mt-1.5 ${fieldHintClass}`}>
                       Review prefill first, then launch all corridor portals in new tabs.
                     </p>
                     {corridorLaunchHint && (
@@ -1446,7 +1434,7 @@ export default function PortalAssistPage() {
               )}
 
               {!attachedPdfs.length && (
-                <div className={`${fieldHintClass} mt-2`}>No PDFs attached yet for this state. Upload after portal response for full record.</div>
+                <div className={`${fieldHintClass} mt-2`}>No PDFs yet — upload after portal response.</div>
               )}
             </div>
 
@@ -1462,8 +1450,8 @@ export default function PortalAssistPage() {
           </div>
         </div>
 
-        <div className={`mt-8 text-xs ${fieldHintClass} border-t border-gray-300 sm:border-gray-200 pt-4`}>
-          All actions are logged with [portal-assist] prefix. Credentials use server-only AES (env PORTAL_CREDENTIALS_ENCRYPTION_KEY). Human approval gate is enforced before any submission record with human_approved. Full backward compatibility with existing history links, submissions table, and RLS.
+        <div className={`mt-8 ${fieldHintClass} border-t border-gray-300 sm:border-gray-200 pt-4`}>
+          Logged as [portal-assist]. Credentials encrypted server-side. Approval required before human_approved submissions.
         </div>
       </main>
     </div>

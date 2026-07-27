@@ -67,7 +67,7 @@ describe('permit-test mobile contrast classes', () => {
 
     // Size-variant fields compose fieldControlClass
     expect(source).toContain('`${fieldControlClass} rounded w-14 p-1 text-center`')
-    expect(source).toContain('`${fieldControlClass} ml-2 w-28 p-1 rounded`')
+    expect(source).toContain('`${fieldControlClass} ml-2 w-28 p-1 rounded min-h-[44px]`')
     expect(source).toContain('`${fieldControlClass} px-1 py-0.5 rounded text-xs`')
   })
 
@@ -127,11 +127,11 @@ describe('permit-test mobile contrast classes', () => {
     expect(source).toContain('label="5. Pickup"')
     expect(source).toContain('6. Drops (deliveries)')
     expect(source).toMatch(
-      /choose driver and rig, enter load details, optional route preferences, then pickup and drops/
+      /Choose driver and rig, enter load details, optional route preferences, then pickup and drops — routing runs when addresses geocode and load dimensions are set\./
     )
     // Primary intro uses body contrast, not soft hint-only gray-500
     expect(source).toMatch(
-      /text-sm text-gray-700 sm:text-gray-600 mt-1\.5 leading-relaxed/
+      /text-sm text-gray-700 sm:text-gray-600 mt-1/
     )
   })
 
