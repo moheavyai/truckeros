@@ -580,7 +580,7 @@ describe('Portal Assist — Missouri Carrier Express playbook v3', () => {
     expect(source).toContain('Guidance for Single Trip selection and application tips in Copy all')
   })
 
-  it('renders Carrier Express path note (de-duped; Trip→Payment + Single Trip focus)', () => {
+  it('renders Carrier Express path note (de-duped; Trip→Payment + Street Address honesty)', () => {
     const source = readSource(pagePath)
     expect(source).toContain('data-testid="mo-walkthrough"')
     expect(source).toContain('CARRIER EXPRESS SINGLE TRIP PATH')
@@ -588,9 +588,22 @@ describe('Portal Assist — Missouri Carrier Express playbook v3', () => {
     // De-duped: no full walkthrough list re-render of MO_PORTAL_WALKTHROUGH
     expect(source).not.toContain('MO_PORTAL_WALKTHROUGH.map')
     expect(source).toContain('Same path as numbered steps above')
-    expect(source).toContain('Application enums → Trip Analyze → Review → Payment')
+    expect(source).toContain('path source of truth')
+    expect(source).toMatch(/Application\s*\n?\s*enums → Trip Analyze → Review → Payment/)
+    expect(source).toMatch(/city\/state only/)
+    expect(source).toMatch(/Street Address on/)
     expect(source).toContain("tripType !== 'Single trip'")
     expect(source).toContain('Playbook is Single Trip')
+  })
+
+  it('shows MO extra field tiles for load/contact when present', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain("selectedState === 'MO'")
+    expect(source).toContain("'load_description'")
+    expect(source).toContain("'contact_name'")
+    expect(source).toContain("'carrier_email'")
+    expect(source).toContain('data-testid={`mo-extra-field-${extraKey}`}')
+    expect(source).toContain('MO Copy all packet includes full Application')
   })
 
   it('filters Prefill hints to keys with values', () => {

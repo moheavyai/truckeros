@@ -1301,9 +1301,11 @@ export default function PortalAssistPage() {
                         CARRIER EXPRESS SINGLE TRIP PATH
                       </span>
                       <p className={`${fieldHintTinyClass} ${bodyTextClass}`}>
-                        Same path as numbered steps above (mapped from live Single Trip screens).
-                        Application enums → Trip Analyze → Review → Payment
+                        Same path as numbered steps above (path source of truth). Application
+                        enums → Trip Analyze → Review → Payment
                         {isMoMultiStatePrefill(prefill) ? ' (pay-last multi-state)' : ''}.
+                        Prefill origin/dest is often city/state only — enter Street Address on
+                        MoDOT Trip map when required.
                         {tripType !== 'Single trip' ? (
                           <>
                             {' '}
@@ -1498,6 +1500,9 @@ export default function PortalAssistPage() {
                 <span className={`${fieldLabelClass} block mb-2`}>PORTAL FIELD MAPPING</span>
                 <p className={`${fieldHintTinyClass} mb-2`}>
                   Copy individual values or use Copy all above, then paste into the state portal.
+                  {selectedState === 'MO'
+                    ? ' MO Copy all packet includes full Application + Trip fields; tiles below are a subset.'
+                    : ''}
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   {Object.entries(config.fieldMapping).map(([ourKey, portalLabel]) => {
@@ -1523,6 +1528,46 @@ export default function PortalAssistPage() {
                       </div>
                     )
                   })}
+                  {/* MO extras not in fieldMapping: load + payment contact tiles (full packet via Copy all) */}
+                  {selectedState === 'MO' &&
+                    (
+                      [
+                        'load_description',
+                        'contact_name',
+                        'carrier_email',
+                        'tip_vehicle_type',
+                      ] as const
+                    ).map((extraKey) => {
+                      const raw = (prefill.generatedFields as any)[extraKey]
+                      if (!hasPrefillValue(raw)) return null
+                      const portalLabel = resolvePortalFieldLabel(
+                        extraKey,
+                        config,
+                        selectedState
+                      )
+                      const display = String(raw)
+                      return (
+                        <div
+                          key={extraKey}
+                          className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3"
+                          data-testid={`mo-extra-field-${extraKey}`}
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-0.5">
+                            <div className={fieldLabelTinyClass}>{portalLabel}</div>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(extraKey, display)}
+                              className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
+                              data-copy-field={extraKey}
+                              aria-label={`Copy ${portalLabel}`}
+                            >
+                              {copiedKey === extraKey ? 'Copied' : 'Copy'}
+                            </button>
+                          </div>
+                          <div className="font-mono break-words text-gray-900">{display}</div>
+                        </div>
+                      )
+                    })}
                   {/* Trip type + extras: MO uses MoDOT labels via resolvePortalFieldLabel(config, state) */}
                   {(prefill.generatedFields as any).trip_type && (
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">

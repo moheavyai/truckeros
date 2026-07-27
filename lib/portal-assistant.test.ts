@@ -38,6 +38,8 @@ import {
   buildMoConveyanceTip,
   buildMoDescriptionListTip,
   buildMoPowerUnitTypeTip,
+  buildMoContactName,
+  countMoCargoTrailers,
   mapTrailerTypeToMoLabel,
   pickPrimaryCargoTrailer,
   getMoStepPrefillKeysWithValues,
@@ -1525,6 +1527,7 @@ describe('Missouri Portal Assist playbook v3', () => {
         'tip_vehicle_type',
         'tip_power_unit_type',
         'tip_booster',
+        'tip_piece_dims',
         'load_description',
         'load_pieces',
         'serial_number',
@@ -1543,6 +1546,11 @@ describe('Missouri Portal Assist playbook v3', () => {
         'trailer_vin',
         'trailer_year',
         'unit_two_type',
+        'trailer_2_make',
+        'trailer_2_plate',
+        'trailer_2_plate_state',
+        'trailer_2_vin',
+        'trailer_2_year',
         'width',
         'length',
         'height',
@@ -1554,8 +1562,9 @@ describe('Missouri Portal Assist playbook v3', () => {
         'carrier_usdot',
         'carrier_company',
         'carrier_mc',
-        'driver_name',
+        'contact_name',
         'carrier_email',
+        'driver_name',
         'origin',
         'destination',
         'route',
@@ -1601,8 +1610,11 @@ describe('Missouri Portal Assist playbook v3', () => {
     expect(getMoPortalFieldLabel('tip_power_unit_type')).toBe('Power Unit Type tip')
     expect(getMoPortalFieldLabel('tip_travel')).toBe('Travel')
     expect(getMoPortalFieldLabel('tip_booster')).toBe('Booster unit')
-    expect(getMoPortalFieldLabel('driver_name')).toBe('Contact name')
-    expect(getMoPortalFieldLabel('carrier_email')).toBe('Contact email')
+    expect(getMoPortalFieldLabel('tip_piece_dims')).toBe('Piece dims note')
+    expect(getMoPortalFieldLabel('contact_name')).toBe('Carrier contact name')
+    expect(getMoPortalFieldLabel('driver_name')).toBe('Driver name')
+    expect(getMoPortalFieldLabel('carrier_email')).toBe('Carrier email')
+    expect(getMoPortalFieldLabel('trailer_2_make')).toBe('Unit Three Make')
     expect(MO_PORTAL_FIELD_LABELS.entry_point).toBe('MO entry border')
   })
 
@@ -1693,14 +1705,19 @@ describe('Missouri Portal Assist playbook v3', () => {
     expect(packet).toContain('USDOT: 7654321')
     expect(packet).toContain('Carrier name: Show-Me Haul')
     expect(packet).toContain('MC number: MC-4242')
-    expect(packet).toContain('Contact name: Pat Driver')
-    expect(packet).toContain('Contact email: pat@showmehaul.example')
+    // Contact prefers company over driver
+    expect(packet).toContain('Carrier contact name: Show-Me Haul')
+    expect(packet).toContain('Carrier email: pat@showmehaul.example')
+    expect(packet).toContain('Driver name: Pat Driver')
     expect(packet).toContain('Origin: Tulsa, OK')
     expect(packet).toContain('Destination: Chicago, IL')
     expect(packet).toContain('Route corridor: OK → MO → IL')
     expect(packet).toContain('Highways: I-44, I-70')
     expect(packet).toMatch(/MO entry border:/)
     expect(packet).toMatch(/MO exit border:/)
+    // Clean piece dims (no overall annotation)
+    expect(packet).toMatch(/Piece Width:.*10/)
+    expect(packet).not.toMatch(/overall — load piece not set/)
     // Full label sequence snapshot (prefix order of present lines)
     const labelSeq = lines.map((l) => l.split(':')[0])
     expect(labelSeq[0]).toBe('Permit type')
@@ -1713,8 +1730,8 @@ describe('Missouri Portal Assist playbook v3', () => {
     expect(labelSeq.indexOf('Unit Two Make')).toBeGreaterThan(labelSeq.indexOf('Power Unit Make'))
     expect(labelSeq.indexOf('Overall Width')).toBeGreaterThan(labelSeq.indexOf('Unit Two Type'))
     expect(labelSeq.indexOf('USDOT')).toBeGreaterThan(labelSeq.indexOf('Number of Axles'))
-    expect(labelSeq.indexOf('Contact name')).toBeGreaterThan(labelSeq.indexOf('USDOT'))
-    expect(labelSeq.indexOf('Origin')).toBeGreaterThan(labelSeq.indexOf('Contact email'))
+    expect(labelSeq.indexOf('Carrier contact name')).toBeGreaterThan(labelSeq.indexOf('USDOT'))
+    expect(labelSeq.indexOf('Origin')).toBeGreaterThan(labelSeq.indexOf('Carrier email'))
     expect(labelSeq.indexOf('Route corridor')).toBeGreaterThan(labelSeq.indexOf('Origin'))
     expect(labelSeq.indexOf('Highways')).toBeGreaterThan(labelSeq.indexOf('Route corridor'))
   })
@@ -1737,8 +1754,11 @@ describe('Missouri Portal Assist playbook v3', () => {
     expect(resolvePortalFieldLabel('tractor_plate', STATE_PORTAL_CONFIGS.MO)).toBe(
       'Power Unit License Number'
     )
+    expect(resolvePortalFieldLabel('contact_name', STATE_PORTAL_CONFIGS.MO)).toBe(
+      'Carrier contact name'
+    )
     expect(resolvePortalFieldLabel('driver_name', STATE_PORTAL_CONFIGS.MO)).toBe(
-      'Contact name'
+      'Driver name'
     )
     // Non-MO still uses fieldMapping / fallbacks
     expect(resolvePortalFieldLabel('origin', STATE_PORTAL_CONFIGS.TX)).toBe(
@@ -1889,10 +1909,12 @@ describe('Missouri Portal Assist playbook v3', () => {
 
     const payment = steps.find((s) => s.id === 'payment')!
     const payPacket = buildMoFilingStepClipboard(prefill, payment)
-    expect(payPacket).toContain('Contact name: Pat Driver')
-    expect(payPacket).toContain('Contact email: pat@showmehaul.example')
+    expect(payPacket).toContain('Carrier contact name: Show-Me Haul')
+    expect(payPacket).toContain('Carrier email: pat@showmehaul.example')
+    expect(payPacket).toContain('Carrier name: Show-Me Haul')
     expect(payPacket).toContain('USDOT: 7654321')
     expect(payPacket).not.toContain('Load Description')
+    expect(payPacket).not.toContain('Driver name:')
 
     const newApp = steps.find((s) => s.id === 'new_app')!
     expect(buildMoFilingStepClipboard(prefill, newApp, { tripType: 'Round trip' })).toBe(
@@ -1903,10 +1925,64 @@ describe('Missouri Portal Assist playbook v3', () => {
     expect(buildMoFilingStepClipboard(prefill, login)).toBe('')
   })
 
-  it('vehicle type tip: tractor+trailer → PowerUnit + 1 Unit; tractor only → PowerUnit; empty equip omits', () => {
+  it('vehicle type tip: cargo count only (skip jeep); +2 Units; tractor only → PowerUnit; empty omits', () => {
     const withTrailer = generatePortalPrefill(moCorridorRequest, 'MO')
     expect(withTrailer.generatedFields.tip_vehicle_type).toBe('PowerUnit + 1 Unit')
     expect(buildMoVehicleTypeTip(withTrailer)).toBe('PowerUnit + 1 Unit')
+
+    // Jeep + cargo deck → cargo count 1, not PowerUnit + 2 Units
+    const jeepAndCargo = generatePortalPrefill(
+      {
+        ...moCorridorRequest,
+        equipment: {
+          rig: {
+            totalAxles: 8,
+            tractor: { vin: 'V1', make: 'Peterbilt', year: 2020 },
+            trailers: [
+              { trailer_type: 'Jeep', vin: 'JEEP1', make: 'JeepCo', year: 2015 },
+              {
+                trailer_type: 'Double Drop',
+                vin: 'MAIN1',
+                make: 'Landoll',
+                year: 2018,
+              },
+            ],
+          },
+        },
+      },
+      'MO'
+    )
+    expect(jeepAndCargo.generatedFields.trailer_count).toBe(2)
+    expect(jeepAndCargo.generatedFields.cargo_trailer_count).toBe(1)
+    expect(countMoCargoTrailers(jeepAndCargo)).toBe(1)
+    expect(jeepAndCargo.generatedFields.tip_vehicle_type).toBe('PowerUnit + 1 Unit')
+    expect(jeepAndCargo.generatedFields.tip_booster).toMatch(/^Yes/)
+    // Unit Three (jeep) identity present in packet
+    const jeepPacket = buildPortalClipboardPacket(jeepAndCargo, STATE_PORTAL_CONFIGS.MO)
+    expect(jeepPacket).toContain('Unit Three Make: JeepCo')
+    expect(jeepPacket).toContain('Unit Three VIN: JEEP1')
+    expect(jeepPacket).toContain('Vehicle Type: PowerUnit + 1 Unit')
+
+    // Two cargo trailers → PowerUnit + 2 Units
+    const twoCargo = generatePortalPrefill(
+      {
+        ...moCorridorRequest,
+        equipment: {
+          rig: {
+            totalAxles: 9,
+            tractor: { vin: 'V2', make: 'Kenworth', year: 2019 },
+            trailers: [
+              { trailer_type: 'Flatbed', vin: 'FB1', make: 'Fontaine', year: 2016 },
+              { trailer_type: 'Step Deck', vin: 'SD1', make: 'Landoll', year: 2017 },
+            ],
+          },
+        },
+      },
+      'MO'
+    )
+    expect(twoCargo.generatedFields.cargo_trailer_count).toBe(2)
+    expect(twoCargo.generatedFields.tip_vehicle_type).toBe('PowerUnit + 2 Units')
+    expect(buildMoVehicleTypeTip(twoCargo)).toBe('PowerUnit + 2 Units')
 
     const tractorOnly = generatePortalPrefill(
       {
@@ -2016,6 +2092,63 @@ describe('Missouri Portal Assist playbook v3', () => {
     expect(prefill.generatedFields.tip_power_unit_type).toBe(MO_POWER_UNIT_TYPE_TIP)
   })
 
+  it('payment contact prefers carrier company over driver; labels lock ownership', () => {
+    expect(buildMoContactName({ companyName: 'Acme', driverFullName: 'Bob' })).toBe('Acme')
+    expect(buildMoContactName({ contactName: 'Dispatch Desk', companyName: 'Acme' })).toBe(
+      'Dispatch Desk'
+    )
+    expect(buildMoContactName({ driverFullName: 'Bob Only' })).toBe('Bob Only')
+    expect(buildMoContactName(null)).toBeNull()
+
+    const withCompany = generatePortalPrefill(moCorridorRequest, 'MO')
+    expect(withCompany.generatedFields.contact_name).toBe('Show-Me Haul')
+    expect(withCompany.generatedFields.driver_name).toBe('Pat Driver')
+    expect(withCompany.generatedFields.carrier_email).toBe('pat@showmehaul.example')
+
+    const driverOnly = generatePortalPrefill(
+      {
+        ...moCorridorRequest,
+        cargo: {
+          description: 'X',
+          carrierDriver: {
+            driverFullName: 'Solo Driver',
+            carrierEmail: 'solo@example.com',
+            usdotNumber: '1',
+          },
+        },
+      },
+      'MO'
+    )
+    expect(driverOnly.generatedFields.contact_name).toBe('Solo Driver')
+    expect(driverOnly.generatedFields.carrier_company).toBeUndefined()
+  })
+
+  it('piece dims are clean numbers; missing piece dims use tip only (no overall annotation)', () => {
+    const withPiece = generatePortalPrefill(moCorridorRequest, 'MO')
+    expect(String(withPiece.generatedFields.piece_width)).not.toMatch(/overall/)
+    expect(String(withPiece.generatedFields.piece_length)).not.toMatch(/load piece not set/)
+    expect(withPiece.generatedFields.tip_piece_dims).toBeUndefined()
+
+    const noPiece = generatePortalPrefill(
+      {
+        ...moCorridorRequest,
+        cargo: {
+          description: 'No piece dims',
+          numberOfPieces: 1,
+          carrierDriver: { companyName: 'Co', usdotNumber: '1' },
+        },
+      },
+      'MO'
+    )
+    expect(noPiece.generatedFields.piece_width).toBeUndefined()
+    expect(noPiece.generatedFields.piece_length).toBeUndefined()
+    expect(noPiece.generatedFields.piece_height).toBeUndefined()
+    expect(noPiece.generatedFields.tip_piece_dims).toMatch(/Piece W\/L\/H not set/)
+    const packet = buildPortalClipboardPacket(noPiece, STATE_PORTAL_CONFIGS.MO)
+    expect(packet).toContain('Piece dims note:')
+    expect(packet).not.toMatch(/overall — load piece not set/)
+  })
+
   it('booster tip defaults No; Yes when jeep/booster present', () => {
     const noBooster = generatePortalPrefill(moCorridorRequest, 'MO')
     expect(noBooster.generatedFields.tip_booster).toBe('No')
@@ -2102,7 +2235,7 @@ describe('Missouri Portal Assist playbook v3', () => {
     expect(prefill.generatedFields.trailer_2_vin).toBe('JEEP1')
   })
 
-  it('power_unit_type only when tractor present (not trailer-only vehicle_id)', () => {
+  it('power_unit_type and tip only when tractor present (not trailer-only vehicle_id)', () => {
     const trailerOnly = generatePortalPrefill(
       {
         origin_city: 'St. Louis',
@@ -2125,7 +2258,11 @@ describe('Missouri Portal Assist playbook v3', () => {
     )
     expect(trailerOnly.generatedFields.vehicle_id).toBe('TRAILERONLY')
     expect(trailerOnly.generatedFields.power_unit_type).toBeUndefined()
+    expect(trailerOnly.generatedFields.tip_power_unit_type).toBeUndefined()
     expect(trailerOnly.generatedFields.unit_two_type).toBe('FLAT BED TRLR')
+    const packet = buildPortalClipboardPacket(trailerOnly, STATE_PORTAL_CONFIGS.MO)
+    expect(packet).not.toContain('Power Unit Type:')
+    expect(packet).not.toContain('Power Unit Type tip:')
   })
 
   it('non-MO states do not emit tip_* keys', () => {
@@ -2207,11 +2344,12 @@ describe('Missouri Portal Assist playbook v3', () => {
     expect(f.tip_power_unit_type).toMatch(/TRUCK-TRACTOR/)
     expect(f.tip_booster).toBe('No')
     expect(f.carrier_usdot).toBe('7654321')
+    expect(f.contact_name).toBe('Show-Me Haul')
     expect(f.driver_name).toBe('Pat Driver')
     expect(f.carrier_email).toBe('pat@showmehaul.example')
   })
 
-  it('MO walkthrough is live Single Trip path v3 (Trip Analyze → Review → Payment pay-last)', () => {
+  it('MO walkthrough aligns with steps; Street Address honesty for city/state prefill', () => {
     expect(MO_PORTAL_WALKTHROUGH).toHaveLength(10)
     expect(MO_PORTAL_WALKTHROUGH[0]).toContain('Login Carrier Express')
     expect(MO_PORTAL_WALKTHROUGH[0]).toContain('mcs.modot.mo.gov')
@@ -2220,9 +2358,9 @@ describe('Missouri Portal Assist playbook v3', () => {
     expect(MO_PORTAL_WALKTHROUGH[3]).toMatch(/Travel Dates/)
     expect(MO_PORTAL_WALKTHROUGH[3]).toMatch(/7 moving days/)
     expect(MO_PORTAL_WALKTHROUGH[4]).toMatch(/Application fields/)
-    expect(MO_PORTAL_WALKTHROUGH[4]).toMatch(/enum tips|Conveyance/i)
     expect(MO_PORTAL_WALKTHROUGH[5]).toMatch(/Trip/)
     expect(MO_PORTAL_WALKTHROUGH[5]).toMatch(/Street Address/)
+    expect(MO_PORTAL_WALKTHROUGH[5]).toMatch(/city\/state|full street/i)
     expect(MO_PORTAL_WALKTHROUGH[5]).toMatch(/Analyze/)
     expect(MO_PORTAL_WALKTHROUGH[6]).toMatch(/Failures\s*=\s*0/)
     expect(MO_PORTAL_WALKTHROUGH[6]).toMatch(/Trip Description/)
@@ -2230,7 +2368,13 @@ describe('Missouri Portal Assist playbook v3', () => {
     expect(MO_PORTAL_WALKTHROUGH[8]).toMatch(/Payment/)
     expect(MO_PORTAL_WALKTHROUGH[8]).toMatch(/MoDOT-displayed|fee is MoDOT/i)
     expect(MO_PORTAL_WALKTHROUGH[8]).toMatch(/validate other corridor states/i)
+    expect(MO_PORTAL_WALKTHROUGH[8]).toMatch(/carrier contact/i)
     expect(MO_PORTAL_WALKTHROUGH[9]).toMatch(/permit #/)
+    const steps = buildMoFilingSteps()
+    expect(steps).toHaveLength(MO_PORTAL_WALKTHROUGH.length)
+    expect(steps.find((s) => s.id === 'trip_tab')?.guidance?.join(' ')).toMatch(
+      /city\/state|Street Address/i
+    )
     const joined = MO_PORTAL_WALKTHROUGH.join(' ')
     expect(joined).not.toMatch(/click File > Applications > New/i)
     expect(MO_PAY_LAST_NOTE).toMatch(/Validate other corridor states/)

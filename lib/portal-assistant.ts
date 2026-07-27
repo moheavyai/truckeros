@@ -1034,6 +1034,8 @@ export const PREFILL_FIELD_LABELS: Record<string, string> = {
   tip_vehicle_type: 'Vehicle Type',
   tip_power_unit_type: 'Power Unit Type tip',
   tip_booster: 'Booster unit',
+  tip_piece_dims: 'Piece dims note',
+  contact_name: 'Carrier contact name',
   special_notes: 'Special Notes',
 }
 
@@ -1183,6 +1185,7 @@ export const MO_PORTAL_FIELD_ORDER: readonly string[] = [
   'tip_vehicle_type',
   'tip_power_unit_type',
   'tip_booster',
+  'tip_piece_dims',
   // Load
   'load_description',
   'load_pieces',
@@ -1204,6 +1207,12 @@ export const MO_PORTAL_FIELD_ORDER: readonly string[] = [
   'trailer_vin',
   'trailer_year',
   'unit_two_type',
+  // Unit three (second identity when present — often jeep/booster)
+  'trailer_2_make',
+  'trailer_2_plate',
+  'trailer_2_plate_state',
+  'trailer_2_vin',
+  'trailer_2_year',
   // Overall dims / weight / overhang / axles
   'width',
   'length',
@@ -1213,12 +1222,13 @@ export const MO_PORTAL_FIELD_ORDER: readonly string[] = [
   'front_overhang',
   'rear_overhang',
   'axles',
-  // Carrier / profile contact (Payment uses name + email)
+  // Carrier / profile contact (Payment prefers carrier contact, not driver)
   'carrier_usdot',
   'carrier_company',
   'carrier_mc',
-  'driver_name',
+  'contact_name',
   'carrier_email',
+  'driver_name',
   // Trip tab guidance
   'origin',
   'destination',
@@ -1238,6 +1248,7 @@ export const MO_APPLICATION_PREFILL_KEYS: readonly string[] = [
   'tip_vehicle_type',
   'tip_power_unit_type',
   'tip_booster',
+  'tip_piece_dims',
   'load_description',
   'load_pieces',
   'serial_number',
@@ -1256,6 +1267,11 @@ export const MO_APPLICATION_PREFILL_KEYS: readonly string[] = [
   'trailer_vin',
   'trailer_year',
   'unit_two_type',
+  'trailer_2_make',
+  'trailer_2_plate',
+  'trailer_2_plate_state',
+  'trailer_2_vin',
+  'trailer_2_year',
   'width',
   'length',
   'height',
@@ -1279,9 +1295,9 @@ export const MO_TRIP_TAB_PREFILL_KEYS: readonly string[] = [
   'border_exit',
 ] as const
 
-/** Prefill keys for Payment step (profile contact + carrier identity). */
+/** Prefill keys for Payment step (carrier contact first; driver only if no carrier contact). */
 export const MO_PAYMENT_PREFILL_KEYS: readonly string[] = [
-  'driver_name',
+  'contact_name',
   'carrier_email',
   'carrier_usdot',
   'carrier_company',
@@ -1326,6 +1342,7 @@ export const MO_PORTAL_FIELD_LABELS: Record<string, string> = {
   tip_vehicle_type: 'Vehicle Type',
   tip_power_unit_type: 'Power Unit Type tip',
   tip_booster: 'Booster unit',
+  tip_piece_dims: 'Piece dims note',
   load_description: 'Load Description',
   load_pieces: 'Load Pieces / How Many',
   serial_number: 'Serial Number',
@@ -1376,25 +1393,26 @@ export const MO_PORTAL_FIELD_LABELS: Record<string, string> = {
   carrier_usdot: 'USDOT',
   carrier_mc: 'MC number',
   carrier_company: 'Carrier name',
-  carrier_email: 'Contact email',
-  driver_name: 'Contact name',
+  contact_name: 'Carrier contact name',
+  carrier_email: 'Carrier email',
+  driver_name: 'Driver name',
 }
 
 /**
- * Live-mapped Carrier Express Single Trip walkthrough v3 (from screenshots).
- * Application enums → Trip Analyze → Review → Payment (pay-last multi-state).
+ * Path-note walkthrough (mirrors buildMoFilingSteps titles — single source of path truth is steps).
+ * Prefill often has city/state only; MoDOT Trip map may still require Street Address entry.
  * Copy-assist only — no RPA / auto-click.
  */
 export const MO_PORTAL_WALKTHROUGH: readonly string[] = [
   'Login Carrier Express (mcs.modot.mo.gov)',
   'Programs → Oversize/Overweight',
   'New Application → Single Trip Permits → Single Trip',
-  'Step 1 Travel Dates (operator picks From/To; 7 moving days typical — no auto dates unless already set)',
-  'Step 2 Application fields (packet + enum tips: Conveyance, Travel, Vehicle Type, Power Unit Type, Unit Two, Booster, Description list)',
-  'Trip — Street Address origin/dest → Add; optional Keypoint/map for borders; Analyze',
-  'After Analyze — Failures = 0; open Restrictions; save Trip Description / Trip From / Trip To',
-  'Review — verify MoDOT fields vs TruckerOS prefill',
-  'Payment — contact/email from profile; fee is MoDOT-displayed; Save if other states unvalidated; multi-state: validate other corridor states before Submit/pay',
+  'Step 1 Travel Dates (From/To; 7 moving days typical)',
+  'Step 2 Application fields (packet + enum tips)',
+  'Trip — Street Address origin/dest → Add (TruckerOS may only have city/state; enter full street on MoDOT if required); optional Keypoint/map for borders; Analyze',
+  'After Analyze — Failures = 0; Restrictions; save Trip Description / From / To',
+  'Review — verify vs TruckerOS prefill',
+  'Payment — carrier contact/email; fee is MoDOT-displayed; Save if other states unvalidated; multi-state: validate other corridor states before Submit/pay',
   'Paste permit # back into Portal Assist when issued',
 ] as const
 
@@ -1426,8 +1444,6 @@ export interface MoFilingStep {
   title: string
   /** Prefill keys whose values are copied for this step (may be empty). */
   prefillKeys: string[]
-  /** True when this step applies for multi-state / border roles. */
-  multiStateOnly?: boolean
   /** Operator guidance under the step (enum options, Analyze checklist, pay-last). */
   guidance?: string[]
 }
@@ -1455,13 +1471,51 @@ export function isMoMultiStatePrefill(prefill?: PrefillPackage | null): boolean 
 }
 
 /**
- * MoDOT Vehicle Type tip from tractor + trailer identity.
- * tractor + trailer → "PowerUnit + 1 Unit"; tractor only → "PowerUnit".
+ * Count cargo trailers only (skip jeep/booster/dolly) for MoDOT Vehicle Type tip.
+ * Prefers cargo_trailer_count when set; else non-booster trailers from equipment; else primary identity.
+ * Clamped to 1–2 for known Unit tips (MoDOT Vehicle Type: +1 / +2 Units).
+ */
+export function countMoCargoTrailers(
+  prefill?: PrefillPackage | null,
+  request?: any
+): number {
+  const fields = prefill?.generatedFields || {}
+  const cargoCount = Number(fields.cargo_trailer_count)
+  if (Number.isFinite(cargoCount) && cargoCount >= 0) {
+    return Math.trunc(cargoCount)
+  }
+  const equip = request?.equipment || prefill?.loadDetails?.equipment || {}
+  const rig = equip?.rig as Record<string, any> | undefined
+  const trailers = Array.isArray(rig?.trailers) ? (rig!.trailers as Record<string, any>[]) : []
+  if (trailers.length > 0) {
+    const cargo = trailers.filter((tr) => !isBoosterLikeTrailer(tr))
+    // All booster-like → treat primary pick as 1 unit if any trailer exists
+    if (cargo.length > 0) return cargo.length
+    return trailers.length > 0 ? 1 : 0
+  }
+  // Fall back to primary Unit Two identity only (not trailer_count which includes jeep)
+  if (
+    hasPrefillValue(fields.trailer_make) ||
+    hasPrefillValue(fields.trailer_vin) ||
+    hasPrefillValue(fields.trailer_plate) ||
+    hasPrefillValue(fields.trailer_year) ||
+    hasPrefillValue(fields.unit_two_type)
+  ) {
+    return 1
+  }
+  return 0
+}
+
+/**
+ * MoDOT Vehicle Type tip from tractor + cargo-trailer count (jeep/booster excluded).
+ * tractor + 1 cargo → "PowerUnit + 1 Unit"; tractor + 2 cargo → "PowerUnit + 2 Units" (max).
  * Empty string when equipment is unknown (omit from packet).
  */
-export function buildMoVehicleTypeTip(prefill?: PrefillPackage | null): string {
+export function buildMoVehicleTypeTip(
+  prefill?: PrefillPackage | null,
+  request?: any
+): string {
   const fields = prefill?.generatedFields || {}
-  const trailerCount = Number(fields.trailer_count)
   // Tractor: discrete power-unit fields only (vehicle_id may be trailer VIN)
   const hasTractor =
     hasPrefillValue(fields.tractor_make) ||
@@ -1470,25 +1524,43 @@ export function buildMoVehicleTypeTip(prefill?: PrefillPackage | null): string {
     hasPrefillValue(fields.tractor_plate) ||
     hasPrefillValue(fields.tractor_model) ||
     hasPrefillValue(fields.tractor_ymm)
-  const hasTrailer =
-    (Number.isFinite(trailerCount) && trailerCount >= 1) ||
-    hasPrefillValue(fields.trailer_make) ||
-    hasPrefillValue(fields.trailer_vin) ||
-    hasPrefillValue(fields.trailer_plate) ||
-    hasPrefillValue(fields.trailer_year) ||
-    hasPrefillValue(fields.unit_two_type)
+  const cargoN = countMoCargoTrailers(prefill, request)
+  const hasTrailer = cargoN >= 1
 
   if (hasTractor && hasTrailer) {
-    const n =
-      Number.isFinite(trailerCount) && trailerCount > 1
-        ? Math.trunc(trailerCount)
-        : 1
+    // MoDOT list: PowerUnit + 1 Unit | + 2 Units | + 3 Units — clamp known cargo to 2
+    const n = Math.min(Math.max(cargoN, 1), 2)
     return n === 1 ? 'PowerUnit + 1 Unit' : `PowerUnit + ${n} Units`
   }
   if (hasTractor) return 'PowerUnit'
-  if (hasTrailer) return '1 Unit'
+  if (hasTrailer) return cargoN >= 2 ? '2 Units' : '1 Unit'
   // Unknown configuration — omit tip rather than invent PowerUnit + 1 Unit
   return ''
+}
+
+/**
+ * Payment contact name: prefer carrier contact / company over driver.
+ * Driver is last-resort fallback only when no carrier identity name exists.
+ */
+export function buildMoContactName(
+  carrierDriver?: Record<string, any> | null
+): string | null {
+  if (!carrierDriver || typeof carrierDriver !== 'object') return null
+  const carrierContact =
+    pickEquipmentField(
+      carrierDriver,
+      'contactName',
+      'contact_name',
+      'carrierContactName',
+      'carrier_contact_name'
+    ) || null
+  if (carrierContact) return String(carrierContact).trim()
+  const company = pickEquipmentField(carrierDriver, 'companyName', 'company_name') || null
+  if (company) return String(company).trim()
+  const driver =
+    pickEquipmentField(carrierDriver, 'driverFullName', 'driver_full_name') || null
+  if (driver) return String(driver).trim()
+  return null
 }
 
 /**
@@ -1623,7 +1695,7 @@ export function getMoStepPrefillKeysWithValues(
       return corridorJoin || undefined
     }
     if (key === 'tip_vehicle_type' && !hasPrefillValue(fields.tip_vehicle_type)) {
-      return buildMoVehicleTypeTip(prefill)
+      return buildMoVehicleTypeTip(prefill, prefill?.loadDetails)
     }
     if (key === 'tip_travel' && !hasPrefillValue(fields.tip_travel)) {
       return buildMoTravelTip(prefill)
@@ -1638,10 +1710,24 @@ export function getMoStepPrefillKeysWithValues(
       return buildMoDescriptionListTip()
     }
     if (key === 'tip_power_unit_type' && !hasPrefillValue(fields.tip_power_unit_type)) {
-      return buildMoPowerUnitTypeTip()
+      // Only when tractor present (same rule as power_unit_type value)
+      const hasTractor =
+        hasPrefillValue(fields.tractor_make) ||
+        hasPrefillValue(fields.tractor_vin) ||
+        hasPrefillValue(fields.tractor_year) ||
+        hasPrefillValue(fields.tractor_plate) ||
+        hasPrefillValue(fields.power_unit_type)
+      return hasTractor ? buildMoPowerUnitTypeTip() : undefined
     }
     if (key === 'tip_for_hire' && !hasPrefillValue(fields.tip_for_hire)) {
       return 'Yes (when for-hire carrier; override if private)'
+    }
+    if (key === 'contact_name' && !hasPrefillValue(fields.contact_name)) {
+      const cd =
+        (prefill.loadDetails as any)?.cargo?.carrierDriver ||
+        (prefill.loadDetails as any)?.carrierDriver ||
+        null
+      return buildMoContactName(cd) || fields.carrier_company || undefined
     }
     return fields[key]
   }
@@ -1673,7 +1759,7 @@ export function buildMoFilingSteps(prefill?: PrefillPackage | null): MoFilingSte
   ]
 
   const tripGuidance = [
-    'Street Address origin/dest → Add',
+    'MoDOT Trip map: Street Address origin/dest → Add (TruckerOS prefill is often city/state only — enter full street on MoDOT if required)',
     multiState
       ? 'Optional Keypoint/map for MO borders'
       : 'Optional Keypoint/map if needed',
@@ -1681,7 +1767,7 @@ export function buildMoFilingSteps(prefill?: PrefillPackage | null): MoFilingSte
   ]
 
   const paymentGuidance = [
-    'Use profile contact name / email when present',
+    'Use carrier contact name / company and carrier email when present (not driver as primary)',
     MO_FEE_DISPLAY_NOTE,
     ...(multiState
       ? [
@@ -1730,7 +1816,6 @@ export function buildMoFilingSteps(prefill?: PrefillPackage | null): MoFilingSte
         ? 'Trip — Street Address origin/dest → Add; Keypoint/map for borders; Analyze'
         : 'Trip — Street Address origin/dest → Add; Analyze',
       prefillKeys: tripKeys,
-      multiStateOnly: false, // trip guidance always shown; borders gated via prefillKeys
       guidance: tripGuidance,
     },
     {
@@ -1758,8 +1843,8 @@ export function buildMoFilingSteps(prefill?: PrefillPackage | null): MoFilingSte
       id: 'payment',
       stepNumber: 9,
       title: multiState
-        ? 'Payment — contact/email; MoDOT fee; pay-last when multi-state'
-        : 'Payment — contact/email; MoDOT-displayed fee',
+        ? 'Payment — carrier contact/email; MoDOT fee; pay-last when multi-state'
+        : 'Payment — carrier contact/email; MoDOT-displayed fee',
       prefillKeys: [...MO_PAYMENT_PREFILL_KEYS],
       guidance: paymentGuidance,
     },
@@ -1804,7 +1889,7 @@ export function buildMoFilingStepClipboard(
       return corridorJoin || undefined
     }
     if (key === 'tip_vehicle_type' && !hasPrefillValue(fields.tip_vehicle_type)) {
-      return buildMoVehicleTypeTip(prefill)
+      return buildMoVehicleTypeTip(prefill, prefill.loadDetails)
     }
     if (key === 'tip_travel' && !hasPrefillValue(fields.tip_travel)) {
       return buildMoTravelTip(prefill)
@@ -1819,10 +1904,23 @@ export function buildMoFilingStepClipboard(
       return buildMoDescriptionListTip()
     }
     if (key === 'tip_power_unit_type' && !hasPrefillValue(fields.tip_power_unit_type)) {
-      return buildMoPowerUnitTypeTip()
+      const hasTractor =
+        hasPrefillValue(fields.tractor_make) ||
+        hasPrefillValue(fields.tractor_vin) ||
+        hasPrefillValue(fields.tractor_year) ||
+        hasPrefillValue(fields.tractor_plate) ||
+        hasPrefillValue(fields.power_unit_type)
+      return hasTractor ? buildMoPowerUnitTypeTip() : undefined
     }
     if (key === 'tip_for_hire' && !hasPrefillValue(fields.tip_for_hire)) {
       return 'Yes (when for-hire carrier; override if private)'
+    }
+    if (key === 'contact_name' && !hasPrefillValue(fields.contact_name)) {
+      const cd =
+        (prefill.loadDetails as any)?.cargo?.carrierDriver ||
+        (prefill.loadDetails as any)?.carrierDriver ||
+        null
+      return buildMoContactName(cd) || fields.carrier_company || undefined
     }
     return fields[key]
   }
@@ -2205,6 +2303,12 @@ export function generatePortalPrefill(
     const trailers = Array.isArray(rig.trailers) ? rig.trailers : []
     if (trailers.length > 0) {
       generated.trailer_count = trailers.length
+      // Cargo-only count for MoDOT Vehicle Type (excludes jeep/booster/dolly)
+      const cargoTrailers = (trailers as Record<string, any>[]).filter(
+        (tr) => !isBoosterLikeTrailer(tr)
+      )
+      generated.cargo_trailer_count =
+        cargoTrailers.length > 0 ? cargoTrailers.length : trailers.length > 0 ? 1 : 0
       // Prefer primary cargo deck for Unit Two (skip jeep/booster when later trailer exists)
       const primary =
         pickPrimaryCargoTrailer(trailers as Record<string, any>[]) ||
@@ -2300,28 +2404,33 @@ export function generatePortalPrefill(
     }
   }
 
-  // Piece dims: prefer cargo.load when present; else overall with note
+  // Piece dims: clean numeric values only when cargo.load piece dims exist (no paste annotations).
+  // Guidance when piece missing lives in tip_piece_dims (MO) — not in the value line.
   const loadSlice = (cargo.load || {}) as Record<string, any>
   const pieceLenRaw = loadSlice.lengthFt ?? loadSlice.length_ft ?? loadSlice.length
   const pieceWidRaw = loadSlice.widthFt ?? loadSlice.width_ft ?? loadSlice.width
   const pieceHtRaw = loadSlice.heightFt ?? loadSlice.height_ft ?? loadSlice.height
-  const overallLen = formatPortalDimension(request.length) || request.length
-  const overallWid = formatPortalDimension(request.width) || request.width
-  const overallHt = formatPortalDimension(request.height) || request.height
+  let hasPieceDim = false
   if (pieceLenRaw != null && pieceLenRaw !== '' && Number(pieceLenRaw) !== 0) {
     generated.piece_length = formatPortalDimension(pieceLenRaw) || pieceLenRaw
-  } else if (overallLen != null && overallLen !== '') {
-    generated.piece_length = `${overallLen} (overall — load piece not set)`
+    hasPieceDim = true
   }
   if (pieceWidRaw != null && pieceWidRaw !== '' && Number(pieceWidRaw) !== 0) {
     generated.piece_width = formatPortalDimension(pieceWidRaw) || pieceWidRaw
-  } else if (overallWid != null && overallWid !== '') {
-    generated.piece_width = `${overallWid} (overall — load piece not set)`
+    hasPieceDim = true
   }
   if (pieceHtRaw != null && pieceHtRaw !== '' && Number(pieceHtRaw) !== 0) {
     generated.piece_height = formatPortalDimension(pieceHtRaw) || pieceHtRaw
-  } else if (overallHt != null && overallHt !== '') {
-    generated.piece_height = `${overallHt} (overall — load piece not set)`
+    hasPieceDim = true
+  }
+  // Piece-dim guidance is MO tip-only (clean numeric piece values when present; no overall annotation in values)
+  if (
+    stateCode === 'MO' &&
+    !hasPieceDim &&
+    (cargoDesc || serial || cargo.load || cargo.envelope)
+  ) {
+    generated.tip_piece_dims =
+      'Piece W/L/H not set on load — enter on MoDOT or use overall dims only if same as piece (do not paste overall into piece fields blindly)'
   }
 
   // Highways from corridor builder (portal trip guidance)
@@ -2377,6 +2486,9 @@ export function generatePortalPrefill(
   if (carrierEmail) generated.carrier_email = carrierEmail
   const driverName = pickEquipmentField(carrierDriver, 'driverFullName', 'driver_full_name')
   if (driverName) generated.driver_name = driverName
+  // Payment contact: carrier contact / company preferred over driver
+  const contactName = buildMoContactName(carrierDriver)
+  if (contactName) generated.contact_name = contactName
   const driverCdl = pickEquipmentField(carrierDriver, 'cdlNumber', 'cdl_number')
   if (driverCdl) generated.driver_cdl = driverCdl
   const driverCdlState = pickEquipmentField(carrierDriver, 'cdlState', 'cdl_state')
@@ -2397,7 +2509,10 @@ export function generatePortalPrefill(
     generated.tip_conveyance = buildMoConveyanceTip()
     generated.tip_description_list = buildMoDescriptionListTip()
     generated.tip_for_hire = 'Yes (when for-hire carrier; override if private)'
-    generated.tip_power_unit_type = buildMoPowerUnitTypeTip()
+    // Power unit type tip only when tractor present (same as power_unit_type value)
+    if (tractorPresent) {
+      generated.tip_power_unit_type = buildMoPowerUnitTypeTip()
+    }
     // Temporary prefill shell for tip helpers (full package assembled below)
     const tipShell: PrefillPackage = {
       state: stateCode,
@@ -2409,7 +2524,7 @@ export function generatePortalPrefill(
       approvalNotes: [],
     }
     generated.tip_travel = buildMoTravelTip(tipShell, request.route_corridor || [])
-    const vehicleTip = buildMoVehicleTypeTip(tipShell)
+    const vehicleTip = buildMoVehicleTypeTip(tipShell, request)
     if (vehicleTip) generated.tip_vehicle_type = vehicleTip
     generated.tip_booster = buildMoBoosterTip(tipShell, request)
   }
