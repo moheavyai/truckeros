@@ -389,6 +389,23 @@ def test_use_us136_through_auburn_seeds_auburn_not_rock_port():
     assert rock is None, f"Rock Port should not be forced when Auburn named; vias={[v['name'] for v in vias]}"
 
 
+def test_use_us136_thru_auburn_seeds_auburn_not_rock_port():
+    """Informal 'thru' is a synonym of 'through' for prefer-clause places."""
+    load = {
+        "origin": {"city": "Kansas City", "state": "MO"},
+        "destination": {"city": "Lincoln", "state": "NE"},
+        "specialInstructions": "avoid IA. use US136 thru Auburn, NE from MO border",
+    }
+    stops = build_stops_from_load(load, (39.0997, -94.5786), (40.8136, -96.7026))
+    vias = [s for s in stops if s.get("is_via")]
+    auburn = next((v for v in vias if "auburn" in v["name"].lower()), None)
+    assert auburn is not None, f"Auburn via missing for thru; vias={[v['name'] for v in vias]}"
+    assert auburn["state"] == "NE"
+    assert auburn["lat"] == pytest.approx(40.3925, abs=0.02)
+    rock = next((v for v in vias if "rock" in v["name"].lower()), None)
+    assert rock is None, f"Rock Port should not be forced when Auburn named via thru; vias={[v['name'] for v in vias]}"
+
+
 def test_prefer_us136_alone_still_seeds_rock_port():
     """Bare 'prefer US136' (no place) keeps highway default anchor Rock Port."""
     load = {
