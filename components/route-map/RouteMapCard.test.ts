@@ -69,7 +69,7 @@ describe('RouteMapCard structure', () => {
     expect(source).toContain('truncateChipLabel')
     expect(source).toContain('legendRoles')
     expect(source).toContain('ROUTE_MAP_ROLE_SWATCH')
-    expect(source).toContain("import type { ReactNode } from 'react'")
+    expect(source).toMatch(/import\s*\{[^}]*\btype\s+ReactNode\b[^}]*\}\s*from\s*['"]react['"]/)
     expect(source).toContain('showLineLegend')
   })
 
@@ -98,17 +98,34 @@ describe('RouteMap MapLibre foundation', () => {
     expect(source).toMatch(/Why MapLibre|MapLibre \(not Leaflet\)/)
   })
 
-  it('loads maplibre-gl via dynamic import (no top-level default import for Map)', () => {
-    // webpack/Next interop leaves `import maplibregl from 'maplibre-gl'` undefined at runtime
+  it('loads maplibre-gl via dynamic import (no top-level default value import)', () => {
+    // webpack/Next interop leaves default value imports of maplibre-gl undefined at runtime
     const source = read(mapPath)
-    expect(source).not.toMatch(
-      /^\s*import\s+maplibregl\s+from\s+['"]maplibre-gl['"]/m
+    // Strip line + block comments so assertions do not match documentation only
+    const codeOnly = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
+    // Ban value imports of maplibre-gl under any binding name (default / namespace / named)
+    expect(codeOnly).not.toMatch(/import\s+[A-Za-z_$][\w$]*\s+from\s+['"]maplibre-gl['"]/)
+    expect(codeOnly).not.toMatch(/import\s+\*\s+as\s+[A-Za-z_$][\w$]*\s+from\s+['"]maplibre-gl['"]/)
+    // Named value import would be `import { Map }` — type-only is `import type { Map`
+    expect(codeOnly).not.toMatch(
+      /import\s*\{[^}]*\b(?:Map|Marker|Popup|NavigationControl|LngLatBounds)\b[^}]*\}\s*from\s*['"]maplibre-gl['"]/
     )
-    expect(source).toContain("import('maplibre-gl')")
-    expect(source).toMatch(/\.default\s*\?\?\s*/)
-    expect(source).toContain('Map failed to load')
-    // Types only — no runtime default value import
-    expect(source).toMatch(/import\s+type\s*\{[\s\S]*Map\s+as\s+MaplibreMap/)
+    expect(codeOnly).toContain("import('maplibre-gl')")
+    expect(codeOnly).toContain('resolveMaplibreModule')
+    expect(codeOnly).toContain('setMapReady(false)')
+    expect(codeOnly).toContain('Map failed to load')
+    expect(codeOnly).toContain('route-map-load-error')
+    // Types only for Map class; runtime Map from dynamic import + resolve
+    expect(codeOnly).toMatch(/import\s+type\s*\{[\s\S]*?\bMap\s+as\s+MaplibreMap/)
+  })
+
+  it('hides idle overlay when map canvas load fails', () => {
+    const card = read(cardPath)
+    expect(card).toContain('mapLoadFailed')
+    expect(card).toContain('onLoadError')
+    expect(card).toContain('isIdleEmpty && !mapLoadFailed')
   })
 
   it('cleans up load listeners and guards short LineString setData', () => {

@@ -6,7 +6,7 @@
  */
 
 import dynamic from 'next/dynamic'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { RouteMapChip, RouteMapStopRole, RouteMapViewModel } from './types'
 import {
   ROUTE_MAP_ROLE_LABEL,
@@ -67,6 +67,7 @@ function truncateChipLabel(label: string, max = 42): string {
 }
 
 export default function RouteMapCard({ model, actions, className, onMapClick }: RouteMapCardProps) {
+  const [mapLoadFailed, setMapLoadFailed] = useState(false)
   const isCalculating = model.status === 'calculating'
   const isError = model.status === 'error'
   const isIdleEmpty = model.status === 'idle' && model.stops.length === 0
@@ -140,9 +141,14 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
       )}
 
       <div className="relative">
-        <RouteMap model={model} onMapClick={onMapClick} />
+        <RouteMap
+          model={model}
+          onMapClick={onMapClick}
+          onLoadError={(msg) => setMapLoadFailed(!!msg)}
+        />
 
-        {isIdleEmpty && (
+        {/* Hide idle hint when MapLibre canvas itself failed to load */}
+        {isIdleEmpty && !mapLoadFailed && (
           <div className="absolute inset-0 flex items-end justify-center pointer-events-none p-4">
             <p className="text-sm text-gray-600 bg-white/90 border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm">
               {model.message || 'Enter origin and destination to preview the route map'}

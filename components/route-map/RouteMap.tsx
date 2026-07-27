@@ -18,11 +18,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type {
   GeoJSONSource,
-  LngLatBounds,
   Map as MaplibreMap,
   Marker as MaplibreMarker,
-  NavigationControl,
-  Popup,
 } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { LatLon, RouteMapStop, RouteMapViewModel } from './types'
@@ -30,6 +27,13 @@ import {
   ROUTE_MAP_MARKER_GLYPH,
   ROUTE_MAP_ROLE_HEX,
 } from './roleStyles'
+import {
+  resolveMaplibreModule,
+  type MaplibreRuntime,
+} from './resolveMaplibreModule'
+
+export { resolveMaplibreModule } from './resolveMaplibreModule'
+export type { MaplibreRuntime } from './resolveMaplibreModule'
 
 const DEFAULT_MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
 /** CONUS-ish default when no stops. */
@@ -37,28 +41,6 @@ const DEFAULT_CENTER: [number, number] = [-98.5, 39.8]
 const DEFAULT_ZOOM = 3.2
 /** Bounds span below this (degrees) treated as coincident → single-stop zoom. */
 const NEAR_ZERO_BOUNDS_DEG = 1e-5
-
-/**
- * Runtime MapLibre namespace after default-or-module interop resolve.
- * Only used from client effects; never top-level default import.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MaplibreRuntime = {
-  Map: new (options: any) => MaplibreMap
-  Marker: new (options?: any) => MaplibreMarker
-  Popup: new (options?: any) => Popup
-  NavigationControl: new (options?: any) => NavigationControl
-  LngLatBounds: new (...args: any[]) => LngLatBounds
-}
-
-function resolveMaplibreModule(mod: unknown): MaplibreRuntime | null {
-  // webpack/Next: (mod as any).default ?? mod
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const raw = mod as any
-  const ml = (raw?.default ?? raw) as MaplibreRuntime | undefined
-  if (!ml?.Map) return null
-  return ml
-}
 
 function resolveMapStyle(): string {
   if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_MAP_STYLE_URL) {
@@ -77,6 +59,8 @@ export interface RouteMapProps {
   className?: string
   /** Map v2 reserved: click handler for adding waypoints (not used in v1 UI). */
   onMapClick?: (coords: { lat: number; lon: number }) => void
+  /** Fires when canvas fails to load (null when cleared on remount success path). */
+  onLoadError?: (message: string | null) => void
 }
 
 function buildMarkerElement(stop: RouteMapStop): HTMLDivElement {
@@ -161,17 +145,34 @@ function fitToStops(map: MaplibreMap, stops: RouteMapStop[], ml: MaplibreRuntime
   })
 }
 
-export default function RouteMap({ model, className, onMapClick }: RouteMapProps) {
+export default function RouteMap({
+  model,
+  className,
+  onMapClick,
+  onLoadError,
+}: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MaplibreMap | null>(null)
   const markersRef = useRef<MaplibreMarker[]>([])
   const mlRef = useRef<MaplibreRuntime | null>(null)
   const onMapClickRef = useRef(onMapClick)
   onMapClickRef.current = onMapClick
+  const onLoadErrorRef = useRef(onLoadError)
+  onLoadErrorRef.current = onLoadError
   const styleReadyRef = useRef(false)
   /** Bumps when map instance is ready so marker/line sync re-runs after async import. */
   const [mapReady, setMapReady] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  const failLoad = (reason: string, err?: unknown) => {
+    if (err !== undefined) {
+      console.error(reason, err)
+    } else {
+      console.error(reason)
+    }
+    setLoadError('Map failed to load')
+    onLoadErrorRef.current?.('Map failed to load')
+  }
 
   // Init map once via dynamic import (webpack default interop safe)
   useEffect(() => {
@@ -186,50 +187,69 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
         mod = await import('maplibre-gl')
       } catch (err) {
         if (cancelled) return
-        console.error('[RouteMap] maplibre-gl import failed', err)
-        setLoadError('Map failed to load')
+        failLoad('[RouteMap] maplibre-gl import failed', err)
         return
       }
 
       if (cancelled) return
 
       const ml = resolveMaplibreModule(mod)
-      if (!ml?.Map) {
-        console.error(
-          '[RouteMap] maplibre-gl Map constructor missing after import interop resolve'
+      if (!ml) {
+        if (cancelled) return
+        failLoad(
+          '[RouteMap] maplibre-gl constructors missing after import interop resolve'
         )
-        setLoadError('Map failed to load')
         return
       }
 
       if (!containerRef.current || cancelled) return
 
-      mlRef.current = ml
-      const map = new ml.Map({
-        container: containerRef.current,
-        style: resolveMapStyle(),
-        center: DEFAULT_CENTER,
-        zoom: DEFAULT_ZOOM,
-        attributionControl: { compact: true },
-        // Prefer page scroll on touch devices only; desktop keeps free wheel zoom
-        cooperativeGestures: isCoarsePointer(),
-      })
-      createdMap = map
-      map.addControl(new ml.NavigationControl({ showCompass: false }), 'top-right')
-      mapRef.current = map
-      styleReadyRef.current = false
+      try {
+        mlRef.current = ml
+        const map = new ml.Map({
+          container: containerRef.current,
+          style: resolveMapStyle(),
+          center: DEFAULT_CENTER,
+          zoom: DEFAULT_ZOOM,
+          attributionControl: { compact: true },
+          // Prefer page scroll on touch devices only; desktop keeps free wheel zoom
+          cooperativeGestures: isCoarsePointer(),
+        })
+        createdMap = map
+        map.addControl(new ml.NavigationControl({ showCompass: false }), 'top-right')
+        mapRef.current = map
+        styleReadyRef.current = false
 
-      const onLoad = () => {
-        styleReadyRef.current = true
-      }
-      map.on('load', onLoad)
+        const onLoad = () => {
+          styleReadyRef.current = true
+        }
+        map.on('load', onLoad)
 
-      map.on('click', (e) => {
-        onMapClickRef.current?.({ lat: e.lngLat.lat, lon: e.lngLat.lng })
-      })
+        map.on('click', (e: { lngLat: { lat: number; lng: number } }) => {
+          onMapClickRef.current?.({ lat: e.lngLat.lat, lon: e.lngLat.lng })
+        })
 
-      if (!cancelled) {
+        // Cheap diagnostics only — do not flip loadError (tile/style noise is common)
+        map.on('error', (e: { error?: Error; message?: string }) => {
+          console.error('[RouteMap] map error', e?.error || e?.message || e)
+        })
+
+        if (cancelled) {
+          map.remove()
+          createdMap = null
+          mapRef.current = null
+          mlRef.current = null
+          return
+        }
+
+        onLoadErrorRef.current?.(null)
         setMapReady(true)
+      } catch (err) {
+        if (cancelled) return
+        createdMap = null
+        mapRef.current = null
+        mlRef.current = null
+        failLoad('[RouteMap] Map construct / addControl failed', err)
       }
     })()
 
@@ -244,6 +264,8 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
       }
       mapRef.current = null
       mlRef.current = null
+      // Strict Mode: setup→cleanup→setup must clear mapReady so second setMapReady(true) retriggers sync
+      setMapReady(false)
     }
   }, [])
 
@@ -355,8 +377,9 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
   if (loadError) {
     return (
       <div
-        className={`${containerClass} flex items-center justify-center text-sm text-slate-600`}
+        className={`${containerClass} relative z-10 flex items-center justify-center px-4 text-sm font-medium text-red-800 bg-red-50 border border-red-200`}
         role="alert"
+        data-testid="route-map-load-error"
       >
         {loadError}
       </div>
