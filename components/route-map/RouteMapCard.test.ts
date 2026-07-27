@@ -98,6 +98,19 @@ describe('RouteMap MapLibre foundation', () => {
     expect(source).toMatch(/Why MapLibre|MapLibre \(not Leaflet\)/)
   })
 
+  it('loads maplibre-gl via dynamic import (no top-level default import for Map)', () => {
+    // webpack/Next interop leaves `import maplibregl from 'maplibre-gl'` undefined at runtime
+    const source = read(mapPath)
+    expect(source).not.toMatch(
+      /^\s*import\s+maplibregl\s+from\s+['"]maplibre-gl['"]/m
+    )
+    expect(source).toContain("import('maplibre-gl')")
+    expect(source).toMatch(/\.default\s*\?\?\s*/)
+    expect(source).toContain('Map failed to load')
+    // Types only — no runtime default value import
+    expect(source).toMatch(/import\s+type\s*\{[\s\S]*Map\s+as\s+MaplibreMap/)
+  })
+
   it('cleans up load listeners and guards short LineString setData', () => {
     const source = read(mapPath)
     expect(source).toContain("map.off('load'")
