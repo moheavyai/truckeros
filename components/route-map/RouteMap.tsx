@@ -7,37 +7,34 @@
  * free styles (OpenFreeMap) with no paid API key, good fitBounds + GeoJSON layers.
  * CSS is imported here once; parent uses dynamic(..., { ssr: false }) so WebGL
  * never runs during Next SSR.
+ *
+ * Style URL: NEXT_PUBLIC_MAP_STYLE_URL or OpenFreeMap liberty default.
+ * onMapClick is optional Map v2 hook (unused in v1 UI). Drag-edit is not wired in v1.
  */
 
 import { useEffect, useRef } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { RouteMapStop, RouteMapViewModel } from './types'
+import {
+  ROUTE_MAP_MARKER_GLYPH,
+  ROUTE_MAP_ROLE_HEX,
+} from './roleStyles'
 
-/** Free MapLibre vector style — no Google/Mapbox paid key. */
-const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
+const DEFAULT_MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
 
-const MARKER_COLORS: Record<RouteMapStop['role'], string> = {
-  origin: '#2563eb', // blue
-  via: '#7c3aed', // violet
-  drop: '#d97706', // amber
-  destination: '#059669', // emerald
-}
-
-const MARKER_LABEL: Record<RouteMapStop['role'], string> = {
-  origin: 'A',
-  via: '•',
-  drop: 'D',
-  destination: 'B',
+function resolveMapStyle(): string {
+  if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_MAP_STYLE_URL) {
+    return process.env.NEXT_PUBLIC_MAP_STYLE_URL
+  }
+  return DEFAULT_MAP_STYLE
 }
 
 export interface RouteMapProps {
   model: RouteMapViewModel
   className?: string
-  /** Map v2: reserved click handler for adding waypoints (unused in v1 UI). */
+  /** Map v2 reserved: click handler for adding waypoints (not used in v1 UI). */
   onMapClick?: (coords: { lat: number; lon: number }) => void
-  /** Map v2: reserved drag end for pending/manual waypoints. */
-  onWaypointDragEnd?: (id: string, coords: { lat: number; lon: number }) => void
 }
 
 function buildMarkerElement(stop: RouteMapStop): HTMLDivElement {
@@ -51,7 +48,7 @@ function buildMarkerElement(stop: RouteMapStop): HTMLDivElement {
     'display:flex',
     'align-items:center',
     'justify-content:center',
-    `background:${MARKER_COLORS[stop.role]}`,
+    `background:${ROUTE_MAP_ROLE_HEX[stop.role]}`,
     'color:#fff',
     'font:700 12px/1 system-ui,sans-serif',
     isRound ? 'border-radius:9999px' : 'border-radius:6px',
@@ -60,16 +57,46 @@ function buildMarkerElement(stop: RouteMapStop): HTMLDivElement {
     'cursor:default',
     'user-select:none',
   ].join(';')
-  el.textContent = MARKER_LABEL[stop.role]
+  el.textContent = ROUTE_MAP_MARKER_GLYPH[stop.role]
   return el
+}
+
+function removeRouteLine(map: maplibregl.Map) {
+  if (map.getLayer('route-line-layer')) {
+    map.removeLayer('route-line-layer')
+  }
+  if (map.getSource('route-line')) {
+    map.removeSource('route-line')
+  }
+}
+
+function fitToStops(map: maplibregl.Map, stops: RouteMapStop[]) {
+  if (stops.length === 1) {
+    map.easeTo({
+      center: [stops[0].lon, stops[0].lat],
+      zoom: 8,
+      duration: prefersReducedMotion() ? 0 : 400,
+    })
+  } else if (stops.length >= 2) {
+    const bounds = new maplibregl.LngLatBounds()
+    for (const s of stops) bounds.extend([s.lon, s.lat])
+    map.fitBounds(bounds, {
+      padding: { top: 48, bottom: 48, left: 48, right: 48 },
+      maxZoom: 10,
+      duration: prefersReducedMotion() ? 0 : 500,
+    })
+  }
 }
 
 export default function RouteMap({ model, className, onMapClick }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
+  const modelRef = useRef(model)
+  modelRef.current = model
   const onMapClickRef = useRef(onMapClick)
   onMapClickRef.current = onMapClick
+  const styleReadyRef = useRef(false)
 
   // Init map once
   useEffect(() => {
@@ -77,34 +104,76 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: MAP_STYLE,
+      style: resolveMapStyle(),
       center: [-98.5, 39.8],
       zoom: 3.2,
       attributionControl: { compact: true },
+      // Prefer page scroll on mobile; hold Ctrl/⌘ to zoom with wheel
+      cooperativeGestures: true,
     })
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
     mapRef.current = map
+    styleReadyRef.current = false
+
+    const onLoad = () => {
+      styleReadyRef.current = true
+    }
+    map.on('load', onLoad)
 
     map.on('click', (e) => {
-      // v1: no-op unless parent wires Map v2 handler
       onMapClickRef.current?.({ lat: e.lngLat.lat, lon: e.lngLat.lng })
     })
 
     return () => {
+      map.off('load', onLoad)
       markersRef.current.forEach((m) => m.remove())
       markersRef.current = []
+      styleReadyRef.current = false
       map.remove()
       mapRef.current = null
     }
   }, [])
 
-  // Sync markers + line + bounds when model changes
+  // ResizeObserver: keep canvas sized when card layout changes
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const ro = new ResizeObserver(() => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        const map = mapRef.current
+        if (!map) return
+        map.resize()
+        if (styleReadyRef.current && modelRef.current.stops.length > 0) {
+          fitToStops(map, modelRef.current.stops)
+        }
+      }, 100)
+    })
+    ro.observe(el)
+    return () => {
+      if (timer) clearTimeout(timer)
+      ro.disconnect()
+    }
+  }, [])
+
+  // Sync markers + line + bounds when model changes (with load listener cleanup)
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
 
+    let cancelled = false
+
     const apply = () => {
-      // Clear prior markers
+      if (cancelled || mapRef.current !== map) return
+      // Guard against apply after style/map teardown
+      try {
+        if (!map.getStyle()) return
+      } catch {
+        return
+      }
+
       markersRef.current.forEach((m) => m.remove())
       markersRef.current = []
 
@@ -121,60 +190,53 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
       }
 
       const line = model.linePositions
-      const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          // MapLibre expects [lon, lat]
-          coordinates: line.map(([lat, lon]) => [lon, lat]),
-        },
-      }
 
-      if (map.getSource('route-line')) {
-        ;(map.getSource('route-line') as maplibregl.GeoJSONSource).setData(geojson)
-      } else if (line.length >= 2) {
-        map.addSource('route-line', { type: 'geojson', data: geojson })
-        map.addLayer({
-          id: 'route-line-layer',
-          type: 'line',
-          source: 'route-line',
-          layout: { 'line-join': 'round', 'line-cap': 'round' },
-          paint: {
-            'line-color': '#2563eb',
-            'line-width': 4,
-            'line-opacity': 0.85,
+      // Always remove short/invalid lines before setData (0–1 points are not valid LineStrings)
+      if (line.length < 2) {
+        removeRouteLine(map)
+      } else {
+        const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: line.map(([lat, lon]) => [lon, lat]),
           },
-        })
+        }
+
+        const existing = map.getSource('route-line') as maplibregl.GeoJSONSource | undefined
+        if (existing) {
+          existing.setData(geojson)
+        } else {
+          map.addSource('route-line', { type: 'geojson', data: geojson })
+          if (!map.getLayer('route-line-layer')) {
+            map.addLayer({
+              id: 'route-line-layer',
+              type: 'line',
+              source: 'route-line',
+              layout: { 'line-join': 'round', 'line-cap': 'round' },
+              paint: {
+                'line-color': '#2563eb',
+                'line-width': 4,
+                'line-opacity': 0.85,
+              },
+            })
+          }
+        }
       }
 
-      if (line.length < 2 && map.getLayer('route-line-layer')) {
-        map.removeLayer('route-line-layer')
-        if (map.getSource('route-line')) map.removeSource('route-line')
-      }
-
-      // fitBounds to stops
-      if (model.stops.length === 1) {
-        map.easeTo({
-          center: [model.stops[0].lon, model.stops[0].lat],
-          zoom: 8,
-          duration: prefersReducedMotion() ? 0 : 400,
-        })
-      } else if (model.stops.length >= 2) {
-        const bounds = new maplibregl.LngLatBounds()
-        for (const s of model.stops) bounds.extend([s.lon, s.lat])
-        map.fitBounds(bounds, {
-          padding: { top: 48, bottom: 48, left: 48, right: 48 },
-          maxZoom: 10,
-          duration: prefersReducedMotion() ? 0 : 500,
-        })
-      }
+      fitToStops(map, model.stops)
     }
 
-    if (map.isStyleLoaded()) {
+    if (map.isStyleLoaded() || styleReadyRef.current) {
       apply()
     } else {
       map.once('load', apply)
+    }
+
+    return () => {
+      cancelled = true
+      map.off('load', apply)
     }
   }, [model.stops, model.linePositions])
 
@@ -185,8 +247,7 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
         className ||
         'w-full min-h-[280px] md:min-h-[360px] rounded-xl overflow-hidden bg-slate-100'
       }
-      role="img"
-      aria-label="Route map"
+      aria-hidden="true"
     />
   )
 }

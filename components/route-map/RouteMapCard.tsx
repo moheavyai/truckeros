@@ -6,14 +6,19 @@
  */
 
 import dynamic from 'next/dynamic'
-import type { RouteMapChip, RouteMapViewModel } from './types'
+import type { ReactNode } from 'react'
+import type { RouteMapChip, RouteMapStopRole, RouteMapViewModel } from './types'
+import {
+  ROUTE_MAP_ROLE_LABEL,
+  ROUTE_MAP_ROLE_SWATCH,
+} from './roleStyles'
 
 const RouteMap = dynamic(() => import('./RouteMap'), {
   ssr: false,
   loading: () => (
     <div
       className="w-full min-h-[280px] md:min-h-[360px] rounded-xl bg-slate-100 flex items-center justify-center text-sm text-gray-500"
-      aria-hidden
+      role="status"
     >
       Loading map…
     </div>
@@ -28,19 +33,51 @@ const CHIP_TONE_CLASS: Record<NonNullable<RouteMapChip['tone']>, string> = {
   danger: 'bg-red-50 text-red-900 border-red-200',
 }
 
+const ROLE_ORDER: RouteMapStopRole[] = ['origin', 'via', 'drop', 'destination']
+
 export interface RouteMapCardProps {
   model: RouteMapViewModel
   /** Optional extra actions (e.g. Map v2 edit mode toggle). */
-  actions?: React.ReactNode
+  actions?: ReactNode
   className?: string
-  /** Map v2 reserved: map click → add waypoint. */
+  /** Map v2 reserved: map click → add waypoint (not wired in v1). */
   onMapClick?: (coords: { lat: number; lon: number }) => void
+}
+
+/** Short badge label for progress — distinct geocoding vs calculating. */
+function progressBadgeLabel(message?: string): string {
+  const m = (message || '').toLowerCase()
+  if (m.includes('resolv') || m.includes('geocod') || m.includes('address')) {
+    return 'Resolving…'
+  }
+  return 'Calculating…'
+}
+
+function truncateChipLabel(label: string, max = 42): string {
+  if (label.length <= max) return label
+  return `${label.slice(0, max - 1)}…`
 }
 
 export default function RouteMapCard({ model, actions, className, onMapClick }: RouteMapCardProps) {
   const isCalculating = model.status === 'calculating'
   const isError = model.status === 'error'
+  const isIdleEmpty = model.status === 'idle' && model.stops.length === 0
   const showLineLegend = model.linePositions.length >= 2 && model.status === 'ready'
+
+  const rolesPresent = new Set(model.stops.map((s) => s.role))
+  const legendRoles = ROLE_ORDER.filter((r) => rolesPresent.has(r))
+
+  // Single polite live region for status (badge + footer share this text for SR)
+  const liveStatus =
+    isError
+      ? model.message || 'Route calculation failed'
+      : isCalculating
+        ? model.message || 'Calculating best route…'
+        : model.status === 'ready'
+          ? 'Route ready'
+          : isIdleEmpty
+            ? model.message || 'Enter origin and destination to preview the route map'
+            : ''
 
   return (
     <section
@@ -49,21 +86,20 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
         'rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden'
       }
       aria-labelledby="route-map-card-title"
+      aria-busy={isCalculating || undefined}
+      data-testid="route-map-card"
     >
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100">
         <h2 id="route-map-card-title" className="text-base font-semibold text-gray-900">
           Route
         </h2>
         {isCalculating && (
-          <span
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-800 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full"
-            aria-live="polite"
-          >
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-800 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
             <span
               className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full motion-safe:animate-spin"
               aria-hidden
             />
-            Calculating…
+            {progressBadgeLabel(model.message)}
           </span>
         )}
         {model.status === 'ready' && (
@@ -79,23 +115,29 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
         {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
       </div>
 
-      {/* Slim non-blocking progress bar on the map frame (not a tall hero). */}
+      {/* Single polite live region for status changes */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true" data-testid="route-map-live">
+        {liveStatus}
+      </div>
+
+      {/* Slim decorative progress (not a second live region) */}
       {isCalculating && (
         <div
           className="h-1 w-full bg-blue-100 overflow-hidden"
           role="progressbar"
-          aria-valuetext={model.message || 'Calculating route'}
-          aria-live="polite"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={model.message || 'Calculating route'}
         >
-          <div className="h-full w-1/3 bg-blue-500 motion-safe:animate-pulse" />
+          <div className="h-full w-1/3 bg-blue-500 motion-safe:animate-pulse" aria-hidden />
         </div>
       )}
 
       <div className="relative">
         <RouteMap model={model} onMapClick={onMapClick} />
 
-        {/* Empty / idle hint overlaid lightly when no stops */}
-        {model.stops.length === 0 && model.status === 'idle' && (
+        {/* Empty idle: single overlay channel (no footer duplicate) */}
+        {isIdleEmpty && (
           <div className="absolute inset-0 flex items-end justify-center pointer-events-none p-4">
             <p className="text-sm text-gray-600 bg-white/90 border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm">
               {model.message || 'Enter origin and destination to preview the route map'}
@@ -104,48 +146,57 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
         )}
       </div>
 
-      {/* Chips: corridor / distance / duration / prefer-avoid honesty */}
-      {(model.chips.length > 0 || model.message) && (
+      {/* SR stop list (map canvas is aria-hidden decorative) */}
+      {model.stops.length > 0 && (
+        <ul className="sr-only" data-testid="route-map-stop-list">
+          {model.stops.map((s) => (
+            <li key={s.id}>
+              {ROUTE_MAP_ROLE_LABEL[s.role]}: {s.name}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Chips + legend + non-idle messages */}
+      {(model.chips.length > 0 ||
+        (model.message && !isIdleEmpty && model.status !== 'ready') ||
+        legendRoles.length > 0) && (
         <div className="px-4 py-3 space-y-2 border-t border-gray-100">
           {model.chips.length > 0 && (
             <div className="flex flex-wrap gap-1.5" data-testid="route-map-chips">
-              {model.chips.map((chip, i) => (
-                <span
-                  key={`${chip.label}-${i}`}
-                  className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
-                    CHIP_TONE_CLASS[chip.tone || 'neutral']
-                  }`}
-                >
-                  {chip.label}
-                </span>
-              ))}
+              {model.chips.map((chip, i) => {
+                const display = truncateChipLabel(chip.label)
+                return (
+                  <span
+                    key={`${chip.label}-${i}`}
+                    title={chip.label}
+                    className={`inline-flex items-center max-w-full px-2.5 py-1 rounded-full text-xs font-medium border truncate ${
+                      CHIP_TONE_CLASS[chip.tone || 'neutral']
+                    }`}
+                  >
+                    {display}
+                  </span>
+                )
+              })}
             </div>
           )}
 
-          {model.status !== 'ready' && model.message && (
-            <p
-              className={`text-xs ${isError ? 'text-red-700' : 'text-gray-500'}`}
-              aria-live={isCalculating || isError ? 'polite' : undefined}
-            >
-              {model.message}
-            </p>
+          {model.status !== 'ready' && !isIdleEmpty && model.message && (
+            <p className={`text-xs ${isError ? 'text-red-700' : 'text-gray-500'}`}>{model.message}</p>
           )}
 
-          {/* Compact legend */}
-          {model.stops.length > 0 && (
+          {legendRoles.length > 0 && (
             <div className="flex flex-wrap gap-3 text-[10px] text-gray-500" aria-hidden>
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded bg-blue-600" /> Origin
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-violet-600" /> Via
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-600" /> Drop
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded bg-emerald-600" /> Destination
-              </span>
+              {legendRoles.map((role) => (
+                <span key={role} className="inline-flex items-center gap-1">
+                  <span
+                    className={`w-2.5 h-2.5 ${
+                      role === 'via' || role === 'drop' ? 'rounded-full' : 'rounded'
+                    } ${ROUTE_MAP_ROLE_SWATCH[role]}`}
+                  />
+                  {ROUTE_MAP_ROLE_LABEL[role]}
+                </span>
+              ))}
               {showLineLegend && (
                 <span className="inline-flex items-center gap-1">
                   <span className="w-4 h-0.5 bg-blue-600 rounded" /> Route

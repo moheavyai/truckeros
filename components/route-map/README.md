@@ -4,14 +4,23 @@ World-class **Route** surface for Permit Test: one card with map, slim progress,
 
 ## How to run
 
-No map API key required. MapLibre GL JS uses free OpenFreeMap vector tiles:
+No map API key required. MapLibre GL JS uses free OpenFreeMap vector tiles by default:
 
-- Style: `https://tiles.openfreemap.org/styles/liberty`
+- Default style: `https://tiles.openfreemap.org/styles/liberty`
+- Override: set `NEXT_PUBLIC_MAP_STYLE_URL` to any MapLibre-compatible style URL
 
 ```bash
 npm install          # installs maplibre-gl
 npm run dev          # open /permit-test
 ```
+
+### CSP / network
+
+Allow map tiles + style hosts (defaults):
+
+- `https://tiles.openfreemap.org` (style + tiles)
+
+If you override `NEXT_PUBLIC_MAP_STYLE_URL`, allow that host in Content-Security-Policy (`connect-src` / `img-src` / `worker-src` as needed).
 
 ## Architecture
 
@@ -19,7 +28,8 @@ npm run dev          # open /permit-test
 |------|------|
 | `types.ts` | `RouteMapStop`, `RouteMapViewModel`, reserved `pendingWaypoints` |
 | `buildRouteMapModel.ts` | Pure OR-Tools option / form coords → view model |
-| `RouteMap.tsx` | MapLibre canvas (markers, line, fitBounds) — client only |
+| `roleStyles.ts` | Shared marker/legend colors |
+| `RouteMap.tsx` | MapLibre canvas (markers, line, fitBounds, resize) — client only |
 | `RouteMapCard.tsx` | Card chrome + dynamic import of map (`ssr: false`) |
 | `index.ts` | Public exports |
 
@@ -30,19 +40,19 @@ MapLibre is the preferred engine (not Leaflet): OSS fork of Mapbox GL JS, free v
 ## States
 
 - **idle** — origin/dest markers if geocoded; one-line muted hint when empty
-- **calculating** — same map + slim bar / badge (not a tall progress hero)
+- **calculating** — same map + slim bar / badge (`Resolving…` vs `Calculating…`); no result chips
 - **ready** — stops + route line + chips (corridor, mi, hrs, avoid/prefer honesty)
-- **error** — error badge + message
+- **error** — error badge + message; no success chips
 
 ## Map v2 waypoint hook
 
-Types already reserve:
+Types reserve:
 
 ```ts
 pendingWaypoints?: { lat: number; lon: number; name? }[]
 ```
 
-`RouteMap` / `RouteMapCard` accept optional `onMapClick` and `onWaypointDragEnd` props. **Do not wire click-to-add or drag editing in v1** — only pass handlers when building the v2 editor.
+`RouteMapCard` / `RouteMap` accept optional `onMapClick` for future click-to-add. **Drag-edit is not implemented or exported in v1** — do not claim drag handlers until Map v2 wires markers.
 
 ## Tests
 

@@ -27,47 +27,56 @@ function stopName(raw: OptimizeRouteStopLike | { name?: string | null }, fallbac
   return n || fallback
 }
 
-function roleForIndexedStop(
+/**
+ * Role from original list index/flags (before coord filter).
+ * Prevents mislabeling origin/dest when an intermediate stop lacks coords.
+ */
+function roleForOriginalIndex(
   stop: OptimizeRouteStopLike,
   index: number,
-  total: number
+  originalTotal: number
 ): RouteMapStopRole {
   if (index === 0) return 'origin'
-  if (index === total - 1) return 'destination'
+  if (originalTotal > 0 && index === originalTotal - 1) return 'destination'
   if (stop.is_via || stop.is_via_stop) return 'via'
   if (stop.is_drop) return 'drop'
   return 'via'
 }
 
 function mapOptimizeStops(rawStops: OptimizeRouteStopLike[]): RouteMapStop[] {
-  const withCoords = rawStops
-    .map((s, i) => {
-      const lat = toFiniteNumber(s.lat)
-      const lon = toFiniteNumber(s.lon)
-      if (lat == null || lon == null) return null
-      return { raw: s, lat, lon, index: i }
-    })
-    .filter(Boolean) as Array<{ raw: OptimizeRouteStopLike; lat: number; lon: number; index: number }>
+  const originalTotal = rawStops.length
+  let dropCount = 0
+  let viaCount = 0
+  const out: RouteMapStop[] = []
 
-  const total = withCoords.length
-  return withCoords.map((item, mappedIndex) => {
-    const role = roleForIndexedStop(item.raw, mappedIndex, total)
-    const fallback =
-      role === 'origin'
-        ? 'Origin'
-        : role === 'destination'
-          ? 'Destination'
-          : role === 'drop'
-            ? `Drop ${mappedIndex}`
-            : `Via ${mappedIndex}`
-    return {
-      id: `stop-${mappedIndex}`,
-      name: stopName(item.raw, fallback),
-      lat: item.lat,
-      lon: item.lon,
-      role,
+  for (let i = 0; i < rawStops.length; i++) {
+    const raw = rawStops[i]
+    const lat = toFiniteNumber(raw.lat)
+    const lon = toFiniteNumber(raw.lon)
+    if (lat == null || lon == null) continue
+
+    const role = roleForOriginalIndex(raw, i, originalTotal)
+    let fallback = 'Stop'
+    if (role === 'origin') fallback = 'Origin'
+    else if (role === 'destination') fallback = 'Destination'
+    else if (role === 'drop') {
+      dropCount += 1
+      fallback = `Drop ${dropCount}`
+    } else {
+      viaCount += 1
+      fallback = `Via ${viaCount}`
     }
-  })
+
+    out.push({
+      id: `stop-${i}`,
+      name: stopName(raw, fallback),
+      lat,
+      lon,
+      role,
+    })
+  }
+
+  return out
 }
 
 function mapFormStops(form: NonNullable<BuildRouteMapModelInput['formStops']>): RouteMapStop[] {
@@ -85,21 +94,21 @@ function mapFormStops(form: NonNullable<BuildRouteMapModelInput['formStops']>): 
   }
 
   const drops = Array.isArray(form.drops) ? form.drops : []
+  let dropOrdinal = 0
   drops.forEach((d, i) => {
     const lat = toFiniteNumber(d?.lat)
     const lon = toFiniteNumber(d?.lon)
     if (lat == null || lon == null) return
-    // Intermediate drops stay "drop"; last form stop reclassified below if it is the destination.
+    dropOrdinal += 1
     out.push({
       id: `form-drop-${i}`,
-      name: stopName(d || {}, drops.length === 1 ? 'Destination' : `Drop ${i + 1}`),
+      name: stopName(d || {}, drops.length === 1 ? 'Destination' : `Drop ${dropOrdinal}`),
       lat,
       lon,
       role: 'drop',
     })
   })
 
-  // If destination differs from last drop (or no drops), add destination marker.
   const dLat = toFiniteNumber(form.destination?.lat)
   const dLon = toFiniteNumber(form.destination?.lon)
   if (dLat != null && dLon != null) {
@@ -120,7 +129,6 @@ function mapFormStops(form: NonNullable<BuildRouteMapModelInput['formStops']>): 
       })
     }
   } else if (out.length > 1) {
-    // Multi-stop form without explicit dest: last drop is destination.
     const last = out[out.length - 1]
     if (last.role === 'drop') last.role = 'destination'
   }
@@ -142,8 +150,7 @@ export function buildLinePositions(
     for (const leg of legs) {
       const shape = extractLatLonPairs(leg?.shape ?? leg?.geometry)
       if (shape.length > 0) {
-        // Avoid duplicating shared vertices between consecutive legs.
-        if (fromLegs.length > 0 && shape.length > 0) {
+        if (fromLegs.length > 0) {
           const last = fromLegs[fromLegs.length - 1]
           const first = shape[0]
           if (Math.abs(last[0] - first[0]) < 1e-7 && Math.abs(last[1] - first[1]) < 1e-7) {
@@ -164,39 +171,62 @@ export function buildLinePositions(
 /** Best-effort parse of GeoJSON LineString / coordinate arrays → [lat, lon][]. */
 function extractLatLonPairs(raw: unknown): [number, number][] {
   if (!raw) return []
-  // GeoJSON geometry { type, coordinates: [lon, lat][] }
+  // GeoJSON geometry object: always [lon, lat] per RFC 7946
   if (typeof raw === 'object' && raw !== null && 'coordinates' in (raw as object)) {
-    const coords = (raw as { coordinates: unknown }).coordinates
-    return coordsToLatLon(coords)
+    const coords = (raw as { type?: string; coordinates: unknown }).coordinates
+    return coordsAsGeoJsonLonLat(coords)
   }
+  // Bare arrays: heuristic (legacy / non-GeoJSON shapes)
   if (Array.isArray(raw)) {
-    return coordsToLatLon(raw)
+    return coordsToLatLonHeuristic(raw)
   }
   return []
 }
 
-function coordsToLatLon(coords: unknown): [number, number][] {
+/** Explicit GeoJSON order [lon, lat] → [lat, lon]. */
+function coordsAsGeoJsonLonLat(coords: unknown): [number, number][] {
   if (!Array.isArray(coords) || coords.length === 0) return []
-  // Nested MultiLineString
+  // Nested MultiLineString / multi-ring
   if (Array.isArray(coords[0]) && Array.isArray((coords[0] as unknown[])[0])) {
     const out: [number, number][] = []
     for (const part of coords as unknown[]) {
-      out.push(...coordsToLatLon(part))
+      out.push(...coordsAsGeoJsonLonLat(part))
     }
     return out
   }
-  // [lon, lat] pairs (GeoJSON) or [lat, lon] if first component looks like lat
+  const out: [number, number][] = []
+  for (const pair of coords as unknown[]) {
+    if (!Array.isArray(pair) || pair.length < 2) continue
+    const lon = toFiniteNumber(pair[0])
+    const lat = toFiniteNumber(pair[1])
+    if (lat == null || lon == null) continue
+    out.push([lat, lon])
+  }
+  return out
+}
+
+/**
+ * Heuristic for bare coordinate arrays only (not GeoJSON objects).
+ * Prefer [lon, lat] when first component looks like longitude.
+ */
+function coordsToLatLonHeuristic(coords: unknown): [number, number][] {
+  if (!Array.isArray(coords) || coords.length === 0) return []
+  if (Array.isArray(coords[0]) && Array.isArray((coords[0] as unknown[])[0])) {
+    const out: [number, number][] = []
+    for (const part of coords as unknown[]) {
+      out.push(...coordsToLatLonHeuristic(part))
+    }
+    return out
+  }
   const out: [number, number][] = []
   for (const pair of coords as unknown[]) {
     if (!Array.isArray(pair) || pair.length < 2) continue
     const a = toFiniteNumber(pair[0])
     const b = toFiniteNumber(pair[1])
     if (a == null || b == null) continue
-    // Heuristic: lon is typically outside [-90,90] more often, but US lon is ~-70..-125.
-    // Prefer GeoJSON order [lon, lat] when |a| > 90 or |b| <= 90 && |a| > 40 with negative a (US).
     const looksLikeLonLat = Math.abs(a) > 90 || (Math.abs(a) > 30 && Math.abs(b) <= 90)
     if (looksLikeLonLat) {
-      out.push([b, a]) // lat, lon
+      out.push([b, a])
     } else {
       out.push([a, b])
     }
@@ -243,7 +273,10 @@ function buildChips(option?: OptimizeRouteOptionLike | null): RouteMapChip[] {
 
   if (option.specialInstructionsEnforced === true) {
     chips.push({ label: 'Prefs enforced', tone: 'success' })
-  } else if (option.specialInstructionsEnforced === false && (avoided.length > 0 || option.chosenCorridorRationale)) {
+  } else if (
+    option.specialInstructionsEnforced === false &&
+    (avoided.length > 0 || option.chosenCorridorRationale)
+  ) {
     chips.push({ label: 'Prefs partial', tone: 'warning' })
   }
 
@@ -251,37 +284,58 @@ function buildChips(option?: OptimizeRouteOptionLike | null): RouteMapChip[] {
 }
 
 /**
+ * Chip policy:
+ * - ready: full honesty chips from option
+ * - calculating / error / idle: no chips (avoids stale success chrome)
+ */
+function resolveChips(
+  status: BuildRouteMapModelInput['status'],
+  option?: OptimizeRouteOptionLike | null
+): RouteMapChip[] {
+  if (status !== 'ready') return []
+  return buildChips(option)
+}
+
+/**
  * Build a presentational view model from optimize option and/or form geocodes.
+ *
+ * Stop source policy:
+ * - ready: prefer option.stops
+ * - idle / error: prefer formStops (avoid sticky optimized markers when incomplete)
+ * - calculating: form first, then previous option stops as fallback
  */
 export function buildRouteMapModel(input: BuildRouteMapModelInput): RouteMapViewModel {
   const { status, message, option, formStops, pendingWaypoints } = input
 
   let stops: RouteMapStop[] = []
-  if (option?.stops && Array.isArray(option.stops) && option.stops.length > 0) {
-    stops = mapOptimizeStops(option.stops)
-  }
-  if (stops.length === 0 && formStops) {
-    stops = mapFormStops(formStops)
+  const optionStops =
+    option?.stops && Array.isArray(option.stops) && option.stops.length > 0
+      ? mapOptimizeStops(option.stops)
+      : []
+  const formMapped = formStops ? mapFormStops(formStops) : []
+
+  if (status === 'ready' && optionStops.length > 0) {
+    stops = optionStops
+  } else if (formMapped.length > 0) {
+    stops = formMapped
+  } else if (optionStops.length > 0) {
+    stops = optionStops
   }
 
   const linePositions =
     status === 'ready' || stops.length >= 2
-      ? buildLinePositions(stops, option)
+      ? buildLinePositions(stops, status === 'ready' ? option : null)
       : stops.map((s) => [s.lat, s.lon] as [number, number])
 
-  const chips = status === 'ready' || status === 'calculating' ? buildChips(option) : buildChips(option)
-  // Idle: only show chips when option already ready (e.g. sticky results); form-only idle has no chips.
-  const resolvedChips =
-    status === 'idle' && !(option?.routeCorridor?.length || option?.distanceMiles)
-      ? []
-      : chips
+  const resolvedChips = resolveChips(status, option)
 
   let resolvedMessage = message
   if (!resolvedMessage) {
     if (status === 'idle' && stops.length === 0) {
       resolvedMessage = 'Enter origin and destination to preview the route map'
     } else if (status === 'idle' && stops.length > 0) {
-      resolvedMessage = 'Route map ready — analysis runs when load details are complete'
+      // Footer suppressed in card when stops present; keep brief for SR if needed
+      resolvedMessage = undefined
     } else if (status === 'calculating') {
       resolvedMessage = 'Calculating best route…'
     } else if (status === 'error') {
@@ -289,9 +343,17 @@ export function buildRouteMapModel(input: BuildRouteMapModelInput): RouteMapView
     }
   }
 
+  // Empty idle only: message for single empty channel (overlay). No double footer.
+  if (status === 'idle' && stops.length > 0) {
+    resolvedMessage = undefined
+  }
+
   return {
     stops,
-    linePositions: status === 'error' && !option?.stops ? stops.map((s) => [s.lat, s.lon] as [number, number]) : linePositions,
+    linePositions:
+      status === 'error' && optionStops.length === 0
+        ? stops.map((s) => [s.lat, s.lon] as [number, number])
+        : linePositions,
     chips: resolvedChips,
     status,
     message: resolvedMessage,

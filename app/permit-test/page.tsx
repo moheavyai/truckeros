@@ -1766,19 +1766,55 @@ export default function PermitTestPage() {
   // Small helper for uniform primary derivation (addresses Issue 7 suggestion for maintainability across render/approve sites; no behavior change)
   const getPrimary = (ar: any, r: any) => ar?.options?.[0] || ar || r?.agent
 
+  /**
+   * Geocode fingerprint only — avoids refitting the map on every form keystroke.
+   * Labels recompute when lat/lon or stop query/city/state change.
+   */
+  const routeMapFormKey = useMemo(() => {
+    const s = syncDestinationFromDrops(formData)
+    const dropKey = (s.drops || [])
+      .map(
+        (d) =>
+          `${d.lat ?? ''},${d.lon ?? ''}|${d.city || ''}|${d.state || ''}|${d.query || ''}`
+      )
+      .join(';')
+    return [
+      s.originLat ?? '',
+      s.originLon ?? '',
+      s.destinationLat ?? '',
+      s.destinationLon ?? '',
+      s.origin.city || '',
+      s.origin.state || '',
+      s.origin.query || '',
+      s.destination.city || '',
+      s.destination.state || '',
+      s.destination.query || '',
+      dropKey,
+    ].join('|')
+  }, [
+    formData.originLat,
+    formData.originLon,
+    formData.destinationLat,
+    formData.destinationLon,
+    formData.origin.city,
+    formData.origin.state,
+    formData.origin.query,
+    formData.destination.city,
+    formData.destination.state,
+    formData.destination.query,
+    formData.drops,
+  ])
+
   /** Map v1 view model: form geocodes (idle) + OR-Tools option (ready) + routeProgress status. */
   const routeMapModel = useMemo(() => {
     const primary = getPrimary(agentResult, result)
-    const hasRouteOption = !!(
-      primary &&
-      (primary.stops?.length || primary.routeCorridor?.length || primary.distanceMiles)
-    )
+    // Ready only when analysis completed — never sticky-ready from leftover option while idle.
     const mapStatus: RouteMapStatus =
       routeProgress === 'error'
         ? 'error'
         : routeProgress === 'calculating' || routeProgress === 'geocoding'
           ? 'calculating'
-          : routeProgress === 'ready' || hasRouteOption
+          : routeProgress === 'ready'
             ? 'ready'
             : 'idle'
 
@@ -1792,6 +1828,10 @@ export default function PermitTestPage() {
       formSynced.destination.query ||
       'Destination'
 
+    // Only pass option for ready/calculating (chips only when ready; calculating may use formStops first).
+    const optionForMap =
+      mapStatus === 'ready' || mapStatus === 'calculating' ? primary || null : null
+
     return buildRouteMapModel({
       status: mapStatus,
       message:
@@ -1802,7 +1842,7 @@ export default function PermitTestPage() {
             : routeProgress === 'calculating'
               ? routeProgressDetail || 'Calculating best route…'
               : undefined,
-      option: primary || null,
+      option: optionForMap,
       formStops: {
         origin: {
           name: originLabel,
@@ -1824,7 +1864,9 @@ export default function PermitTestPage() {
         },
       },
     })
-  }, [agentResult, result, routeProgress, routeProgressDetail, formData])
+    // routeMapFormKey captures geocode-relevant form fields (not every keystroke field).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional fingerprint deps
+  }, [agentResult, result, routeProgress, routeProgressDetail, routeMapFormKey])
 
   /** Map /api/optimize-route JSON to the agentResult shape (including OSRM fallback). */
   function normalizeOrToolsToAgentData(optData: any) {
@@ -2007,7 +2049,13 @@ export default function PermitTestPage() {
         if (resultsRef.current) {
           const headerOffset = 80
           const elementPosition = resultsRef.current.getBoundingClientRect().top
-          window.scrollTo({ top: elementPosition + window.pageYOffset - headerOffset, behavior: 'smooth' })
+          const reduceMotion =
+            typeof window !== 'undefined' &&
+            window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+          window.scrollTo({
+            top: elementPosition + window.pageYOffset - headerOffset,
+            behavior: reduceMotion ? 'auto' : 'smooth',
+          })
         }
       }, 50)
     } catch (error: any) {
@@ -2324,8 +2372,13 @@ export default function PermitTestPage() {
     setResult(null)
     setShowChangeRouteInput(false)
     setManualRoute('')
+    setRouteProgress('idle')
+    setRouteProgressDetail('')
     // Scroll back to the form for convenience
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })
   }
 
   // Handle manual route change (Change Route feature)

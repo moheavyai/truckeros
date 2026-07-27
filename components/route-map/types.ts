@@ -2,9 +2,10 @@
  * Route map view-model types (Map v1).
  *
  * Extension points for Map v2 (manualWaypoints click/drag editor):
- * - `pendingWaypoints` is reserved on the view model (unused in UI v1).
+ * - `pendingWaypoints` is reserved on the view model (typed only; unused in UI v1).
  * - `RouteMapStop.role` covers origin/via/drop/destination so v2 can re-order vias.
  * - `RouteMapLeg.shape` is reserved for full geometry polylines when legs expose them later.
+ * - Drag-edit handlers are intentionally not part of the v1 public component API.
  */
 
 export type RouteMapStopRole = 'origin' | 'via' | 'drop' | 'destination'
