@@ -386,3 +386,110 @@ describe('Portal Assist — Launch all corridor portals', () => {
     expect(source).toContain('corridorLaunchHint')
   })
 })
+
+describe('Portal Assist — Filing kit (copy, checklist, trip type, workflow)', () => {
+  it('imports clipboard packet + completeness checklist helpers', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('buildPortalClipboardPacket')
+    expect(source).toContain('buildPortalCompletenessChecklist')
+    expect(source).toContain('resolvePortalFieldLabel')
+    expect(source).toContain('PORTAL_TRIP_TYPES')
+    expect(source).toContain('type PortalTripType')
+  })
+
+  it('wires per-field Copy via navigator.clipboard.writeText with Copied feedback', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('navigator.clipboard.writeText')
+    expect(source).toContain('copyToClipboard')
+    expect(source).toContain("copiedKey === 'all'")
+    expect(source).toContain("copiedKey === ourKey ? 'Copied' : 'Copy'")
+    expect(source).toContain('data-copy-field=')
+    expect(source).toContain('aria-label={`Copy ${portalLabel}`}')
+  })
+
+  it('shows clipboard fail feedback and aria-live status', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('copyStatus')
+    expect(source).toContain('aria-live="polite"')
+    expect(source).toContain('data-testid="copy-status"')
+    expect(source).toContain('Copy failed — clipboard permission denied or unavailable')
+    expect(source).toContain('copyTimeoutRef')
+    expect(source).toContain('clearTimeout(copyTimeoutRef.current)')
+  })
+
+  it('exposes Copy all fields for selected state using buildPortalClipboardPacket', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('handleCopyAllFields')
+    expect(source).toContain('Copy all fields for ${selectedState}')
+    expect(source).toContain('data-testid="copy-all-fields"')
+    const handlerStart = source.indexOf('const handleCopyAllFields = async () => {')
+    expect(handlerStart).toBeGreaterThan(-1)
+    const handlerEnd = source.indexOf('const handleTripTypeChange', handlerStart)
+    const handler = source.slice(handlerStart, handlerEnd)
+    expect(handler).toContain('buildPortalClipboardPacket(prefill, stateConfig, { tripType })')
+  })
+
+  it('shows completeness checklist panel with pass/warn markers', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="completeness-checklist"')
+    expect(source).toContain('FILING COMPLETENESS')
+    expect(source).toContain('buildPortalCompletenessChecklist(prefill, config)')
+    expect(source).toContain("item.status === 'pass'")
+    expect(source).toContain("item.status === 'warn'")
+    expect(source).toContain('text-amber-800 sm:text-amber-700')
+  })
+
+  it('shows trip type control and clears approval on change', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="trip-type-control"')
+    expect(source).toContain('TRIP TYPE')
+    expect(source).toContain('handleTripTypeChange')
+    expect(source).toContain("useState<PortalTripType>('Single trip')")
+    expect(source).toContain("tripType === 'Annual'")
+    expect(source).toContain('not auto-matched yet')
+    expect(source).toContain('trip_type: next')
+    expect(source).toContain('tripType: effectiveTripType')
+    const handlerStart = source.indexOf('const handleTripTypeChange = (next: PortalTripType) => {')
+    const handlerEnd = source.indexOf('return (', handlerStart)
+    const handler = source.slice(handlerStart, handlerEnd)
+    expect(handler).toContain('setIsApproved(false)')
+    expect(handler).toContain('setApprovalChecked(false)')
+  })
+
+  it('resets tripType when loading a new request', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('resetTripType: true')
+    expect(source).toContain("opts?.resetTripType ? 'Single trip' : tripType")
+  })
+
+  it('shows filing workflow strip under Final Review without Step N clash', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="filing-workflow-strip"')
+    expect(source).toContain('Filing steps:')
+    expect(source).toContain('Review prefill')
+    expect(source).toContain('Copy fields')
+    expect(source).toContain('Open portal')
+    expect(source).toContain('Paste &amp; pay on state site')
+    expect(source).not.toContain('Step 1 Review prefill')
+    // Workflow appears inside Final Review section
+    const reviewStart = source.indexOf('2. Final Review — Generated Prefill for')
+    const workflowIdx = source.indexOf('data-testid="filing-workflow-strip"')
+    const credentialsIdx = source.indexOf('3. Portal Credentials (encrypted at rest)')
+    expect(reviewStart).toBeGreaterThan(-1)
+    expect(workflowIdx).toBeGreaterThan(reviewStart)
+    expect(credentialsIdx).toBeGreaterThan(workflowIdx)
+  })
+
+  it('keeps approval gate and Launch corridor portals without auto-open on load', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('handleApproveGate')
+    expect(source).toContain('Launch all corridor portals')
+    expect(source).toContain('Open Real {selectedState} Portal')
+    // Still must not auto-open portals when loading a request
+    const loadStart = source.indexOf('const loadRealRequest = async (')
+    const loadEnd = source.indexOf('const loadSubmissionsForRequest', loadStart)
+    const loadBody = source.slice(loadStart, loadEnd > loadStart ? loadEnd : loadStart + 2000)
+    expect(loadBody).not.toContain('openStatePortals')
+    expect(loadBody).not.toContain('window.open')
+  })
+})

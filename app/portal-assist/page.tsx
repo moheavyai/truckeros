@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import AppHeader from '@/components/AppHeader'
@@ -15,9 +15,14 @@ import {
   getPortalStatesForAnalysis,
   openStatePortals,
   resolveInitialPortalState,
+  buildPortalClipboardPacket,
+  buildPortalCompletenessChecklist,
+  resolvePortalFieldLabel,
+  PORTAL_TRIP_TYPES,
   type RouteComparison,
   type PortalSubmissionRecord,
-  type PrefillPackage
+  type PrefillPackage,
+  type PortalTripType,
 } from '@/lib/portal-assistant'
 import { formatLoadDisplay } from '@/lib/parse-dimension'
 import { formatPortalEquipmentSnapshot } from '@/lib/portal-equipment-display'
@@ -163,7 +168,22 @@ export default function PortalAssistPage() {
   const [corridorLaunchHint, setCorridorLaunchHint] = useState<string | null>(null)
   const [isReviewStep, setIsReviewStep] = useState(false)
 
+  /** Filing kit: trip type for prefill + copy packet (default Single trip). */
+  const [tripType, setTripType] = useState<PortalTripType>('Single trip')
+  /** Which copy control last succeeded (`all` or field key) — brief "Copied" feedback. */
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  /** Clipboard status for aria-live (success or fail). */
+  const [copyStatus, setCopyStatus] = useState<string | null>(null)
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const router = useRouter()
+
+  // Clear copy feedback timer on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+    }
+  }, [])
 
   const portalStatesForRequest = request
     ? getPortalStatesForAnalysis({
@@ -187,13 +207,19 @@ export default function PortalAssistPage() {
     return state.includes(q) || (c?.name || '').toUpperCase().includes(q)
   })
 
-  const applyPortalState = (req: PermitRequest, state: string, opts?: { showLaunchHint?: boolean }) => {
+  const applyPortalState = (
+    req: PermitRequest,
+    state: string,
+    opts?: { showLaunchHint?: boolean; resetTripType?: boolean }
+  ) => {
     if (!STATE_PORTAL_CONFIGS[state]) {
       setPageError(`Config for ${state} missing. Add it in lib/portal-assistant.ts (config-driven).`)
       return
     }
+    const effectiveTripType: PortalTripType = opts?.resetTripType ? 'Single trip' : tripType
+    if (opts?.resetTripType) setTripType('Single trip')
     setSelectedState(state)
-    setPrefill(generatePortalPrefill(req, state))
+    setPrefill(generatePortalPrefill(req, state, { tripType: effectiveTripType }))
     setIsApproved(false)
     setRouteComparison(null)
     setSubmissionRecord(null)
@@ -203,6 +229,8 @@ export default function PortalAssistPage() {
     setCredentialError(null)
     setParseError(null)
     setPdfError(null)
+    setCopiedKey(null)
+    setCopyStatus(null)
 
     if (opts?.showLaunchHint) {
       const corridor = (req.route_corridor || []).join(' → ')
@@ -293,7 +321,11 @@ export default function PortalAssistPage() {
       setParsedOutput(null)
 
       const initialState = resolveInitialPortalState(loaded)
-      applyPortalState(loaded, initialState, { showLaunchHint: !opts?.reviewStep })
+      // New request → reset trip type to Single trip
+      applyPortalState(loaded, initialState, {
+        showLaunchHint: !opts?.reviewStep,
+        resetTripType: true,
+      })
       if (opts?.reviewStep) {
         setIsReviewStep(true)
       }
@@ -395,7 +427,9 @@ export default function PortalAssistPage() {
     setParsedOutput(null)
     setSubmissions([]) // fresh demo
     setLaunchHint(null)
-    applyPortalState(demoRequest, resolveInitialPortalState(demoRequest))
+    applyPortalState(demoRequest, resolveInitialPortalState(demoRequest), {
+      resetTripType: true,
+    })
     setAttachedPdfs([])
     setCurrentPdfReference(null)
     setHasCredentials(false)
@@ -783,6 +817,59 @@ export default function PortalAssistPage() {
     applyPortalState(request, selectedState)
   }
 
+  /** Brief clipboard feedback for per-field or copy-all controls (aria-live + fail message). */
+  const copyToClipboard = async (key: string, text: string) => {
+    const value = String(text ?? '').trim()
+    if (!value || value === '—') return
+    if (copyTimeoutRef.current) {
+      clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = null
+    }
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopiedKey(key)
+      setCopyStatus('Copied')
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopiedKey((current) => (current === key ? null : current))
+        setCopyStatus(null)
+        copyTimeoutRef.current = null
+      }, 1500)
+    } catch {
+      setCopiedKey(null)
+      setCopyStatus('Copy failed — clipboard permission denied or unavailable')
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopyStatus(null)
+        copyTimeoutRef.current = null
+      }, 3000)
+    }
+  }
+
+  const handleCopyAllFields = async () => {
+    const stateConfig = STATE_PORTAL_CONFIGS[selectedState]
+    if (!prefill || !stateConfig) return
+    const packet = buildPortalClipboardPacket(prefill, stateConfig, { tripType })
+    await copyToClipboard('all', packet)
+  }
+
+  const handleTripTypeChange = (next: PortalTripType) => {
+    if (next === tripType) return
+    setTripType(next)
+    setPrefill((prev) =>
+      prev
+        ? {
+            ...prev,
+            generatedFields: { ...prev.generatedFields, trip_type: next },
+          }
+        : prev
+    )
+    // Trip type is part of the filing package — clear approval like regenerate
+    setIsApproved(false)
+    setApprovalChecked(false)
+    setApprovalNotes('')
+    setApprovalError(null)
+    setSubmissionRecord(null)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <AppHeader user={user} />
@@ -991,9 +1078,113 @@ export default function PortalAssistPage() {
             {prefill && config && (
               <div className={cardClass}>
                 <h2 className="font-semibold text-gray-900">2. Final Review — Generated Prefill for {config.name}</h2>
-                <p className={`${fieldHintClass} mt-1 mb-4`}>
+                <p className={`${fieldHintClass} mt-1 mb-2`}>
                   Confirm carrier, driver, load, and equipment before portal entry.
                 </p>
+
+                {/* Filing workflow strip — copy-ready kit, not RPA (no Step N to avoid clashing with section numbers) */}
+                <div
+                  className={`${fieldHintClass} mb-4 flex flex-wrap items-center gap-x-1.5 gap-y-1`}
+                  data-testid="filing-workflow-strip"
+                >
+                  <span className="font-medium text-gray-600 sm:text-gray-500">Filing steps:</span>
+                  <span>Review prefill</span>
+                  <span aria-hidden="true">→</span>
+                  <span>Copy fields</span>
+                  <span aria-hidden="true">→</span>
+                  <span>Open portal</span>
+                  <span aria-hidden="true">→</span>
+                  <span>Paste &amp; pay on state site</span>
+                </div>
+
+                {/* Trip type for generatedFields + copy packet */}
+                <div className="mb-4" data-testid="trip-type-control">
+                  <span className={`${fieldLabelClass} block mb-2`}>TRIP TYPE</span>
+                  <div className="flex flex-wrap gap-2">
+                    {PORTAL_TRIP_TYPES.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => handleTripTypeChange(t)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${
+                          tripType === t
+                            ? 'bg-gray-900 text-white border-gray-900'
+                            : `${buttonSecondaryClass}`
+                        }`}
+                        aria-pressed={tripType === t}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  {tripType === 'Annual' && (
+                    <p className={`${fieldHintTinyClass} mt-1`}>
+                      Annual — not auto-matched yet; use for manual portal selection.
+                    </p>
+                  )}
+                </div>
+
+                {/* Completeness checklist (pass/warn) + copy-all nearby */}
+                {(() => {
+                  const checklist = buildPortalCompletenessChecklist(prefill, config)
+                  return (
+                    <div className="mb-4" data-testid="completeness-checklist">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <span className={`${fieldLabelClass} block`}>FILING COMPLETENESS</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={fieldHintTinyClass}>
+                            {checklist.passCount} ready
+                            {checklist.warnCount > 0 ? ` · ${checklist.warnCount} to fix` : ''}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleCopyAllFields}
+                            className={`px-3 py-1.5 ${buttonSecondaryClass}`}
+                            data-testid="copy-all-fields"
+                            aria-label={`Copy all fields for ${selectedState}`}
+                          >
+                            {copiedKey === 'all'
+                              ? 'Copied'
+                              : `Copy all fields for ${selectedState}`}
+                          </button>
+                        </div>
+                      </div>
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        data-testid="copy-status"
+                        className={`${fieldHintTinyClass} mb-2 min-h-[1rem] ${
+                          copyStatus && copyStatus.startsWith('Copy failed')
+                            ? 'text-amber-800 sm:text-amber-700'
+                            : ''
+                        }`}
+                      >
+                        {copyStatus || ''}
+                      </div>
+                      <ul className="space-y-1.5 text-sm">
+                        {checklist.items.map((item) => (
+                          <li
+                            key={item.id}
+                            className={
+                              item.status === 'pass'
+                                ? 'text-emerald-800 sm:text-emerald-700'
+                                : 'text-amber-800 sm:text-amber-700'
+                            }
+                          >
+                            <span className="font-medium">
+                              {item.status === 'pass' ? '✓' : '⚠'} {item.label}
+                            </span>
+                            {item.status === 'warn' && item.hint && (
+                              <span className={`block ${fieldHintTinyClass} pl-4`}>
+                                {item.hint}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )
+                })()}
 
                 <div className="mb-4">
                   <span className={`${fieldLabelClass} block mb-2`}>CARRIER INFO</span>
@@ -1107,35 +1298,136 @@ export default function PortalAssistPage() {
                 )}
 
                 <span className={`${fieldLabelClass} block mb-2`}>PORTAL FIELD MAPPING</span>
+                <p className={`${fieldHintTinyClass} mb-2`}>
+                  Copy individual values or use Copy all above, then paste into the state portal.
+                </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                  {Object.entries(config.fieldMapping).map(([ourKey, portalLabel]) => (
-                    <div key={ourKey} className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
-                      <div className={`${fieldLabelTinyClass} mb-0.5`}>{portalLabel}</div>
-                      <div className="font-mono break-words text-gray-900">{(prefill.generatedFields as any)[ourKey] ?? '—'}</div>
+                  {Object.entries(config.fieldMapping).map(([ourKey, portalLabel]) => {
+                    const value = (prefill.generatedFields as any)[ourKey]
+                    const display = value != null && value !== '' ? String(value) : '—'
+                    return (
+                      <div key={ourKey} className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
+                        <div className="flex items-start justify-between gap-2 mb-0.5">
+                          <div className={fieldLabelTinyClass}>{portalLabel}</div>
+                          {display !== '—' && (
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(ourKey, display)}
+                              className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
+                              data-copy-field={ourKey}
+                              aria-label={`Copy ${portalLabel}`}
+                            >
+                              {copiedKey === ourKey ? 'Copied' : 'Copy'}
+                            </button>
+                          )}
+                        </div>
+                        <div className="font-mono break-words text-gray-900">{display}</div>
+                      </div>
+                    )
+                  })}
+                  {/* Trip type shown in mapping grid for copy */}
+                  {(prefill.generatedFields as any).trip_type && (
+                    <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
+                      <div className="flex items-start justify-between gap-2 mb-0.5">
+                        <div className={fieldLabelTinyClass}>{resolvePortalFieldLabel('trip_type')}</div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyToClipboard('trip_type', String((prefill.generatedFields as any).trip_type))
+                          }
+                          className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
+                          data-copy-field="trip_type"
+                          aria-label="Copy Trip Type"
+                        >
+                          {copiedKey === 'trip_type' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <div className="font-mono text-gray-900">{(prefill.generatedFields as any).trip_type}</div>
                     </div>
-                  ))}
+                  )}
                   {/* Extra rich fields pulled from equipment/cargo */}
                   {(prefill.generatedFields as any).axles && (
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
-                      <div className={`${fieldLabelTinyClass} mb-0.5`}>Axles (from equip)</div>
+                      <div className="flex items-start justify-between gap-2 mb-0.5">
+                        <div className={fieldLabelTinyClass}>Axles (from equip)</div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyToClipboard('axles', String((prefill.generatedFields as any).axles))
+                          }
+                          className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
+                          data-copy-field="axles"
+                          aria-label="Copy Axles"
+                        >
+                          {copiedKey === 'axles' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
                       <div className="font-mono text-gray-900">{(prefill.generatedFields as any).axles}</div>
                     </div>
                   )}
                   {(prefill.generatedFields as any).vehicle_id && (
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
-                      <div className={`${fieldLabelTinyClass} mb-0.5`}>Vehicle / VIN (from equip)</div>
+                      <div className="flex items-start justify-between gap-2 mb-0.5">
+                        <div className={fieldLabelTinyClass}>Vehicle / VIN (from equip)</div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyToClipboard(
+                              'vehicle_id',
+                              String((prefill.generatedFields as any).vehicle_id)
+                            )
+                          }
+                          className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
+                          data-copy-field="vehicle_id"
+                          aria-label="Copy Vehicle / VIN"
+                        >
+                          {copiedKey === 'vehicle_id' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
                       <div className="font-mono text-gray-900">{(prefill.generatedFields as any).vehicle_id}</div>
                     </div>
                   )}
                   {(prefill.generatedFields as any).entry_point && (
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
-                      <div className={`${fieldLabelTinyClass} mb-0.5`}>Border Entry Point</div>
+                      <div className="flex items-start justify-between gap-2 mb-0.5">
+                        <div className={fieldLabelTinyClass}>Border Entry Point</div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyToClipboard(
+                              'entry_point',
+                              String((prefill.generatedFields as any).entry_point)
+                            )
+                          }
+                          className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
+                          data-copy-field="entry_point"
+                          aria-label="Copy Border Entry Point"
+                        >
+                          {copiedKey === 'entry_point' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
                       <div className="font-mono break-words text-gray-900">{(prefill.generatedFields as any).entry_point}</div>
                     </div>
                   )}
                   {(prefill.generatedFields as any).exit_point && (
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
-                      <div className={`${fieldLabelTinyClass} mb-0.5`}>Border Exit Point</div>
+                      <div className="flex items-start justify-between gap-2 mb-0.5">
+                        <div className={fieldLabelTinyClass}>Border Exit Point</div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyToClipboard(
+                              'exit_point',
+                              String((prefill.generatedFields as any).exit_point)
+                            )
+                          }
+                          className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
+                          data-copy-field="exit_point"
+                          aria-label="Copy Border Exit Point"
+                        >
+                          {copiedKey === 'exit_point' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
                       <div className="font-mono break-words text-gray-900">{(prefill.generatedFields as any).exit_point}</div>
                     </div>
                   )}
@@ -1143,7 +1435,23 @@ export default function PortalAssistPage() {
                     (prefill.generatedFields as any).exit_point) &&
                     (prefill.generatedFields as any).border_summary && (
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3 sm:col-span-2">
-                      <div className={`${fieldLabelTinyClass} mb-0.5`}>Border Summary</div>
+                      <div className="flex items-start justify-between gap-2 mb-0.5">
+                        <div className={fieldLabelTinyClass}>Border Summary</div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyToClipboard(
+                              'border_summary',
+                              String((prefill.generatedFields as any).border_summary)
+                            )
+                          }
+                          className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
+                          data-copy-field="border_summary"
+                          aria-label="Copy Border Summary"
+                        >
+                          {copiedKey === 'border_summary' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
                       <div className="font-mono break-words text-gray-900">{(prefill.generatedFields as any).border_summary}</div>
                     </div>
                   )}

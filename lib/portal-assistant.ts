@@ -943,6 +943,15 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
   },
 }
 
+/** Trip type for portal filing (not auto-matched for Annual yet). */
+export type PortalTripType = 'Single trip' | 'Round trip' | 'Annual'
+
+export const PORTAL_TRIP_TYPES: readonly PortalTripType[] = [
+  'Single trip',
+  'Round trip',
+  'Annual',
+] as const
+
 export interface PrefillPackage {
   state: string
   loadDetails: any
@@ -951,6 +960,65 @@ export interface PrefillPackage {
   generatedFields: Record<string, any>
   humanApprovalRequired: boolean
   approvalNotes: string[]
+}
+
+/** Fallback labels when a key is not in config.fieldMapping. */
+export const PREFILL_FIELD_LABELS: Record<string, string> = {
+  origin: 'Origin',
+  destination: 'Destination',
+  weight: 'Gross Weight (lbs)',
+  length: 'Overall Length (ft)',
+  width: 'Overall Width (ft)',
+  height: 'Overall Height (ft)',
+  route: 'Proposed Route / Corridor',
+  border_entry: 'Border Entry',
+  border_exit: 'Border Exit',
+  entry_point: 'Border Entry Point',
+  exit_point: 'Border Exit Point',
+  border_summary: 'Border Summary',
+  border_role: 'Border Role',
+  axles: 'Axles',
+  vehicle_id: 'Vehicle / VIN',
+  carrier_company: 'Carrier Company',
+  carrier_usdot: 'USDOT',
+  carrier_mc: 'MC Number',
+  carrier_phone: 'Carrier Phone',
+  carrier_email: 'Carrier Email',
+  driver_name: 'Driver',
+  driver_cdl: 'Driver CDL',
+  driver_cdl_state: 'Driver CDL State',
+  driver_phone: 'Driver Phone',
+  trip_type: 'Trip Type',
+  rig_name: 'Rig Name',
+  overhang: 'Overhang',
+  special_notes: 'Special Notes',
+}
+
+export type CompletenessStatus = 'pass' | 'warn'
+
+export interface CompletenessItem {
+  id: string
+  label: string
+  status: CompletenessStatus
+  /** Short fix hint when status is warn. */
+  hint?: string
+}
+
+export interface CompletenessChecklist {
+  items: CompletenessItem[]
+  passCount: number
+  warnCount: number
+  /** True when every item passes. */
+  ready: boolean
+}
+
+export interface ClipboardPacketOptions {
+  tripType?: PortalTripType
+}
+
+export interface CompletenessChecklistContext {
+  /** Override multi-state detection (default: routeCorridor length > 1). */
+  multiState?: boolean
 }
 
 /** Geometry point used for portal border entry/exit copy-paste fields. */
@@ -1166,6 +1234,24 @@ function formatPortalWeight(lbs: number | null | undefined): string | number {
   return `${Math.round(Number(lbs)).toLocaleString()} lbs`
 }
 
+/**
+ * Formats "City, ST" for portal prefill. Requires both city and state;
+ * empty / null / "undefined" fragments → '' so checklist does not false-pass
+ * on "undefined, TX", ", TX", or city-only.
+ */
+export function formatPortalCityState(city: unknown, state: unknown): string {
+  const clean = (v: unknown): string => {
+    if (v == null) return ''
+    const t = String(v).trim()
+    if (!t || /^(undefined|null)$/i.test(t)) return ''
+    return t
+  }
+  const c = clean(city)
+  const s = clean(state)
+  if (!c || !s) return ''
+  return `${c}, ${s}`
+}
+
 function pickEquipmentField(equip: Record<string, any>, ...keys: string[]): any {
   for (const key of keys) {
     const val = equip[key]
@@ -1226,8 +1312,9 @@ export function openStatePortals(
  * This is the core of the "auto-prefill" feature.
  */
 export function generatePortalPrefill(
-  request: any, 
-  stateCode: string
+  request: any,
+  stateCode: string,
+  options?: { tripType?: PortalTripType }
 ): PrefillPackage {
   const config = STATE_PORTAL_CONFIGS[stateCode]
   if (!config) throw new Error(`Unsupported state: ${stateCode}`)
@@ -1235,15 +1322,23 @@ export function generatePortalPrefill(
   const generated: Record<string, any> = {}
 
   // Map common fields (dimensions as clean X' Y" for portal copy-paste)
-  generated.origin = `${request.origin_city}, ${request.origin_state}`
-  generated.destination = `${request.destination_city}, ${request.destination_state}`
+  generated.origin = formatPortalCityState(request.origin_city, request.origin_state)
+  generated.destination = formatPortalCityState(
+    request.destination_city,
+    request.destination_state
+  )
   generated.weight = formatPortalWeight(request.weight) || request.weight
   generated.length = formatPortalDimension(request.length) || request.length
   generated.width = formatPortalDimension(request.width) || request.width
   generated.height = formatPortalDimension(request.height) || request.height
+  generated.trip_type = options?.tripType || 'Single trip'
 
   if (request.route_corridor) {
-    generated.route = request.route_corridor.join(' → ')
+    const corridorJoin = (request.route_corridor as unknown[])
+      .map((s) => String(s ?? '').trim())
+      .filter(Boolean)
+      .join(' → ')
+    if (corridorJoin) generated.route = corridorJoin
   }
 
   // Geometry-aligned border entry/exit for this state's portal form
@@ -1390,6 +1485,245 @@ export function generatePortalPrefill(
     generatedFields: generated,
     humanApprovalRequired,
     approvalNotes,
+  }
+}
+
+/** True when a prefill field has a real value (rejects blank and "undefined"/null placeholders). */
+export function hasPrefillValue(v: unknown): boolean {
+  if (v == null) return false
+  if (typeof v === 'string') {
+    const t = v.trim()
+    if (!t) return false
+    // Reject location placeholders like "undefined, TX", "City, null", ", "
+    if (/^(undefined|null)(\s*,\s*(undefined|null)?)?$/i.test(t)) return false
+    if (/^(undefined|null)\s*,/i.test(t)) return false
+    if (/,\s*(undefined|null)$/i.test(t)) return false
+    if (t === ',' || t === ', ') return false
+    return true
+  }
+  if (typeof v === 'number') return Number.isFinite(v) && v !== 0
+  return true
+}
+
+/** Meaningful non-empty route/corridor string (not only arrows/spaces). */
+function hasMeaningfulRouteString(route: string): boolean {
+  const t = route.trim()
+  if (!t) return false
+  return /[A-Za-z0-9]/.test(t)
+}
+
+/** Resolves portal field label: config.fieldMapping first, then shared fallbacks. */
+export function resolvePortalFieldLabel(
+  key: string,
+  config?: PortalStateConfig | null
+): string {
+  if (config?.fieldMapping?.[key]) return config.fieldMapping[key]
+  return PREFILL_FIELD_LABELS[key] || key
+}
+
+/**
+ * Builds a plain-text copy-paste packet for a state portal filing.
+ * Lines: "{Portal field label}: {value}" using config.fieldMapping labels when available.
+ * Always includes trip type; includes route/corridor when present even if not in fieldMapping;
+ * includes border, axles, vehicle, carrier, driver when present.
+ */
+export function buildPortalClipboardPacket(
+  prefill: PrefillPackage,
+  config: PortalStateConfig,
+  options?: ClipboardPacketOptions
+): string {
+  const fields = prefill.generatedFields || {}
+  const tripType =
+    options?.tripType ||
+    (typeof fields.trip_type === 'string' && fields.trip_type
+      ? fields.trip_type
+      : 'Single trip')
+  const lines: string[] = []
+  const seen = new Set<string>()
+
+  const pushLine = (key: string, value: unknown, labelOverride?: string) => {
+    if (!hasPrefillValue(value)) return
+    if (seen.has(key)) return
+    seen.add(key)
+    const label = labelOverride || resolvePortalFieldLabel(key, config)
+    lines.push(`${label}: ${String(value).trim()}`)
+  }
+
+  // Mapped portal fields first (stable order from config.fieldMapping)
+  for (const key of Object.keys(config.fieldMapping || {})) {
+    pushLine(key, fields[key])
+  }
+
+  // Always include route/corridor when present (even if config omits route in fieldMapping)
+  if (!seen.has('route')) {
+    const corridorJoin = (prefill.routeCorridor || [])
+      .map((s) => String(s ?? '').trim())
+      .filter(Boolean)
+      .join(' → ')
+    const routeVal = hasPrefillValue(fields.route)
+      ? String(fields.route).trim()
+      : corridorJoin
+    pushLine(
+      'route',
+      routeVal,
+      config.fieldMapping?.route || 'Route corridor'
+    )
+  }
+
+  // Border entry/exit (prefer border_* aliases, fall back to entry/exit_point)
+  const borderEntry = fields.border_entry || fields.entry_point
+  const borderExit = fields.border_exit || fields.exit_point
+  pushLine('border_entry', borderEntry, resolvePortalFieldLabel('border_entry', config))
+  pushLine('border_exit', borderExit, resolvePortalFieldLabel('border_exit', config))
+
+  // Vehicle / equipment extras when present
+  pushLine('axles', fields.axles)
+  pushLine('vehicle_id', fields.vehicle_id)
+
+  // Carrier + driver when present
+  pushLine('carrier_company', fields.carrier_company)
+  pushLine('carrier_usdot', fields.carrier_usdot)
+  pushLine('carrier_mc', fields.carrier_mc)
+  pushLine('driver_name', fields.driver_name)
+
+  // Trip type always present in packet
+  pushLine('trip_type', tripType)
+
+  return lines.join('\n')
+}
+
+/**
+ * Completeness checklist for a portal filing kit (pass / warn only).
+ * Missing items are warn with a short fix hint for the dispatcher.
+ */
+export function buildPortalCompletenessChecklist(
+  prefill: PrefillPackage,
+  config: PortalStateConfig,
+  context?: CompletenessChecklistContext
+): CompletenessChecklist {
+  const f = prefill.generatedFields || {}
+  const corridorCodes = (prefill.routeCorridor || [])
+    .map((s) => String(s ?? '').trim())
+    .filter(Boolean)
+  const load = prefill.loadDetails || {}
+  const originSt = String(load.origin_state ?? '').trim().toUpperCase()
+  const destSt = String(load.destination_state ?? '').trim().toUpperCase()
+  // Multi-state: corridor has 2+ codes, or origin≠dest, or explicit context
+  const multiState =
+    context?.multiState !== undefined
+      ? context.multiState
+      : corridorCodes.length > 1 ||
+        (!!originSt &&
+          !!destSt &&
+          originSt !== destSt &&
+          !/^(UNDEFINED|NULL)$/.test(originSt) &&
+          !/^(UNDEFINED|NULL)$/.test(destSt))
+
+  const items: CompletenessItem[] = []
+
+  const add = (
+    id: string,
+    label: string,
+    ok: boolean,
+    hint: string
+  ) => {
+    items.push(
+      ok
+        ? { id, label, status: 'pass' }
+        : { id, label, status: 'warn', hint }
+    )
+  }
+
+  add(
+    'origin',
+    'Origin',
+    hasPrefillValue(f.origin),
+    'Set origin city/state on the permit request'
+  )
+  add(
+    'destination',
+    'Destination',
+    hasPrefillValue(f.destination),
+    'Set destination city/state on the permit request'
+  )
+
+  const dimsOk =
+    hasPrefillValue(f.weight) &&
+    hasPrefillValue(f.length) &&
+    hasPrefillValue(f.width) &&
+    hasPrefillValue(f.height)
+  add(
+    'dimensions',
+    'Weight + L/W/H',
+    dimsOk,
+    'Add weight and overall L/W/H on the permit request'
+  )
+
+  if (multiState) {
+    // Require a meaningful route string — do not treat corridor.length alone as pass
+    const routeStr = hasPrefillValue(f.route)
+      ? String(f.route).trim()
+      : corridorCodes.join(' → ')
+    const routeOk = hasMeaningfulRouteString(routeStr)
+    add(
+      'route',
+      'Route corridor',
+      routeOk,
+      'Run analysis so route corridor is saved on the request'
+    )
+  }
+
+  const role = String(f.border_role || '')
+  const entryOk = hasPrefillValue(f.border_entry) || hasPrefillValue(f.entry_point)
+  const exitOk = hasPrefillValue(f.border_exit) || hasPrefillValue(f.exit_point)
+  if (role === 'through') {
+    add(
+      'border',
+      'Border entry & exit',
+      entryOk && exitOk,
+      'Re-run analysis with geometry so border entry/exit populate for through states'
+    )
+  } else if (role === 'origin') {
+    add(
+      'border',
+      'Border exit (origin state)',
+      exitOk,
+      'Re-run analysis with geometry so origin exit border populates'
+    )
+  } else if (role === 'destination') {
+    add(
+      'border',
+      'Border entry (destination state)',
+      entryOk,
+      'Re-run analysis with geometry so destination entry border populates'
+    )
+  }
+
+  const carrierOk =
+    hasPrefillValue(f.carrier_usdot) || hasPrefillValue(f.carrier_company)
+  add(
+    'carrier',
+    'Carrier USDOT or company',
+    carrierOk,
+    'Add USDOT on Profile / Permit Test carrier section'
+  )
+
+  if (config.requiresVehicleInfo) {
+    add(
+      'vehicle',
+      'Vehicle ID / VIN',
+      hasPrefillValue(f.vehicle_id),
+      'Add unit number or VIN on equipment / rig'
+    )
+  }
+
+  const passCount = items.filter((i) => i.status === 'pass').length
+  const warnCount = items.filter((i) => i.status === 'warn').length
+  return {
+    items,
+    passCount,
+    warnCount,
+    ready: warnCount === 0,
   }
 }
 
