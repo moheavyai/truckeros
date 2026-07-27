@@ -1234,6 +1234,24 @@ function formatPortalWeight(lbs: number | null | undefined): string | number {
   return `${Math.round(Number(lbs)).toLocaleString()} lbs`
 }
 
+/**
+ * Formats "City, ST" for portal prefill. Requires both city and state;
+ * empty / null / "undefined" fragments → '' so checklist does not false-pass
+ * on "undefined, TX", ", TX", or city-only.
+ */
+export function formatPortalCityState(city: unknown, state: unknown): string {
+  const clean = (v: unknown): string => {
+    if (v == null) return ''
+    const t = String(v).trim()
+    if (!t || /^(undefined|null)$/i.test(t)) return ''
+    return t
+  }
+  const c = clean(city)
+  const s = clean(state)
+  if (!c || !s) return ''
+  return `${c}, ${s}`
+}
+
 function pickEquipmentField(equip: Record<string, any>, ...keys: string[]): any {
   for (const key of keys) {
     const val = equip[key]
@@ -1304,8 +1322,11 @@ export function generatePortalPrefill(
   const generated: Record<string, any> = {}
 
   // Map common fields (dimensions as clean X' Y" for portal copy-paste)
-  generated.origin = `${request.origin_city}, ${request.origin_state}`
-  generated.destination = `${request.destination_city}, ${request.destination_state}`
+  generated.origin = formatPortalCityState(request.origin_city, request.origin_state)
+  generated.destination = formatPortalCityState(
+    request.destination_city,
+    request.destination_state
+  )
   generated.weight = formatPortalWeight(request.weight) || request.weight
   generated.length = formatPortalDimension(request.length) || request.length
   generated.width = formatPortalDimension(request.width) || request.width
@@ -1313,7 +1334,11 @@ export function generatePortalPrefill(
   generated.trip_type = options?.tripType || 'Single trip'
 
   if (request.route_corridor) {
-    generated.route = request.route_corridor.join(' → ')
+    const corridorJoin = (request.route_corridor as unknown[])
+      .map((s) => String(s ?? '').trim())
+      .filter(Boolean)
+      .join(' → ')
+    if (corridorJoin) generated.route = corridorJoin
   }
 
   // Geometry-aligned border entry/exit for this state's portal form
@@ -1463,11 +1488,28 @@ export function generatePortalPrefill(
   }
 }
 
-function hasPrefillValue(v: unknown): boolean {
+/** True when a prefill field has a real value (rejects blank and "undefined"/null placeholders). */
+export function hasPrefillValue(v: unknown): boolean {
   if (v == null) return false
-  if (typeof v === 'string') return v.trim() !== ''
+  if (typeof v === 'string') {
+    const t = v.trim()
+    if (!t) return false
+    // Reject location placeholders like "undefined, TX", "City, null", ", "
+    if (/^(undefined|null)(\s*,\s*(undefined|null)?)?$/i.test(t)) return false
+    if (/^(undefined|null)\s*,/i.test(t)) return false
+    if (/,\s*(undefined|null)$/i.test(t)) return false
+    if (t === ',' || t === ', ') return false
+    return true
+  }
   if (typeof v === 'number') return Number.isFinite(v) && v !== 0
   return true
+}
+
+/** Meaningful non-empty route/corridor string (not only arrows/spaces). */
+function hasMeaningfulRouteString(route: string): boolean {
+  const t = route.trim()
+  if (!t) return false
+  return /[A-Za-z0-9]/.test(t)
 }
 
 /** Resolves portal field label: config.fieldMapping first, then shared fallbacks. */
@@ -1482,7 +1524,8 @@ export function resolvePortalFieldLabel(
 /**
  * Builds a plain-text copy-paste packet for a state portal filing.
  * Lines: "{Portal field label}: {value}" using config.fieldMapping labels when available.
- * Always includes trip type; includes border, axles, vehicle, carrier, driver when present.
+ * Always includes trip type; includes route/corridor when present even if not in fieldMapping;
+ * includes border, axles, vehicle, carrier, driver when present.
  */
 export function buildPortalClipboardPacket(
   prefill: PrefillPackage,
@@ -1503,12 +1546,28 @@ export function buildPortalClipboardPacket(
     if (seen.has(key)) return
     seen.add(key)
     const label = labelOverride || resolvePortalFieldLabel(key, config)
-    lines.push(`${label}: ${value}`)
+    lines.push(`${label}: ${String(value).trim()}`)
   }
 
   // Mapped portal fields first (stable order from config.fieldMapping)
   for (const key of Object.keys(config.fieldMapping || {})) {
     pushLine(key, fields[key])
+  }
+
+  // Always include route/corridor when present (even if config omits route in fieldMapping)
+  if (!seen.has('route')) {
+    const corridorJoin = (prefill.routeCorridor || [])
+      .map((s) => String(s ?? '').trim())
+      .filter(Boolean)
+      .join(' → ')
+    const routeVal = hasPrefillValue(fields.route)
+      ? String(fields.route).trim()
+      : corridorJoin
+    pushLine(
+      'route',
+      routeVal,
+      config.fieldMapping?.route || 'Route corridor'
+    )
   }
 
   // Border entry/exit (prefer border_* aliases, fall back to entry/exit_point)
@@ -1543,9 +1602,23 @@ export function buildPortalCompletenessChecklist(
   context?: CompletenessChecklistContext
 ): CompletenessChecklist {
   const f = prefill.generatedFields || {}
-  const corridor = prefill.routeCorridor || []
+  const corridorCodes = (prefill.routeCorridor || [])
+    .map((s) => String(s ?? '').trim())
+    .filter(Boolean)
+  const load = prefill.loadDetails || {}
+  const originSt = String(load.origin_state ?? '').trim().toUpperCase()
+  const destSt = String(load.destination_state ?? '').trim().toUpperCase()
+  // Multi-state: corridor has 2+ codes, or origin≠dest, or explicit context
   const multiState =
-    context?.multiState !== undefined ? context.multiState : corridor.length > 1
+    context?.multiState !== undefined
+      ? context.multiState
+      : corridorCodes.length > 1 ||
+        (!!originSt &&
+          !!destSt &&
+          originSt !== destSt &&
+          !/^(UNDEFINED|NULL)$/.test(originSt) &&
+          !/^(UNDEFINED|NULL)$/.test(destSt))
+
   const items: CompletenessItem[] = []
 
   const add = (
@@ -1587,7 +1660,11 @@ export function buildPortalCompletenessChecklist(
   )
 
   if (multiState) {
-    const routeOk = hasPrefillValue(f.route) || corridor.length > 1
+    // Require a meaningful route string — do not treat corridor.length alone as pass
+    const routeStr = hasPrefillValue(f.route)
+      ? String(f.route).trim()
+      : corridorCodes.join(' → ')
+    const routeOk = hasMeaningfulRouteString(routeStr)
     add(
       'route',
       'Route corridor',

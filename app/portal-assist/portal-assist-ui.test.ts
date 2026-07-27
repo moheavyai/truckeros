@@ -404,6 +404,17 @@ describe('Portal Assist — Filing kit (copy, checklist, trip type, workflow)', 
     expect(source).toContain("copiedKey === 'all'")
     expect(source).toContain("copiedKey === ourKey ? 'Copied' : 'Copy'")
     expect(source).toContain('data-copy-field=')
+    expect(source).toContain('aria-label={`Copy ${portalLabel}`}')
+  })
+
+  it('shows clipboard fail feedback and aria-live status', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('copyStatus')
+    expect(source).toContain('aria-live="polite"')
+    expect(source).toContain('data-testid="copy-status"')
+    expect(source).toContain('Copy failed — clipboard permission denied or unavailable')
+    expect(source).toContain('copyTimeoutRef')
+    expect(source).toContain('clearTimeout(copyTimeoutRef.current)')
   })
 
   it('exposes Copy all fields for selected state using buildPortalClipboardPacket', () => {
@@ -428,7 +439,7 @@ describe('Portal Assist — Filing kit (copy, checklist, trip type, workflow)', 
     expect(source).toContain('text-amber-800 sm:text-amber-700')
   })
 
-  it('shows trip type control Single / Round / Annual with annual note', () => {
+  it('shows trip type control and clears approval on change', () => {
     const source = readSource(pagePath)
     expect(source).toContain('data-testid="trip-type-control"')
     expect(source).toContain('TRIP TYPE')
@@ -437,16 +448,29 @@ describe('Portal Assist — Filing kit (copy, checklist, trip type, workflow)', 
     expect(source).toContain("tripType === 'Annual'")
     expect(source).toContain('not auto-matched yet')
     expect(source).toContain('trip_type: next')
-    expect(source).toContain('generatePortalPrefill(req, state, { tripType })')
+    expect(source).toContain('tripType: effectiveTripType')
+    const handlerStart = source.indexOf('const handleTripTypeChange = (next: PortalTripType) => {')
+    const handlerEnd = source.indexOf('return (', handlerStart)
+    const handler = source.slice(handlerStart, handlerEnd)
+    expect(handler).toContain('setIsApproved(false)')
+    expect(handler).toContain('setApprovalChecked(false)')
   })
 
-  it('shows filing workflow strip under Final Review', () => {
+  it('resets tripType when loading a new request', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('resetTripType: true')
+    expect(source).toContain("opts?.resetTripType ? 'Single trip' : tripType")
+  })
+
+  it('shows filing workflow strip under Final Review without Step N clash', () => {
     const source = readSource(pagePath)
     expect(source).toContain('data-testid="filing-workflow-strip"')
-    expect(source).toContain('Step 1 Review prefill')
-    expect(source).toContain('Step 2 Copy fields')
-    expect(source).toContain('Step 3 Open portal')
-    expect(source).toContain('Step 4 Paste &amp; pay on state site')
+    expect(source).toContain('Filing steps:')
+    expect(source).toContain('Review prefill')
+    expect(source).toContain('Copy fields')
+    expect(source).toContain('Open portal')
+    expect(source).toContain('Paste &amp; pay on state site')
+    expect(source).not.toContain('Step 1 Review prefill')
     // Workflow appears inside Final Review section
     const reviewStart = source.indexOf('2. Final Review — Generated Prefill for')
     const workflowIdx = source.indexOf('data-testid="filing-workflow-strip"')

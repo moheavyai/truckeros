@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   STATE_PORTAL_CONFIGS,
   formatBorderPoint,
+  formatPortalCityState,
   generatePortalPrefill,
   getPortalStatesForAnalysis,
   openStatePortals,
@@ -10,7 +11,9 @@ import {
   buildPortalClipboardPacket,
   buildPortalCompletenessChecklist,
   resolvePortalFieldLabel,
+  hasPrefillValue,
   PORTAL_TRIP_TYPES,
+  type PrefillPackage,
 } from './portal-assistant'
 
 const ALL_US_STATES = [
@@ -628,6 +631,79 @@ describe('buildPortalClipboardPacket', () => {
     expect(packet).not.toContain('Axles:')
     expect(packet).not.toContain('Border Entry:')
   })
+
+  it('includes route corridor even when fieldMapping omits route (FL)', () => {
+    const prefill = generatePortalPrefill(
+      {
+        origin_city: 'Miami',
+        origin_state: 'FL',
+        destination_city: 'Tampa',
+        destination_state: 'FL',
+        weight: 80000,
+        length: 60,
+        width: 8.5,
+        height: 13.5,
+        route_corridor: ['FL', 'GA'],
+        permit_required_states: [],
+        equipment: {},
+        cargo: {},
+      },
+      'FL'
+    )
+    expect(STATE_PORTAL_CONFIGS.FL.fieldMapping.route).toBeUndefined()
+    const packet = buildPortalClipboardPacket(prefill, STATE_PORTAL_CONFIGS.FL)
+    expect(packet).toMatch(/Route corridor: FL → GA/)
+  })
+
+  it('supports Annual trip type and trims whitespace in values', () => {
+    const prefill = generatePortalPrefill(
+      {
+        origin_city: '  Houston  ',
+        origin_state: 'TX',
+        destination_city: 'Dallas',
+        destination_state: 'TX',
+        weight: 80000,
+        length: 60,
+        width: 8.5,
+        height: 13.5,
+        route_corridor: ['TX'],
+        equipment: {},
+        cargo: {},
+      },
+      'TX',
+      { tripType: 'Annual' }
+    )
+    // Inject padded field to assert packet trims
+    prefill.generatedFields.carrier_usdot = '  123  '
+    const packet = buildPortalClipboardPacket(prefill, STATE_PORTAL_CONFIGS.TX, {
+      tripType: 'Annual',
+    })
+    expect(packet).toContain('Trip Type: Annual')
+    expect(packet).toContain('USDOT: 123')
+    expect(packet).not.toContain('USDOT:  123')
+  })
+
+  it('dedupes route when already present via fieldMapping', () => {
+    const prefill = generatePortalPrefill(
+      {
+        origin_city: 'Houston',
+        origin_state: 'TX',
+        destination_city: 'Dallas',
+        destination_state: 'TX',
+        weight: 80000,
+        length: 60,
+        width: 8.5,
+        height: 13.5,
+        route_corridor: ['TX', 'OK'],
+        equipment: {},
+        cargo: {},
+      },
+      'TX'
+    )
+    const packet = buildPortalClipboardPacket(prefill, STATE_PORTAL_CONFIGS.TX)
+    const routeLines = packet.split('\n').filter((l) => /route|corridor/i.test(l.split(':')[0]))
+    expect(routeLines.length).toBe(1)
+  })
 })
 
 describe('buildPortalCompletenessChecklist', () => {
@@ -815,6 +891,140 @@ describe('buildPortalCompletenessChecklist', () => {
     )
     expect(resolvePortalFieldLabel('trip_type')).toBe('Trip Type')
     expect(resolvePortalFieldLabel('vehicle_id')).toBe('Vehicle / VIN')
+  })
+
+  it('warns missing origin/destination/dims/vehicle and rejects undefined O/D false-pass', () => {
+    const prefill = generatePortalPrefill(
+      {
+        origin_city: undefined,
+        origin_state: 'TX',
+        destination_city: '',
+        destination_state: 'OK',
+        weight: 0,
+        length: null,
+        width: 8.5,
+        height: 13.5,
+        route_corridor: ['TX'],
+        equipment: {},
+        cargo: { carrierDriver: { usdotNumber: '1' } },
+      },
+      'TX'
+    )
+    // Generation must not produce "undefined, TX" — requires both city and state
+    expect(prefill.generatedFields.origin).toBe('')
+    expect(prefill.generatedFields.destination).toBe('')
+    const genCheck = buildPortalCompletenessChecklist(prefill, STATE_PORTAL_CONFIGS.TX)
+    expect(genCheck.items.find((i) => i.id === 'origin')?.status).toBe('warn')
+    expect(genCheck.items.find((i) => i.id === 'destination')?.status).toBe('warn')
+    expect(genCheck.items.find((i) => i.id === 'dimensions')?.status).toBe('warn')
+    expect(genCheck.items.find((i) => i.id === 'vehicle')?.status).toBe('warn')
+
+    // Legacy placeholder strings also rejected by hasPrefillValue
+    const broken: PrefillPackage = {
+      ...prefill,
+      generatedFields: {
+        ...prefill.generatedFields,
+        origin: 'undefined, TX',
+        destination: ', ',
+        weight: '',
+        length: '',
+        width: '',
+        height: '',
+        vehicle_id: '',
+      },
+    }
+    const checklist = buildPortalCompletenessChecklist(broken, STATE_PORTAL_CONFIGS.TX)
+    expect(checklist.items.find((i) => i.id === 'origin')?.status).toBe('warn')
+    expect(checklist.items.find((i) => i.id === 'destination')?.status).toBe('warn')
+    expect(hasPrefillValue('undefined, TX')).toBe(false)
+    expect(hasPrefillValue('City, null')).toBe(false)
+    expect(formatPortalCityState(undefined, 'TX')).toBe('')
+    expect(formatPortalCityState(undefined, undefined)).toBe('')
+    expect(formatPortalCityState('Houston', 'TX')).toBe('Houston, TX')
+  })
+
+  it('warns multi-state when route string empty (not circular on corridor length)', () => {
+    const prefill = generatePortalPrefill(
+      {
+        origin_city: 'Tulsa',
+        origin_state: 'OK',
+        destination_city: 'Omaha',
+        destination_state: 'NE',
+        weight: 90000,
+        length: 70,
+        width: 10,
+        height: 13.5,
+        route_corridor: ['OK', 'KS', 'NE'],
+        equipment: { unit_number: 'U1' },
+        cargo: { carrierDriver: { usdotNumber: '1' } },
+      },
+      'KS'
+    )
+    // Clear route + corridor so multi-state is forced via context, route is missing
+    const stripped: PrefillPackage = {
+      ...prefill,
+      routeCorridor: [],
+      generatedFields: { ...prefill.generatedFields, route: '' },
+    }
+    const checklist = buildPortalCompletenessChecklist(stripped, STATE_PORTAL_CONFIGS.KS, {
+      multiState: true,
+    })
+    expect(checklist.items.find((i) => i.id === 'route')?.status).toBe('warn')
+    expect(checklist.items.find((i) => i.id === 'route')?.hint).toMatch(/corridor/i)
+  })
+
+  it('warns origin missing exit and destination missing entry', () => {
+    const base = {
+      origin_city: 'Tulsa',
+      origin_state: 'OK',
+      destination_city: 'Omaha',
+      destination_state: 'NE',
+      weight: 90000,
+      length: 70,
+      width: 10,
+      height: 13.5,
+      route_corridor: ['OK', 'KS', 'NE'],
+      equipment: { unit_number: 'U1' },
+      cargo: { carrierDriver: { usdotNumber: '1' } },
+    }
+    const originPrefill = generatePortalPrefill(base, 'OK')
+    originPrefill.generatedFields.exit_point = ''
+    originPrefill.generatedFields.border_exit = ''
+    const originCheck = buildPortalCompletenessChecklist(
+      originPrefill,
+      STATE_PORTAL_CONFIGS.OK
+    )
+    expect(originCheck.items.find((i) => i.id === 'border')?.status).toBe('warn')
+    expect(originCheck.items.find((i) => i.id === 'border')?.label).toMatch(/exit/i)
+
+    const destPrefill = generatePortalPrefill(base, 'NE')
+    destPrefill.generatedFields.entry_point = ''
+    destPrefill.generatedFields.border_entry = ''
+    const destCheck = buildPortalCompletenessChecklist(destPrefill, STATE_PORTAL_CONFIGS.NE)
+    expect(destCheck.items.find((i) => i.id === 'border')?.status).toBe('warn')
+    expect(destCheck.items.find((i) => i.id === 'border')?.label).toMatch(/entry/i)
+  })
+
+  it('warns multi-leg load with empty corridor via origin≠dest', () => {
+    const prefill = generatePortalPrefill(
+      {
+        origin_city: 'Houston',
+        origin_state: 'TX',
+        destination_city: 'Chicago',
+        destination_state: 'IL',
+        weight: 90000,
+        length: 70,
+        width: 10,
+        height: 13.5,
+        route_corridor: [],
+        equipment: { unit_number: 'U1' },
+        cargo: { carrierDriver: { companyName: 'Co' } },
+      },
+      'TX'
+    )
+    expect(prefill.generatedFields.route).toBeUndefined()
+    const checklist = buildPortalCompletenessChecklist(prefill, STATE_PORTAL_CONFIGS.TX)
+    expect(checklist.items.find((i) => i.id === 'route')?.status).toBe('warn')
   })
 })
 

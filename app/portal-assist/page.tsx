@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import AppHeader from '@/components/AppHeader'
@@ -172,8 +172,18 @@ export default function PortalAssistPage() {
   const [tripType, setTripType] = useState<PortalTripType>('Single trip')
   /** Which copy control last succeeded (`all` or field key) — brief "Copied" feedback. */
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  /** Clipboard status for aria-live (success or fail). */
+  const [copyStatus, setCopyStatus] = useState<string | null>(null)
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const router = useRouter()
+
+  // Clear copy feedback timer on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+    }
+  }, [])
 
   const portalStatesForRequest = request
     ? getPortalStatesForAnalysis({
@@ -197,13 +207,19 @@ export default function PortalAssistPage() {
     return state.includes(q) || (c?.name || '').toUpperCase().includes(q)
   })
 
-  const applyPortalState = (req: PermitRequest, state: string, opts?: { showLaunchHint?: boolean }) => {
+  const applyPortalState = (
+    req: PermitRequest,
+    state: string,
+    opts?: { showLaunchHint?: boolean; resetTripType?: boolean }
+  ) => {
     if (!STATE_PORTAL_CONFIGS[state]) {
       setPageError(`Config for ${state} missing. Add it in lib/portal-assistant.ts (config-driven).`)
       return
     }
+    const effectiveTripType: PortalTripType = opts?.resetTripType ? 'Single trip' : tripType
+    if (opts?.resetTripType) setTripType('Single trip')
     setSelectedState(state)
-    setPrefill(generatePortalPrefill(req, state, { tripType }))
+    setPrefill(generatePortalPrefill(req, state, { tripType: effectiveTripType }))
     setIsApproved(false)
     setRouteComparison(null)
     setSubmissionRecord(null)
@@ -214,6 +230,7 @@ export default function PortalAssistPage() {
     setParseError(null)
     setPdfError(null)
     setCopiedKey(null)
+    setCopyStatus(null)
 
     if (opts?.showLaunchHint) {
       const corridor = (req.route_corridor || []).join(' → ')
@@ -304,7 +321,11 @@ export default function PortalAssistPage() {
       setParsedOutput(null)
 
       const initialState = resolveInitialPortalState(loaded)
-      applyPortalState(loaded, initialState, { showLaunchHint: !opts?.reviewStep })
+      // New request → reset trip type to Single trip
+      applyPortalState(loaded, initialState, {
+        showLaunchHint: !opts?.reviewStep,
+        resetTripType: true,
+      })
       if (opts?.reviewStep) {
         setIsReviewStep(true)
       }
@@ -406,7 +427,9 @@ export default function PortalAssistPage() {
     setParsedOutput(null)
     setSubmissions([]) // fresh demo
     setLaunchHint(null)
-    applyPortalState(demoRequest, resolveInitialPortalState(demoRequest))
+    applyPortalState(demoRequest, resolveInitialPortalState(demoRequest), {
+      resetTripType: true,
+    })
     setAttachedPdfs([])
     setCurrentPdfReference(null)
     setHasCredentials(false)
@@ -794,18 +817,30 @@ export default function PortalAssistPage() {
     applyPortalState(request, selectedState)
   }
 
-  /** Brief clipboard feedback for per-field or copy-all controls. */
+  /** Brief clipboard feedback for per-field or copy-all controls (aria-live + fail message). */
   const copyToClipboard = async (key: string, text: string) => {
     const value = String(text ?? '').trim()
     if (!value || value === '—') return
+    if (copyTimeoutRef.current) {
+      clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = null
+    }
     try {
       await navigator.clipboard.writeText(value)
       setCopiedKey(key)
-      window.setTimeout(() => {
+      setCopyStatus('Copied')
+      copyTimeoutRef.current = setTimeout(() => {
         setCopiedKey((current) => (current === key ? null : current))
+        setCopyStatus(null)
+        copyTimeoutRef.current = null
       }, 1500)
     } catch {
       setCopiedKey(null)
+      setCopyStatus('Copy failed — clipboard permission denied or unavailable')
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopyStatus(null)
+        copyTimeoutRef.current = null
+      }, 3000)
     }
   }
 
@@ -817,6 +852,7 @@ export default function PortalAssistPage() {
   }
 
   const handleTripTypeChange = (next: PortalTripType) => {
+    if (next === tripType) return
     setTripType(next)
     setPrefill((prev) =>
       prev
@@ -826,6 +862,12 @@ export default function PortalAssistPage() {
           }
         : prev
     )
+    // Trip type is part of the filing package — clear approval like regenerate
+    setIsApproved(false)
+    setApprovalChecked(false)
+    setApprovalNotes('')
+    setApprovalError(null)
+    setSubmissionRecord(null)
   }
 
   return (
@@ -1040,18 +1082,19 @@ export default function PortalAssistPage() {
                   Confirm carrier, driver, load, and equipment before portal entry.
                 </p>
 
-                {/* Filing workflow strip — copy-ready kit, not RPA */}
+                {/* Filing workflow strip — copy-ready kit, not RPA (no Step N to avoid clashing with section numbers) */}
                 <div
                   className={`${fieldHintClass} mb-4 flex flex-wrap items-center gap-x-1.5 gap-y-1`}
                   data-testid="filing-workflow-strip"
                 >
-                  <span>Step 1 Review prefill</span>
+                  <span className="font-medium text-gray-600 sm:text-gray-500">Filing steps:</span>
+                  <span>Review prefill</span>
                   <span aria-hidden="true">→</span>
-                  <span>Step 2 Copy fields</span>
+                  <span>Copy fields</span>
                   <span aria-hidden="true">→</span>
-                  <span>Step 3 Open portal</span>
+                  <span>Open portal</span>
                   <span aria-hidden="true">→</span>
-                  <span>Step 4 Paste &amp; pay on state site</span>
+                  <span>Paste &amp; pay on state site</span>
                 </div>
 
                 {/* Trip type for generatedFields + copy packet */}
@@ -1081,17 +1124,42 @@ export default function PortalAssistPage() {
                   )}
                 </div>
 
-                {/* Completeness checklist (pass/warn) */}
+                {/* Completeness checklist (pass/warn) + copy-all nearby */}
                 {(() => {
                   const checklist = buildPortalCompletenessChecklist(prefill, config)
                   return (
                     <div className="mb-4" data-testid="completeness-checklist">
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                         <span className={`${fieldLabelClass} block`}>FILING COMPLETENESS</span>
-                        <span className={fieldHintTinyClass}>
-                          {checklist.passCount} ready
-                          {checklist.warnCount > 0 ? ` · ${checklist.warnCount} to fix` : ''}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={fieldHintTinyClass}>
+                            {checklist.passCount} ready
+                            {checklist.warnCount > 0 ? ` · ${checklist.warnCount} to fix` : ''}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleCopyAllFields}
+                            className={`px-3 py-1.5 ${buttonSecondaryClass}`}
+                            data-testid="copy-all-fields"
+                            aria-label={`Copy all fields for ${selectedState}`}
+                          >
+                            {copiedKey === 'all'
+                              ? 'Copied'
+                              : `Copy all fields for ${selectedState}`}
+                          </button>
+                        </div>
+                      </div>
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        data-testid="copy-status"
+                        className={`${fieldHintTinyClass} mb-2 min-h-[1rem] ${
+                          copyStatus && copyStatus.startsWith('Copy failed')
+                            ? 'text-amber-800 sm:text-amber-700'
+                            : ''
+                        }`}
+                      >
+                        {copyStatus || ''}
                       </div>
                       <ul className="space-y-1.5 text-sm">
                         {checklist.items.map((item) => (
@@ -1229,21 +1297,9 @@ export default function PortalAssistPage() {
                   </div>
                 )}
 
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <span className={`${fieldLabelClass} block`}>PORTAL FIELD MAPPING</span>
-                  <button
-                    type="button"
-                    onClick={handleCopyAllFields}
-                    className={`px-3 py-1.5 ${buttonSecondaryClass}`}
-                    data-testid="copy-all-fields"
-                  >
-                    {copiedKey === 'all'
-                      ? 'Copied'
-                      : `Copy all fields for ${selectedState}`}
-                  </button>
-                </div>
+                <span className={`${fieldLabelClass} block mb-2`}>PORTAL FIELD MAPPING</span>
                 <p className={`${fieldHintTinyClass} mb-2`}>
-                  Copy individual values or the full packet, then paste into the state portal.
+                  Copy individual values or use Copy all above, then paste into the state portal.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   {Object.entries(config.fieldMapping).map(([ourKey, portalLabel]) => {
@@ -1259,6 +1315,7 @@ export default function PortalAssistPage() {
                               onClick={() => copyToClipboard(ourKey, display)}
                               className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
                               data-copy-field={ourKey}
+                              aria-label={`Copy ${portalLabel}`}
                             >
                               {copiedKey === ourKey ? 'Copied' : 'Copy'}
                             </button>
@@ -1280,6 +1337,7 @@ export default function PortalAssistPage() {
                           }
                           className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
                           data-copy-field="trip_type"
+                          aria-label="Copy Trip Type"
                         >
                           {copiedKey === 'trip_type' ? 'Copied' : 'Copy'}
                         </button>
@@ -1299,6 +1357,7 @@ export default function PortalAssistPage() {
                           }
                           className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
                           data-copy-field="axles"
+                          aria-label="Copy Axles"
                         >
                           {copiedKey === 'axles' ? 'Copied' : 'Copy'}
                         </button>
@@ -1320,6 +1379,7 @@ export default function PortalAssistPage() {
                           }
                           className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
                           data-copy-field="vehicle_id"
+                          aria-label="Copy Vehicle / VIN"
                         >
                           {copiedKey === 'vehicle_id' ? 'Copied' : 'Copy'}
                         </button>
@@ -1341,6 +1401,7 @@ export default function PortalAssistPage() {
                           }
                           className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
                           data-copy-field="entry_point"
+                          aria-label="Copy Border Entry Point"
                         >
                           {copiedKey === 'entry_point' ? 'Copied' : 'Copy'}
                         </button>
@@ -1362,6 +1423,7 @@ export default function PortalAssistPage() {
                           }
                           className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
                           data-copy-field="exit_point"
+                          aria-label="Copy Border Exit Point"
                         >
                           {copiedKey === 'exit_point' ? 'Copied' : 'Copy'}
                         </button>
@@ -1385,6 +1447,7 @@ export default function PortalAssistPage() {
                           }
                           className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
                           data-copy-field="border_summary"
+                          aria-label="Copy Border Summary"
                         >
                           {copiedKey === 'border_summary' ? 'Copied' : 'Copy'}
                         </button>
