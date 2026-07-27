@@ -973,9 +973,11 @@ def _prefer_anchor_geo_ok(
 
 # Leading tokens that are never part of a county proper name (prepositions / prefer verbs).
 _COUNTY_NAME_STRIP: Final = frozenset({
-    "via", "through", "use", "take", "prefer", "near", "from", "enter",
+    "via", "through", "thru", "use", "take", "prefer", "near", "from", "enter",
     "include", "including", "go", "pass", "by", "on", "the", "a", "an",
 })
+# Place prepositions in prefer/use clauses (thru == through for informal text)
+_PLACE_PREP = r"from|near|through|thru|enter|via"
 
 # Prefer-clause highway extraction: do NOT stop at through/from/enter (place prepositions),
 # so "prefer US136 through Auburn then US75" still yields both highways.
@@ -1015,7 +1017,7 @@ def extract_prefer_clause_places(
     """
     Extract user-named CITY_MAP places from prefer/use/take/via clauses.
 
-    Matches through/via/from/near/enter CITY (prefer context required).
+    Matches through/thru/via/from/near/enter CITY (prefer context required).
     Product: user-named place > default highway anchor (e.g. Auburn beats Rock Port for US136).
     Does NOT fire on bare "from Dallas" / "away from X" without prefer verb.
     Skips places whose CITY_MAP state is avoided, or when text state suffix mismatches map.
@@ -1029,14 +1031,14 @@ def extract_prefer_clause_places(
     city_keys = sorted(CITY_MAP.keys(), key=len, reverse=True)
     seen: set[str] = set()
     for city_key in city_keys:
-        # Prefer verb … (from|near|through|enter|via) CITY
+        # Prefer verb … (from|near|through|thru|enter|via) CITY
         # Also: bare "via CITY" (via is itself a prefer verb).
         # Reject "away from" / "depart from".
         matched = re.search(
             rf"(?:use|take|prefer|via)\b"
             rf"(?:(?!\b(?:avoid|use|take|prefer|via)\b).){{0,120}}?"
             rf"(?<!\baway )(?<!\bdepart )"
-            rf"(?:from|near|through|enter|via)\s+{re.escape(city_key)}\b",
+            rf"(?:{_PLACE_PREP})\s+{re.escape(city_key)}\b",
             t,
         )
         if not matched:
@@ -1083,7 +1085,7 @@ def extract_county_vias(
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """
     MVP county seeding: "X County, ST" → COUNTY_MAP centroid if known.
-    Strips leading prefer/via/through verbs so "through Nemaha County, NE" seeds.
+    Strips leading prefer/via/through/thru verbs so "through Nemaha County, NE" seeds.
     Unknown counties → note only (no hard fail). Returns (vias, notes).
     """
     vias: list[dict[str, Any]] = []
@@ -1202,7 +1204,7 @@ def _preferred_hwys_with_named_places(
             continue
         for ck in city_keys:
             for pm in re.finditer(
-                rf"(?:from|near|through|enter|via)\s+{re.escape(ck)}\b",
+                rf"(?:{_PLACE_PREP})\s+{re.escape(ck)}\b",
                 window,
             ):
                 # Reject "away from" / "depart from"
@@ -1248,8 +1250,8 @@ def seed_preferred_hwy_vias(
     Seed real via stops for preferred highways / prefer-clause places / counties.
 
     Product rules:
-    1) User-named place in prefer/use/via/through/from/enter > default hwy anchor
-       ("use US136 through Auburn, NE" → Auburn, not Rock Port) — per-hwy suppression.
+    1) User-named place in prefer/use/via/through/thru/from/enter > default hwy anchor
+       ("use US136 thru Auburn, NE" → Auburn, not Rock Port) — per-hwy suppression.
     2) Bare "prefer US136" (no place) → PREFERRED_HWY_VIA_ANCHORS (Rock Port).
     3) Or-groups: do not seed default hwy anchors unless a place is named.
     4) Places in avoided states are not seeded; fall back to non-avoided hwy anchors.
@@ -1409,7 +1411,7 @@ def parse_special_instructions(
     """
     Parse free-text. Returns avoided states, included city waypoints, preferred highways, notes.
     Supports: avoid AR,IL ; include Corinth, MS, Memphis ; prefer I-40 southern ; bypass CA
-    Avoid clause stops at period or next directive verb (use|take|prefer|via|include|through|from|enter|to|...).
+    Avoid clause stops at period or next directive verb (use|take|prefer|via|include|through|thru|from|enter|to|...).
     States that appear only inside prefer/use/from/enter clauses are not avoided.
     origin_state / dest_state are always stripped from avoided (impossible o/d avoid).
 
@@ -1442,7 +1444,7 @@ def parse_special_instructions(
     # (e.g. "avoid IA. use US136 from Rock Port, MO to enter NE" → avoided=['IA'] only).
     # `to` tradeoff: "avoid CA to AZ" stops at `to` (use "avoid CA, AZ" instead).
     _avoid_stop = (
-        r"use|take|prefer|via|include|including|through|from|enter|to|"
+        r"use|take|prefer|via|include|including|through|thru|from|enter|to|"
         r"avoid|avoiding|no|skip|steer clear of|shun|bypass|near|"
         r"southern|northern|interstate|stay on|avoid major"
     )
@@ -1464,11 +1466,11 @@ def parse_special_instructions(
     # Include / via / near (only cities from CITY_MAP become real VRP stops)
     # Stop before prefer/use/from/enter/to so state tokens there are not treated as include targets.
     _inc_stop = (
-        r"avoid|avoiding|no|skip|include|including|prefer|use|take|via|through|near|"
+        r"avoid|avoiding|no|skip|include|including|prefer|use|take|via|through|thru|near|"
         r"from|enter|to|southern|northern"
     )
     inc_re = re.compile(
-        rf"(?:^|[\s,.(]|\b)[^\w]*(include|including|via|through|near|go (?:by|via|through|near)|pass (?:by|near|through))[^\w]+"
+        rf"(?:^|[\s,.(]|\b)[^\w]*(include|including|via|through|thru|near|go (?:by|via|through|thru|near)|pass (?:by|near|through|thru))[^\w]+"
         rf"([a-z0-9,\s&\/]+?)"
         rf"(?=\s*(?:{_inc_stop})\b|\s*\.|$)",
         re.IGNORECASE,
