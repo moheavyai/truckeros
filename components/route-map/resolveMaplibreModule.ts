@@ -4,13 +4,12 @@
  */
 
 /** Runtime MapLibre namespace used by RouteMap after interop resolve. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type MaplibreRuntime = {
-  Map: new (options: any) => any
-  Marker: new (options?: any) => any
-  Popup: new (options?: any) => any
-  NavigationControl: new (options?: any) => any
-  LngLatBounds: new (...args: any[]) => any
+  Map: new (options?: object) => unknown
+  Marker: new (options?: object) => unknown
+  Popup: new (options?: object) => unknown
+  NavigationControl: new (options?: object) => unknown
+  LngLatBounds: new (...args: unknown[]) => unknown
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

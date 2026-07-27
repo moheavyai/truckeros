@@ -46,7 +46,8 @@ describe('RouteMapCard structure', () => {
     const source = read(cardPath)
     expect(source).toContain('data-testid="route-map-live"')
     expect(source).toContain('isIdleEmpty')
-    expect(source).toMatch(/\{isCalculating && \([\s\S]*role="progressbar"/)
+    // Progress gated by showCalculating (also suppressed when mapLoadFailed)
+    expect(source).toMatch(/\{showCalculating && \([\s\S]*role="progressbar"/)
   })
 
   it('dynamically imports RouteMap with ssr: false and Loading map text', () => {
@@ -105,27 +106,39 @@ describe('RouteMap MapLibre foundation', () => {
     const codeOnly = source
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '')
-    // Ban value imports of maplibre-gl under any binding name (default / namespace / named)
+    // Ban value imports of maplibre-gl under any binding name (default / namespace).
+    // Type-only `import type { Map as MaplibreMap }` must still pass.
     expect(codeOnly).not.toMatch(/import\s+[A-Za-z_$][\w$]*\s+from\s+['"]maplibre-gl['"]/)
     expect(codeOnly).not.toMatch(/import\s+\*\s+as\s+[A-Za-z_$][\w$]*\s+from\s+['"]maplibre-gl['"]/)
-    // Named value import would be `import { Map }` — type-only is `import type { Map`
+    // Named value import (no `type` keyword between import and `{`)
     expect(codeOnly).not.toMatch(
       /import\s*\{[^}]*\b(?:Map|Marker|Popup|NavigationControl|LngLatBounds)\b[^}]*\}\s*from\s*['"]maplibre-gl['"]/
     )
-    expect(codeOnly).toContain("import('maplibre-gl')")
-    expect(codeOnly).toContain('resolveMaplibreModule')
+    expect(codeOnly).toMatch(/import\s+type\s*\{[\s\S]*?\bMap\s+as\s+MaplibreMap/)
+    // Dynamic import lives in the init effect path
+    const initIdx = codeOnly.indexOf('// Init map once')
+    const initSlice =
+      initIdx >= 0 ? codeOnly.slice(initIdx, initIdx + 2500) : codeOnly
+    expect(initSlice).toContain("import('maplibre-gl')")
+    expect(initSlice).toContain('resolveMaplibreModule')
     expect(codeOnly).toContain('setMapReady(false)')
+    expect(codeOnly).toContain('setMapReady(true)')
+    expect(codeOnly).toContain('safeRemoveMap(createdMap)')
     expect(codeOnly).toContain('Map failed to load')
     expect(codeOnly).toContain('route-map-load-error')
-    // Types only for Map class; runtime Map from dynamic import + resolve
-    expect(codeOnly).toMatch(/import\s+type\s*\{[\s\S]*?\bMap\s+as\s+MaplibreMap/)
+    // Error is overlay — map container ref stays mounted
+    expect(codeOnly).toContain('ref={containerRef}')
+    expect(codeOnly).toMatch(/loadError[\s\S]*route-map-load-error|route-map-load-error[\s\S]*loadError/)
   })
 
-  it('hides idle overlay when map canvas load fails', () => {
+  it('hides idle/calculating chrome when map canvas load fails', () => {
     const card = read(cardPath)
     expect(card).toContain('mapLoadFailed')
     expect(card).toContain('onLoadError')
     expect(card).toContain('isIdleEmpty && !mapLoadFailed')
+    expect(card).toContain('showCalculating')
+    expect(card).toContain('isCalculating && !mapLoadFailed')
+    expect(card).toContain("mapLoadFailed\n    ? 'Map failed to load'")
   })
 
   it('cleans up load listeners and guards short LineString setData', () => {

@@ -70,14 +70,18 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
   const [mapLoadFailed, setMapLoadFailed] = useState(false)
   const isCalculating = model.status === 'calculating'
   const isError = model.status === 'error'
+  /** Canvas dead → suppress calculating chrome; map failure is primary. */
+  const showCalculating = isCalculating && !mapLoadFailed
   const isIdleEmpty = model.status === 'idle' && model.stops.length === 0
-  const showLineLegend = model.linePositions.length >= 2 && model.status === 'ready'
+  const showLineLegend =
+    model.linePositions.length >= 2 && model.status === 'ready' && !mapLoadFailed
 
   const rolesPresent = new Set(model.stops.map((s) => s.role))
   const legendRoles = ROLE_ORDER.filter((r) => rolesPresent.has(r))
 
-  const liveStatus =
-    isError
+  const liveStatus = mapLoadFailed
+    ? 'Map failed to load'
+    : isError
       ? model.message || 'Route calculation failed'
       : isCalculating
         ? model.message || 'Calculating best route…'
@@ -91,14 +95,14 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
     <section
       className={className || ROUTE_MAP_CARD_DEFAULT_CLASS}
       aria-labelledby="route-map-card-title"
-      aria-busy={isCalculating || undefined}
+      aria-busy={showCalculating || undefined}
       data-testid="route-map-card"
     >
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100">
         <h2 id="route-map-card-title" className="text-base font-semibold text-gray-900">
           Route
         </h2>
-        {isCalculating && (
+        {showCalculating && (
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-800 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
             <span
               className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full motion-safe:animate-spin"
@@ -107,12 +111,12 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
             {progressBadgeLabel(model.message)}
           </span>
         )}
-        {model.status === 'ready' && (
+        {model.status === 'ready' && !mapLoadFailed && (
           <span className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
             Ready
           </span>
         )}
-        {isError && (
+        {(isError || mapLoadFailed) && (
           <span className="text-xs font-medium text-red-700 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
             Error
           </span>
@@ -125,7 +129,7 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
       </div>
 
       {/* Slim indeterminate progress (motion-safe translating bar) */}
-      {isCalculating && (
+      {showCalculating && (
         <div
           className="h-1 w-full bg-blue-100 overflow-hidden relative"
           role="progressbar"
@@ -168,7 +172,7 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
       )}
 
       {(model.chips.length > 0 ||
-        (model.message && !isIdleEmpty && model.status !== 'ready') ||
+        (model.message && !isIdleEmpty && model.status !== 'ready' && !mapLoadFailed) ||
         legendRoles.length > 0) && (
         <div className="px-4 py-3 space-y-2 border-t border-gray-100">
           {model.chips.length > 0 && (
@@ -190,7 +194,7 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
             </div>
           )}
 
-          {model.status !== 'ready' && !isIdleEmpty && model.message && (
+          {model.status !== 'ready' && !isIdleEmpty && !mapLoadFailed && model.message && (
             <p className={`text-xs ${isError ? 'text-red-700' : 'text-gray-500'}`}>{model.message}</p>
           )}
 

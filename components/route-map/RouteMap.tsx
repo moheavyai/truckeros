@@ -18,8 +18,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type {
   GeoJSONSource,
+  LngLatBounds,
   Map as MaplibreMap,
   Marker as MaplibreMarker,
+  NavigationControl,
+  Popup,
 } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { LatLon, RouteMapStop, RouteMapViewModel } from './types'
@@ -42,6 +45,8 @@ const DEFAULT_ZOOM = 3.2
 /** Bounds span below this (degrees) treated as coincident → single-stop zoom. */
 const NEAR_ZERO_BOUNDS_DEG = 1e-5
 
+const LOAD_ERROR_MESSAGE = 'Map failed to load'
+
 function resolveMapStyle(): string {
   if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_MAP_STYLE_URL) {
     return process.env.NEXT_PUBLIC_MAP_STYLE_URL
@@ -52,6 +57,15 @@ function resolveMapStyle(): string {
 function isCoarsePointer(): boolean {
   if (typeof window === 'undefined' || !window.matchMedia) return false
   return window.matchMedia('(pointer: coarse)').matches
+}
+
+function safeRemoveMap(map: MaplibreMap | null | undefined) {
+  if (!map) return
+  try {
+    map.remove()
+  } catch {
+    // ignore double-remove / already-destroyed
+  }
 }
 
 export interface RouteMapProps {
@@ -122,7 +136,7 @@ function fitToStops(map: MaplibreMap, stops: RouteMapStop[], ml: MaplibreRuntime
     return
   }
 
-  const bounds = new ml.LngLatBounds()
+  const bounds = new ml.LngLatBounds() as LngLatBounds
   for (const s of stops) bounds.extend([s.lon, s.lat])
   const ne = bounds.getNorthEast()
   const sw = bounds.getSouthWest()
@@ -160,18 +174,22 @@ export default function RouteMap({
   const onLoadErrorRef = useRef(onLoadError)
   onLoadErrorRef.current = onLoadError
   const styleReadyRef = useRef(false)
+  /** Prevents duplicate loadError from construct + style error paths. */
+  const loadErrorOnceRef = useRef(false)
   /** Bumps when map instance is ready so marker/line sync re-runs after async import. */
   const [mapReady, setMapReady] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const failLoad = (reason: string, err?: unknown) => {
+    if (loadErrorOnceRef.current) return
+    loadErrorOnceRef.current = true
     if (err !== undefined) {
       console.error(reason, err)
     } else {
       console.error(reason)
     }
-    setLoadError('Map failed to load')
-    onLoadErrorRef.current?.('Map failed to load')
+    setLoadError(LOAD_ERROR_MESSAGE)
+    onLoadErrorRef.current?.(LOAD_ERROR_MESSAGE)
   }
 
   // Init map once via dynamic import (webpack default interop safe)
@@ -214,9 +232,12 @@ export default function RouteMap({
           attributionControl: { compact: true },
           // Prefer page scroll on touch devices only; desktop keeps free wheel zoom
           cooperativeGestures: isCoarsePointer(),
-        })
+        }) as MaplibreMap
         createdMap = map
-        map.addControl(new ml.NavigationControl({ showCompass: false }), 'top-right')
+        map.addControl(
+          new ml.NavigationControl({ showCompass: false }) as NavigationControl,
+          'top-right'
+        )
         mapRef.current = map
         styleReadyRef.current = false
 
@@ -229,13 +250,21 @@ export default function RouteMap({
           onMapClickRef.current?.({ lat: e.lngLat.lat, lon: e.lngLat.lng })
         })
 
-        // Cheap diagnostics only — do not flip loadError (tile/style noise is common)
+        // Style/init failures escalate once; post-load tile noise only logs
         map.on('error', (e: { error?: Error; message?: string }) => {
           console.error('[RouteMap] map error', e?.error || e?.message || e)
+          if (cancelled || loadErrorOnceRef.current) return
+          if (styleReadyRef.current) return
+          failLoad('[RouteMap] map style failed to load', e?.error || e)
+          safeRemoveMap(map)
+          if (mapRef.current === map) mapRef.current = null
+          createdMap = null
+          mlRef.current = null
+          setMapReady(false)
         })
 
         if (cancelled) {
-          map.remove()
+          safeRemoveMap(map)
           createdMap = null
           mapRef.current = null
           mlRef.current = null
@@ -245,10 +274,12 @@ export default function RouteMap({
         onLoadErrorRef.current?.(null)
         setMapReady(true)
       } catch (err) {
-        if (cancelled) return
+        // Always tear down partial Map (new Map succeeded, addControl/listener failed)
+        safeRemoveMap(createdMap)
         createdMap = null
         mapRef.current = null
         mlRef.current = null
+        if (cancelled) return
         failLoad('[RouteMap] Map construct / addControl failed', err)
       }
     })()
@@ -259,9 +290,7 @@ export default function RouteMap({
       markersRef.current = []
       styleReadyRef.current = false
       const map = createdMap ?? mapRef.current
-      if (map) {
-        map.remove()
-      }
+      safeRemoveMap(map)
       mapRef.current = null
       mlRef.current = null
       // Strict Mode: setup→cleanup→setup must clear mapReady so second setMapReady(true) retriggers sync
@@ -269,8 +298,10 @@ export default function RouteMap({
     }
   }, [])
 
-  // ResizeObserver: map.resize only — do not re-fit (preserves user pan/zoom)
+  // ResizeObserver: map.resize only — do not re-fit (preserves user pan/zoom).
+  // Skip / disconnect when loadError so we never observe a detached-only error surface.
   useEffect(() => {
+    if (loadError) return
     const el = containerRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
 
@@ -286,13 +317,13 @@ export default function RouteMap({
       if (timer) clearTimeout(timer)
       ro.disconnect()
     }
-  }, [])
+  }, [loadError])
 
   // Sync markers + line + bounds when model changes (with load listener cleanup)
   useEffect(() => {
     const map = mapRef.current
     const ml = mlRef.current
-    if (!map || !ml || !mapReady) return
+    if (!map || !ml || !mapReady || loadError) return
 
     let cancelled = false
 
@@ -308,10 +339,11 @@ export default function RouteMap({
       markersRef.current = []
 
       for (const stop of model.stops) {
-        const marker = new ml.Marker({ element: buildMarkerElement(stop) })
+        const marker = new ml.Marker({ element: buildMarkerElement(stop) }) as MaplibreMarker
+        marker
           .setLngLat([stop.lon, stop.lat])
           .setPopup(
-            new ml.Popup({ offset: 16, closeButton: false }).setText(
+            (new ml.Popup({ offset: 16, closeButton: false }) as Popup).setText(
               `${stop.role}: ${stop.name}`
             )
           )
@@ -368,30 +400,26 @@ export default function RouteMap({
       cancelled = true
       map.off('load', apply)
     }
-  }, [model.stops, model.linePositions, mapReady])
+  }, [model.stops, model.linePositions, mapReady, loadError])
 
   const containerClass =
     className ||
     'w-full min-h-[280px] md:min-h-[360px] rounded-xl overflow-hidden bg-slate-100'
 
-  if (loadError) {
-    return (
-      <div
-        className={`${containerClass} relative z-10 flex items-center justify-center px-4 text-sm font-medium text-red-800 bg-red-50 border border-red-200`}
-        role="alert"
-        data-testid="route-map-load-error"
-      >
-        {loadError}
-      </div>
-    )
-  }
-
+  // Keep map container mounted (ref stable); show error as overlay so RO can disconnect cleanly
   return (
-    <div
-      ref={containerRef}
-      className={containerClass}
-      aria-hidden="true"
-    />
+    <div className={`relative ${containerClass}`}>
+      <div ref={containerRef} className="absolute inset-0" aria-hidden="true" />
+      {loadError && (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center px-4 text-sm font-medium text-red-800 bg-red-50 border border-red-200"
+          role="alert"
+          data-testid="route-map-load-error"
+        >
+          {loadError}
+        </div>
+      )}
+    </div>
   )
 }
 
