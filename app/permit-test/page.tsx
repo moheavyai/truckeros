@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import VehicleDiagram from '@/components/VehicleDiagram'
@@ -37,6 +37,12 @@ import OverhangFeetInput from '@/components/OverhangFeetInput'
 import LocationStopInput from '@/components/LocationStopInput'
 import ActiveCarrierBanner from '@/components/ActiveCarrierBanner'
 import CarrierContextBar from '@/components/CarrierContextBar'
+import {
+  RouteMapCard,
+  ROUTE_MAP_CARD_EMBED_CLASS,
+  buildRouteMapModel,
+  toRouteMapBuildInput,
+} from '@/components/route-map'
 import {
   buildOrganizationTeamMemberList,
   buildTeamMemberList,
@@ -800,11 +806,10 @@ export default function PermitTestPage() {
 
   const LEGAL_GROSS_LBS = 80000
 
-  // NEW (Intake v2): equipment profile selector + Quick Route Glance state (declared early so helpers below can reference safely)
+  // NEW (Intake v2): equipment profile selector (declared early so helpers below can reference safely)
   const [equipmentProfiles, setEquipmentProfiles] = useState<any[]>([])
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   const [loadingProfiles, setLoadingProfiles] = useState(false)
-  const [glance, setGlance] = useState<any>(null)
 
   // NEW Smart Rig Builder integration (v3): separate tractors/trailers/rigs from /equipment
   const [rigs, setRigs] = useState<RigConfiguration[]>([])
@@ -1366,7 +1371,6 @@ export default function PermitTestPage() {
       trailerYear: profile.trailer_year != null ? String(profile.trailer_year) : '',
       trailerLengthFt: profile.trailer_length_ft || 53,
     }))
-    setGlance(null)
   }
 
   // NEW Smart Rig Selector handler (v3) — sets snapshot for clean display + submit payload
@@ -1422,7 +1426,6 @@ export default function PermitTestPage() {
         next.axleWeights = distributeWeightSteerFirst(n, gross, groups)
         return next
       })
-      setGlance(null)
       return
     }
     setSelectedRigId(rig.id)
@@ -1448,7 +1451,6 @@ export default function PermitTestPage() {
       next.axleWeights = distributeWeightSteerFirst(n, gross, groups)
       return next
     })
-    setGlance(null)
   }
 
   // Safety net: if user selected a rig before the async tractor/trailer load finished,
@@ -1525,31 +1527,6 @@ export default function PermitTestPage() {
     } catch (e: any) {
       alert('Failed to save profile: ' + (e?.message || e))
     }
-  }
-
-  function handleQuickGlance() {
-    const synced = syncDestinationFromDrops(formData)
-    const o = (synced.origin.state || '').toUpperCase()
-    const dropStates = synced.drops.map((d) => (d.state || '?').toUpperCase()).join(' → ')
-    const d = (synced.destination.state || '').toUpperCase()
-    const corridor = dropStates ? `${o || '?'} → ${dropStates}` : `${o || '?'} → ${d || '?'}`
-
-    // Heuristic major highways for the corridors used in this app (AL-NE demo + common long-haul). Matches History badge style.
-    let highways: string[] = ['I-40', 'I-80']
-    if ((o === 'AL' && d === 'NE') || (o === 'NE' && d === 'AL')) highways = ['I-65', 'I-70', 'I-80']
-    else if (o === 'CA' || d === 'CA') highways = ['I-5', 'I-10', 'I-40']
-    else if (o === 'TX' || d === 'TX') highways = ['I-10', 'I-20', 'I-35']
-
-    const w = Number(formData.weight) || 80000
-    const isLong = (Number(formData.length) || 60) > 60
-    const rough = Math.max(65, Math.round(((w - 80000) / 1500) * 11 + (isLong ? 55 : 0) + 50))
-
-    setGlance({
-      corridor,
-      highways,
-      roughFee: rough,
-      note: 'Preview only — rough corridor estimate. Full OR-Tools optimization runs automatically below with live DOT restrictions and accurate highways.',
-    })
   }
 
   // Ref for scrolling to results after submission
@@ -1793,6 +1770,82 @@ export default function PermitTestPage() {
   // Small helper for uniform primary derivation (addresses Issue 7 suggestion for maintainability across render/approve sites; no behavior change)
   const getPrimary = (ar: any, r: any) => ar?.options?.[0] || ar || r?.agent
 
+  /**
+   * Geocode fingerprint only — avoids refitting the map on every form keystroke.
+   * Labels recompute when lat/lon or stop query/city/state change.
+   */
+  const routeMapFormKey = useMemo(() => {
+    const s = syncDestinationFromDrops(formData)
+    const dropKey = (s.drops || [])
+      .map(
+        (d) =>
+          `${d.lat ?? ''},${d.lon ?? ''}|${d.city || ''}|${d.state || ''}|${d.query || ''}`
+      )
+      .join(';')
+    return [
+      s.originLat ?? '',
+      s.originLon ?? '',
+      s.destinationLat ?? '',
+      s.destinationLon ?? '',
+      s.origin.city || '',
+      s.origin.state || '',
+      s.origin.query || '',
+      s.destination.city || '',
+      s.destination.state || '',
+      s.destination.query || '',
+      dropKey,
+    ].join('|')
+  }, [
+    formData.originLat,
+    formData.originLon,
+    formData.destinationLat,
+    formData.destinationLon,
+    formData.origin.city,
+    formData.origin.state,
+    formData.origin.query,
+    formData.destination.city,
+    formData.destination.state,
+    formData.destination.query,
+    formData.drops,
+  ])
+
+  /** Map v1 view model: thin page adapter → pure toRouteMapBuildInput → buildRouteMapModel. */
+  const routeMapModel = useMemo(() => {
+    const primary = getPrimary(agentResult, result)
+    const formSynced = syncDestinationFromDrops(formData)
+    const coordsReady =
+      hasValidCoords(formSynced.originLat, formSynced.originLon) &&
+      (formSynced.drops || []).every((drop) => hasValidCoords(drop.lat, drop.lon))
+    const dimsReady =
+      Number(formSynced.weight) > 0 &&
+      Number(formSynced.length) > 0 &&
+      Number(formSynced.width) > 0 &&
+      Number(formSynced.height) > 0
+
+    return buildRouteMapModel(
+      toRouteMapBuildInput({
+        routeProgress,
+        routeProgressDetail,
+        primary: primary || null,
+        formSynced,
+        coordsReady,
+        dimsReady,
+      })
+    )
+    // routeMapFormKey + dims fields capture map-relevant form state (not every keystroke).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional fingerprint deps
+  }, [
+    agentResult,
+    result,
+    routeProgress,
+    routeProgressDetail,
+    routeMapFormKey,
+    formData.weight,
+    formData.length,
+    formData.width,
+    formData.height,
+  ])
+
   /** Map /api/optimize-route JSON to the agentResult shape (including OSRM fallback). */
   function normalizeOrToolsToAgentData(optData: any) {
     const primaryOpt = optData.primary || optData
@@ -1974,7 +2027,13 @@ export default function PermitTestPage() {
         if (resultsRef.current) {
           const headerOffset = 80
           const elementPosition = resultsRef.current.getBoundingClientRect().top
-          window.scrollTo({ top: elementPosition + window.pageYOffset - headerOffset, behavior: 'smooth' })
+          const reduceMotion =
+            typeof window !== 'undefined' &&
+            window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+          window.scrollTo({
+            top: elementPosition + window.pageYOffset - headerOffset,
+            behavior: reduceMotion ? 'auto' : 'smooth',
+          })
         }
       }, 50)
     } catch (error: any) {
@@ -2291,8 +2350,13 @@ export default function PermitTestPage() {
     setResult(null)
     setShowChangeRouteInput(false)
     setManualRoute('')
+    setRouteProgress('idle')
+    setRouteProgressDetail('')
     // Scroll back to the form for convenience
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })
   }
 
   // Handle manual route change (Change Route feature)
@@ -3836,55 +3900,8 @@ export default function PermitTestPage() {
           <p className="text-red-500 text-sm">{errors['geocode']}</p>
         )}
 
-        {(routeProgress !== 'idle' || loading) && (
-          <div className={`rounded-2xl p-4 border flex items-center gap-3 ${
-            routeProgress === 'error' ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'
-          }`}>
-            {loading && routeProgress !== 'error' && (
-              <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
-            )}
-            <div className="min-w-0">
-              <p className={`text-sm font-medium ${routeProgress === 'error' ? 'text-red-800' : 'text-blue-900'}`}>
-                {routeProgress === 'error' ? 'Route calculation failed' : routeProgressDetail || 'Calculating best route…'}
-              </p>
-              {routeProgress === 'calculating' && (
-                <p className="text-xs text-blue-700 mt-0.5">Best route and permit analysis run automatically when addresses are complete</p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Quick Route Glance — optional corridor preview (after addresses; needs origin/dest) */}
-        <div className="p-4 border-2 border-blue-100 bg-blue-50 rounded-xl">
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold text-blue-900 text-sm">Quick Route Glance</div>
-            <button
-              type="button"
-              onClick={handleQuickGlance}
-              className="text-xs px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Preview Corridor &amp; Fee
-            </button>
-          </div>
-          <p className="text-xs text-blue-700 mb-2">Rough corridor/fee preview. Full optimization runs when addresses geocode and load dimensions are set.</p>
-
-          {glance && (
-            <div className="space-y-2 text-sm">
-              <div><span className="font-medium text-blue-900">Corridor:</span> <span className="font-mono">{glance.corridor}</span></div>
-              <div>
-                <span className="font-medium text-blue-900">Est. Major Highways:</span>
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {glance.highways.map((h: string, i: number) => (
-                    <span key={i} className="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium border bg-white text-blue-800 border-blue-200">{formatHighwayForDisplay(h)}</span>
-                  ))}
-                </div>
-              </div>
-              <div><span className="font-medium text-blue-900">Rough Fee Estimate:</span> <span className="font-semibold">${glance.roughFee}</span> <span className="text-xs text-blue-600">(varies by exact route &amp; permits)</span></div>
-              <div className="text-[10px] text-blue-600 italic">{glance.note}</div>
-            </div>
-          )}
-          {!glance && <div className="text-xs text-blue-600">Preview corridor, or wait for auto-optimization when addresses geocode and load dimensions are set.</div>}
-        </div>
+        {/* Map v1: single Route card (replaces tall progress hero + long corridor preview chrome). */}
+        <RouteMapCard model={routeMapModel} className={ROUTE_MAP_CARD_EMBED_CLASS} />
         </div> {/* End form card */}
       </form>
 
@@ -3913,12 +3930,15 @@ export default function PermitTestPage() {
           <div className="flex justify-end">
             <button
               onClick={() => {
-                window.scrollTo({ top: 0, behavior: 'smooth' })
+                const reduceMotion =
+                  typeof window !== 'undefined' &&
+                  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+                window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })
                 // Optional: focus first input after scroll
                 setTimeout(() => {
                   const firstInput = document.querySelector('input[placeholder="City"]') as HTMLInputElement
                   firstInput?.focus()
-                }, 600)
+                }, reduceMotion ? 0 : 600)
               }}
               className="text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-colors flex items-center gap-1.5"
             >
