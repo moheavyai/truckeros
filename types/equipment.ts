@@ -5,6 +5,12 @@
  * Used by /equipment management page, Rig Selector in /permit-test, and VehicleDiagram.
  */
 
+/**
+ * Inter-axle spacings in inches.
+ * Prefer `number[]` (e.g. [40, 48, 48]). `string` is legacy CSV / JSON text from DB meta.
+ */
+export type AxleSpacingsField = number[] | string | null
+
 export interface Tractor {
   id: string
   user_id: string
@@ -14,7 +20,7 @@ export interface Tractor {
   num_axles: number | null
   steer_axle_setback_in: number | null
   wheelbase_in: number | null
-  axle_spacings: number[] | null          // inches, e.g. [40, 48, 48]
+  axle_spacings: AxleSpacingsField
   fifth_wheel_from_rear_in: number | null
 
   unit_number?: string | null
@@ -39,7 +45,7 @@ export interface Trailer {
   overall_length_ft: number | null
   kingpin_distance_from_front_in: number | null
   num_axles: number | null
-  axle_spacings: number[] | null
+  axle_spacings: AxleSpacingsField
   kingpin_to_first_axle_in: number | null
 
   has_lift_axle: boolean | null
@@ -132,8 +138,17 @@ export interface RigSnapshot {
  * middle zeros (that shifts later gap labels and breaks diagram alignment).
  * When expectedLength is set, pad/truncate to that slot count.
  */
+/** True when spacings are present as a non-empty array or non-blank legacy string. */
+export function hasDeclaredAxleSpacings(
+  spacings: AxleSpacingsField | undefined
+): boolean {
+  if (Array.isArray(spacings)) return spacings.length > 0
+  if (typeof spacings === 'string') return spacings.trim().length > 0
+  return false
+}
+
 export function parseAxleSpacings(
-  input: number[] | string | null | undefined,
+  input: AxleSpacingsField | undefined,
   expectedLength?: number | null
 ): number[] {
   if (input == null || input === '') {
@@ -232,9 +247,7 @@ export function computeRigDimensions(
     const numDriveGaps = targetTractorAxles - 1
     // Slot-preserving parse (middle zeros keep index). Empty slots use geometry defaults.
     const tSpacings = parseAxleSpacings(t.axle_spacings, numDriveGaps > 0 ? numDriveGaps : null)
-    const hasDeclaredTractorSpacings =
-      (Array.isArray(t.axle_spacings) && t.axle_spacings.length > 0) ||
-      (typeof t.axle_spacings === 'string' && t.axle_spacings.trim().length > 0)
+    const hasDeclaredTractorSpacings = hasDeclaredAxleSpacings(t.axle_spacings)
 
     // Prefer full individual axle spacings [1-2, 2-3, 3-4, …]. Falls back to legacy wheelbase.
     if (hasDeclaredTractorSpacings && numDriveGaps > 0) {

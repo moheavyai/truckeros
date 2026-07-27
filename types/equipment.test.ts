@@ -3,6 +3,7 @@ import {
   computeOverallDimensions,
   computeRigDimensions,
   computeRoutingEnvelope,
+  hasDeclaredAxleSpacings,
   parseAxleSpacings,
 } from './equipment'
 
@@ -125,6 +126,17 @@ describe('parseAxleSpacings slot preservation', () => {
     expect(parseAxleSpacings([220, 48, 0])).toEqual([220, 48])
     expect(parseAxleSpacings([220], 3)).toEqual([220, 0, 0])
     expect(parseAxleSpacings('220,,48')).toEqual([220, 0, 48])
+  })
+})
+
+describe('hasDeclaredAxleSpacings', () => {
+  it('accepts non-empty arrays and non-blank legacy strings', () => {
+    expect(hasDeclaredAxleSpacings([220, 48])).toBe(true)
+    expect(hasDeclaredAxleSpacings([])).toBe(false)
+    expect(hasDeclaredAxleSpacings('220,48')).toBe(true)
+    expect(hasDeclaredAxleSpacings('   ')).toBe(false)
+    expect(hasDeclaredAxleSpacings(null)).toBe(false)
+    expect(hasDeclaredAxleSpacings(undefined)).toBe(false)
   })
 })
 
