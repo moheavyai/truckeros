@@ -4,33 +4,55 @@ World-class **Route** surface for Permit Test: one card with map, slim progress,
 
 ## How to run
 
-No map API key required. MapLibre GL JS uses free OpenFreeMap vector tiles by default:
+No map API key required.
 
-- Default style: `https://tiles.openfreemap.org/styles/liberty`
-- Override: set `NEXT_PUBLIC_MAP_STYLE_URL` to any MapLibre-compatible style URL
+- **Default style:** `https://demotiles.maplibre.org/style.json` (reliable for local Next dev)
+- **Override:** set `NEXT_PUBLIC_MAP_STYLE_URL` to any MapLibre-compatible style URL
+- **Fallback:** if primary fails before first `load`, once to OpenFreeMap liberty
 
 ```bash
 npm install          # installs maplibre-gl
 npm run dev          # open /permit-test
 ```
 
+### Worker (Next MIME `text/html` fix)
+
+MapLibre runs a Web Worker. If the worker URL is resolved to a Next **document** route, the browser reports:
+
+> module script … MIME type "text/html"
+
+and the style never finishes → **Loading map tiles…** forever while the card can still show **Ready**.
+
+`RouteMap` calls `setWorkerUrl` **before** `new Map`:
+
+1. Prefer bundler asset: `maplibre-gl/dist/maplibre-gl-worker.mjs?url`
+2. Else same-origin **`/maplibre-gl-worker.mjs`** from `public/` (plus sibling `maplibre-gl-shared.mjs`)
+
+These files are copied from `node_modules/maplibre-gl/dist/` into `public/`. After upgrading `maplibre-gl`, re-copy:
+
+```bash
+# PowerShell
+Copy-Item node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs public/
+Copy-Item node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs public/
+```
+
 ### CSP / network
 
-Allow map tiles + style hosts (defaults):
+Allow:
 
-- `https://tiles.openfreemap.org` (style + tiles)
-- `https://demotiles.maplibre.org` (automatic fallback style if primary fails before first load)
+- `https://demotiles.maplibre.org` (default style + tiles)
+- `https://tiles.openfreemap.org` (optional fallback style + tiles)
+- `worker-src` / `script-src` for same-origin `/maplibre-gl-worker.mjs` (and blob if bundler uses blob workers)
 
-If you override `NEXT_PUBLIC_MAP_STYLE_URL`, allow that host in Content-Security-Policy (`connect-src` / `img-src` / `worker-src` as needed).
+If you override `NEXT_PUBLIC_MAP_STYLE_URL`, allow that host.
 
-### Blank canvas troubleshooting
+### Blank canvas / stuck tiles troubleshooting
 
-If Permit Test shows Route **Ready** but the map area is solid gray (no tiles/markers):
-
-1. **Container size / resize** — MapLibre paints blank when constructed at 0×0. `RouteMap` calls `map.resize()` on style `load`, once after `mapReady`, via `ResizeObserver`, and an immediate resize plus two `requestAnimationFrame` follow-ups for late flex layout.
-2. **Style / network** — Primary style is trimmed `NEXT_PUBLIC_MAP_STYLE_URL` or OpenFreeMap liberty. On style error before first `load`, the map falls back **once** to `https://demotiles.maplibre.org/style.json` (residual primary errors during the switch are ignored). Permanent fail only if demotiles also fails. Check the console for `[RouteMap] using map style …` and any tile/CSP failures.
-3. **Loading vs failure** — Until style loads you should see **Loading map tiles…** (idle empty hint is suppressed until then). Permanent failure shows **Map failed to load** (construct/import still broken, or both primary and demotiles failed).
-4. **Env** — Set `NEXT_PUBLIC_MAP_STYLE_URL` only to a MapLibre-compatible style JSON URL (whitespace-only is ignored); restart `npm run dev` after changing env.
+1. **Worker MIME** — Console shows MIME `text/html` for a worker → confirm `public/maplibre-gl-worker.mjs` + `maplibre-gl-shared.mjs` exist; check logs for `[RouteMap] maplibre worker url`.
+2. **Container size / resize** — `map.resize()` on style `load`, after `mapReady`, via `ResizeObserver`, and immediate + two rAF follow-ups.
+3. **Style / network** — Default demotiles; env override; one OpenFreeMap fallback. Console: `[RouteMap] using map style …`.
+4. **Loading vs failure** — Until style `load`: **Loading map tiles…**. Permanent: **Map failed to load** (import/construct/worker+style both failed).
+5. **Env** — Restart `npm run dev` after changing `NEXT_PUBLIC_MAP_STYLE_URL`.
 
 ## Architecture
 
@@ -39,13 +61,14 @@ If Permit Test shows Route **Ready** but the map area is solid gray (no tiles/ma
 | `types.ts` | `RouteMapStop`, `RouteMapViewModel`, reserved `pendingWaypoints` |
 | `buildRouteMapModel.ts` | Pure OR-Tools option / form coords → view model |
 | `roleStyles.ts` | Shared marker/legend colors |
+| `configureMaplibreWorker.ts` | `setWorkerUrl` + default/fallback style URLs |
 | `RouteMap.tsx` | MapLibre canvas (markers, line, fitBounds, resize) — client only |
 | `RouteMapCard.tsx` | Card chrome + dynamic import of map (`ssr: false`) |
 | `index.ts` | Public exports |
 
 ## Why MapLibre
 
-MapLibre is the preferred engine (not Leaflet): OSS fork of Mapbox GL JS, free vector styles without a paid key, solid GeoJSON line layers and `fitBounds`. CSS is imported once inside the map component; the card wraps it in `next/dynamic({ ssr: false })` so WebGL never breaks Next SSR.
+MapLibre is the preferred engine (not Leaflet): OSS fork of Mapbox GL JS, free styles without a paid key, solid GeoJSON line layers and `fitBounds`. CSS is imported once inside the map component; the card wraps it in `next/dynamic({ ssr: false })` so WebGL never breaks Next SSR.
 
 ## States
 
@@ -56,9 +79,9 @@ MapLibre is the preferred engine (not Leaflet): OSS fork of Mapbox GL JS, free v
 
 Map engine (orthogonal to route status):
 
-- **tiles loading** — style not yet `load` → “Loading map tiles…” (no dual idle stack)
-- **style ready** — primary or demotiles fallback painted; markers/line may sync
-- **map failed** — construct/import failed, or primary + demotiles both failed → “Map failed to load”
+- **tiles loading** — style not yet `load` → “Loading map tiles…”
+- **style ready** — primary or fallback painted; markers/line may sync
+- **map failed** — construct/import/worker+style failed → “Map failed to load”
 
 ## Map v2 waypoint hook
 
@@ -68,12 +91,12 @@ Types reserve:
 pendingWaypoints?: { lat: number; lon: number; name? }[]
 ```
 
-`RouteMapCard` / `RouteMap` accept optional `onMapClick` for future click-to-add. **Drag-edit is not implemented or exported in v1** — do not claim drag handlers until Map v2 wires markers.
+`RouteMapCard` / `RouteMap` accept optional `onMapClick` for future click-to-add. **Drag-edit is not implemented or exported in v1**.
 
 ## Tests
 
 ```bash
-npx vitest run components/route-map app/permit-test
+npx vitest run components/route-map app/permit-test/route-map-ui.test.ts
 ```
 
-Unit tests cover `buildRouteMapModel` without WebGL. UI tests source-inspect the Permit Test page for Route card wiring.
+Unit tests cover model + worker/style helpers without WebGL.

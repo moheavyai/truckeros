@@ -90,14 +90,37 @@ describe('RouteMapCard structure', () => {
 })
 
 describe('RouteMap MapLibre foundation', () => {
-  it('uses MapLibre GL JS with free OpenFreeMap style (no paid key)', () => {
+  it('uses MapLibre GL JS with demotiles default (no paid key)', () => {
     const source = read(mapPath)
+    const cfg = read(
+      path.join(process.cwd(), 'components', 'route-map', 'configureMaplibreWorker.ts')
+    )
     expect(source).toContain("from 'maplibre-gl'")
     expect(source).toContain("import 'maplibre-gl/dist/maplibre-gl.css'")
-    expect(source).toContain('openfreemap.org')
-    expect(source).toContain('NEXT_PUBLIC_MAP_STYLE_URL')
+    expect(source).toContain('configureMaplibreWorker')
+    expect(source).toContain('resolveMapStyle')
+    expect(source).toContain('DEFAULT_MAP_STYLE')
+    expect(cfg).toContain('demotiles.maplibre.org')
+    expect(cfg).toContain('NEXT_PUBLIC_MAP_STYLE_URL')
     expect(source).toContain('fitBounds')
     expect(source).toMatch(/Why MapLibre|MapLibre \(not Leaflet\)/)
+  })
+
+  it('configures MapLibre worker before new Map (Next MIME text/html fix)', () => {
+    const source = read(mapPath)
+    expect(source).toContain('configureMaplibreWorker')
+    // Worker must be configured after import resolve and before Map construct
+    expect(source).toMatch(
+      /await\s+import\(['"]maplibre-gl['"]\)[\s\S]*configureMaplibreWorker\([\s\S]*new\s+ml\.Map\(/
+    )
+    const cfg = read(
+      path.join(process.cwd(), 'components', 'route-map', 'configureMaplibreWorker.ts')
+    )
+    expect(cfg).toContain('setWorkerUrl')
+    expect(cfg).toContain('maplibre-gl-worker.mjs')
+    expect(cfg).toContain('PUBLIC_MAPLIBRE_WORKER_PATH')
+    expect(cfg).toContain('?url')
+    expect(cfg).toContain('demotiles.maplibre.org')
   })
 
   it('loads maplibre-gl via dynamic import (no top-level default value import)', () => {
@@ -204,15 +227,19 @@ describe('RouteMap MapLibre foundation', () => {
     expect(source).toContain('[mapReady, loadError]')
   })
 
-  it('falls back once to demotiles; ignores residual errors until transition settles', () => {
+  it('falls back once to OpenFreeMap; ignores residual errors until transition settles', () => {
     const source = read(mapPath)
-    expect(source).toContain('https://demotiles.maplibre.org/style.json')
+    const cfg = read(
+      path.join(process.cwd(), 'components', 'route-map', 'configureMaplibreWorker.ts')
+    )
+    expect(cfg).toContain('demotiles.maplibre.org')
+    expect(cfg).toContain('openfreemap.org')
     expect(source).toContain('FALLBACK_MAP_STYLE')
     expect(source).toContain('styleFallbackTriedRef')
     expect(source).toContain('styleFallbackTransitionRef')
     expect(source).toContain('setStyle(FALLBACK_MAP_STYLE)')
     expect(source).toContain("console.info('[RouteMap] using map style'")
-    expect(source).toContain('falling back to demotiles')
+    expect(source).toMatch(/falling back to OpenFreeMap/)
     // Branch order: first error → setStyle + return; transition residual → return; then failLoad
     expect(source).toMatch(
       /!styleFallbackTriedRef\.current[\s\S]*setStyle\(FALLBACK_MAP_STYLE\)[\s\S]*return[\s\S]*styleFallbackTransitionRef\.current[\s\S]*return[\s\S]*failLoad\(/
@@ -220,8 +247,7 @@ describe('RouteMap MapLibre foundation', () => {
     // Strict Mode cleanup resets sticky load error
     expect(source).toContain('loadErrorOnceRef.current = false')
     expect(source).toContain('setLoadError(null)')
-    // trim whitespace-only env style URL
-    expect(source).toMatch(/NEXT_PUBLIC_MAP_STYLE_URL\.trim\(\)/)
+    expect(cfg).toMatch(/NEXT_PUBLIC_MAP_STYLE_URL\.trim\(\)/)
   })
 
   it('shows Loading map tiles overlay until style load; permanent fail uses Map failed to load', () => {
