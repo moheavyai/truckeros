@@ -493,3 +493,83 @@ describe('Portal Assist — Filing kit (copy, checklist, trip type, workflow)', 
     expect(loadBody).not.toContain('window.open')
   })
 })
+
+describe('Portal Assist — Missouri Carrier Express playbook', () => {
+  it('imports MO playbook helpers', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('buildMoFilingSteps')
+    expect(source).toContain('buildMoFilingStepClipboard')
+    expect(source).toContain('MO_PORTAL_WALKTHROUGH')
+    expect(source).toContain('getMoPortalFieldLabel')
+    expect(source).toContain('type MoFilingStep')
+  })
+
+  it('renders MO filing steps panel only when selectedState === MO', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="mo-playbook"')
+    expect(source).toContain('data-testid="mo-filing-steps"')
+    expect(source).toContain('MODOT CARRIER EXPRESS STEPS')
+    expect(source).toContain("selectedState === 'MO'")
+    expect(source).toContain('buildMoFilingSteps(prefill)')
+    expect(source).toContain('handleCopyMoStep')
+    expect(source).toContain('data-testid={`mo-step-copy-${step.id}`}')
+    expect(source).toContain('mo-step-${step.id}')
+    expect(source).toContain('data-testid="mo-portal-link"')
+    expect(source).toContain('data-testid="mo-info-link"')
+    expect(source).toContain('config.infoUrl')
+    expect(source).toContain('modot.org')
+  })
+
+  it('hides step Copy when packet empty and clears copiedKey on empty copy', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('buildMoFilingStepClipboard(prefill, step, { tripType })')
+    expect(source).toContain('stepPacket ? (')
+    const handlerStart = source.indexOf('const handleCopyMoStep = async (step: MoFilingStep) => {')
+    expect(handlerStart).toBeGreaterThan(-1)
+    const handlerEnd = source.indexOf('const handleTripTypeChange', handlerStart)
+    const handler = source.slice(handlerStart, handlerEnd)
+    expect(handler).toContain('setCopiedKey(null)')
+    expect(handler).toContain('Nothing to copy for this step yet')
+    expect(source).toContain('data-testid="mo-copy-status"')
+  })
+
+  it('uses MO labels for field grid extras via resolvePortalFieldLabel(config, state)', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain("resolvePortalFieldLabel('trip_type', config, selectedState)")
+    expect(source).toContain("resolvePortalFieldLabel('axles', config, selectedState)")
+    expect(source).toContain("resolvePortalFieldLabel('vehicle_id', config, selectedState)")
+    expect(source).toContain("resolvePortalFieldLabel('entry_point', config, selectedState)")
+    expect(source).toContain("resolvePortalFieldLabel('exit_point', config, selectedState)")
+  })
+
+  it('places trip type control before MO playbook and references permit type', () => {
+    const source = readSource(pagePath)
+    const tripIdx = source.indexOf('data-testid="trip-type-control"')
+    const moIdx = source.indexOf('data-testid="mo-playbook"')
+    expect(tripIdx).toBeGreaterThan(-1)
+    expect(moIdx).toBeGreaterThan(tripIdx)
+    expect(source).toContain('Used as Permit type for MoDOT step 2 and Copy all')
+  })
+
+  it('renders static MO walkthrough copy', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="mo-walkthrough"')
+    expect(source).toContain('POST-LOGIN WALKTHROUGH')
+    expect(source).toContain('MO_PORTAL_WALKTHROUGH.map')
+  })
+
+  it('does not claim auto-click into MoDOT; playbook is copy-assist only', () => {
+    const source = readSource(pagePath)
+    expect(source.toLowerCase()).not.toContain('auto-click')
+    expect(source).not.toMatch(/automate[sd]?\s+(filing|submission|modot)/i)
+    // Playbook block must not auto-open portal on render
+    const playbookStart = source.indexOf('data-testid="mo-playbook"')
+    expect(playbookStart).toBeGreaterThan(-1)
+    const playbookSlice = source.slice(playbookStart, playbookStart + 3500)
+    expect(playbookSlice).not.toContain('window.open')
+    expect(playbookSlice).not.toContain('openStatePortals')
+    // Steps use copy helpers, not portal automation
+    expect(source).toContain('buildMoFilingStepClipboard')
+    expect(source).toContain('handleCopyMoStep')
+  })
+})

@@ -128,16 +128,18 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
     name: 'Missouri (MoDOT)',
     portalUrl: 'https://mcs.modot.mo.gov/mce/login.htm',
     portalType: 'online',
-    portalSystemName: 'MoDOT MCS',
-    instructions: 'Missouri OSOW Permitting. Use prefill for multi-state corridor loads; note Missouri River crossings and I-70 restrictions.',
+    portalSystemName: 'MoDOT Carrier Express',
+    infoUrl: 'https://www.modot.org/',
+    instructions:
+      'MoDOT Carrier Express (MCE) OSOW. Use the MO field packet and filing steps below; official Using MCE / OSOW guides live on modot.org. Note Missouri River crossings and I-70 restrictions.',
     fieldMapping: {
-      origin: 'Origin',
-      destination: 'Destination',
-      weight: 'Gross Weight (lbs)',
-      length: 'Overall Length (ft)',
-      width: 'Overall Width (ft)',
-      height: 'Overall Height (ft)',
-      route: 'Route / Corridor',
+      origin: 'Origin (city, state / junction)',
+      destination: 'Destination (city, state / junction)',
+      weight: 'Gross weight (lbs)',
+      length: 'Overall length',
+      width: 'Overall width',
+      height: 'Overall height',
+      route: 'Requested route / corridor',
     },
     requiresVehicleInfo: true,
     typicalRestrictions: ['Missouri River bridge restrictions', 'I-70 weight postings near KC'],
@@ -1021,6 +1023,223 @@ export interface CompletenessChecklistContext {
   multiState?: boolean
 }
 
+// ---------------------------------------------------------------------------
+// Missouri (MoDOT Carrier Express) Portal Assist playbook — pure helpers
+// Clerk-facing field order/labels, filing steps, and static walkthrough.
+// NOT browser RPA / auto-click into MoDOT.
+// ---------------------------------------------------------------------------
+
+/** Stable MO-ordered prefill keys for clipboard packet + field UI. */
+export const MO_PORTAL_FIELD_ORDER: readonly string[] = [
+  'trip_type',
+  'origin',
+  'destination',
+  'weight',
+  'length',
+  'width',
+  'height',
+  'axles',
+  'route',
+  'border_entry',
+  'border_exit',
+  'vehicle_id',
+  'carrier_usdot',
+  'carrier_mc',
+  'carrier_company',
+  'driver_name',
+] as const
+
+/** MoDOT-oriented portal labels for MO packet / resolvePortalFieldLabel. */
+export const MO_PORTAL_FIELD_LABELS: Record<string, string> = {
+  trip_type: 'Permit type',
+  origin: 'Origin (city, state / junction)',
+  destination: 'Destination (city, state / junction)',
+  weight: 'Gross weight (lbs)',
+  length: 'Overall length',
+  width: 'Overall width',
+  height: 'Overall height',
+  axles: 'Number of axles',
+  route: 'Requested route / corridor',
+  border_entry: 'Entry into Missouri',
+  border_exit: 'Exit from Missouri',
+  entry_point: 'Entry into Missouri',
+  exit_point: 'Exit from Missouri',
+  vehicle_id: 'Power unit ID / VIN',
+  carrier_usdot: 'USDOT',
+  carrier_mc: 'MC number',
+  carrier_company: 'Carrier name',
+  driver_name: 'Driver name',
+}
+
+/** Static post-login walkthrough (honest; no invented menu paths). */
+export const MO_PORTAL_WALKTHROUGH: readonly string[] = [
+  'Open portal → sign in with carrier credentials',
+  'Choose OSOW / oversize overweight application',
+  'Single trip; one origin → one destination',
+  'Enter dims + weight; overweight needs axle weights/spacings when available',
+  'Enter route; use TruckerOS corridor + border points as request guidance',
+  'Submit/pay on MoDOT; paste permit # back into Portal Assist when issued',
+] as const
+
+export function isMissouriPortal(
+  stateCode?: string | null,
+  config?: PortalStateConfig | null
+): boolean {
+  if (stateCode && String(stateCode).trim().toUpperCase() === 'MO') return true
+  if (config?.portalUrl && /modot\.mo\.gov/i.test(config.portalUrl)) return true
+  if (config?.portalSystemName && /carrier express/i.test(config.portalSystemName)) {
+    return true
+  }
+  return false
+}
+
+/** MO field order for packet / UI (copy of constant for callers that prefer a function). */
+export function getMoPortalFieldOrder(): readonly string[] {
+  return MO_PORTAL_FIELD_ORDER
+}
+
+/** Resolve MoDOT label for a prefill key; falls back to shared labels. */
+export function getMoPortalFieldLabel(key: string): string {
+  return MO_PORTAL_FIELD_LABELS[key] || PREFILL_FIELD_LABELS[key] || key
+}
+
+export interface MoFilingStep {
+  id: string
+  stepNumber: number
+  title: string
+  /** Prefill keys whose values are copied for this step (may be empty). */
+  prefillKeys: string[]
+  /** True when this step applies for multi-state / border roles. */
+  multiStateOnly?: boolean
+}
+
+/**
+ * Multi-state signal for MO playbook (corridor 2+ codes or origin≠dest).
+ * Matches buildPortalCompletenessChecklist multi-state detection.
+ */
+export function isMoMultiStatePrefill(prefill?: PrefillPackage | null): boolean {
+  if (!prefill) return false
+  const corridorCodes = (prefill.routeCorridor || [])
+    .map((s) => String(s ?? '').trim())
+    .filter(Boolean)
+  if (corridorCodes.length > 1) return true
+  const load = prefill.loadDetails || {}
+  const originSt = String(load.origin_state ?? '').trim().toUpperCase()
+  const destSt = String(load.destination_state ?? '').trim().toUpperCase()
+  return (
+    !!originSt &&
+    !!destSt &&
+    originSt !== destSt &&
+    !/^(UNDEFINED|NULL)$/.test(originSt) &&
+    !/^(UNDEFINED|NULL)$/.test(destSt)
+  )
+}
+
+/**
+ * Numbered MoDOT Carrier Express filing steps for the MO playbook panel.
+ * Filters multiStateOnly steps (route & MO entry/exit) for single-state MO;
+ * renumbers remaining steps 1..N.
+ */
+export function buildMoFilingSteps(prefill?: PrefillPackage | null): MoFilingStep[] {
+  const multiState = isMoMultiStatePrefill(prefill)
+  const all: MoFilingStep[] = [
+    {
+      id: 'login',
+      stepNumber: 1,
+      title: 'Login MoDOT Carrier Express',
+      prefillKeys: [],
+    },
+    {
+      id: 'start',
+      stepNumber: 2,
+      title: 'Start new OSOW / single-trip application',
+      prefillKeys: ['trip_type'],
+    },
+    {
+      id: 'origin_dest',
+      stepNumber: 3,
+      title: 'Origin & destination',
+      prefillKeys: ['origin', 'destination'],
+    },
+    {
+      id: 'dims_weight',
+      stepNumber: 4,
+      title: 'Dimensions & gross weight',
+      prefillKeys: ['length', 'width', 'height', 'weight'],
+    },
+    {
+      id: 'axles_vehicle',
+      stepNumber: 5,
+      title: 'Axles / vehicle ID',
+      prefillKeys: ['axles', 'vehicle_id'],
+    },
+    {
+      id: 'carrier_driver',
+      stepNumber: 6,
+      title: 'Carrier, USDOT & driver',
+      prefillKeys: ['carrier_usdot', 'carrier_mc', 'carrier_company', 'driver_name'],
+    },
+    {
+      id: 'route_borders',
+      stepNumber: 7,
+      title: 'Route & MO entry/exit (if multi-state)',
+      prefillKeys: ['route', 'border_entry', 'border_exit'],
+      multiStateOnly: true,
+    },
+    {
+      id: 'review_pay',
+      stepNumber: 8,
+      title: 'Review on MoDOT → pay',
+      prefillKeys: [],
+    },
+  ]
+  const filtered = all.filter((s) => !s.multiStateOnly || multiState)
+  return filtered.map((s, i) => ({ ...s, stepNumber: i + 1 }))
+}
+
+/**
+ * Plain-text packet for one MO filing step (label: value lines for step keys only).
+ * Empty when the step has no prefill keys or no values present.
+ */
+export function buildMoFilingStepClipboard(
+  prefill: PrefillPackage,
+  step: MoFilingStep,
+  options?: ClipboardPacketOptions
+): string {
+  const fields = prefill.generatedFields || {}
+  const tripType =
+    options?.tripType ||
+    (typeof fields.trip_type === 'string' && fields.trip_type
+      ? fields.trip_type
+      : 'Single trip')
+  const lines: string[] = []
+  const seen = new Set<string>()
+
+  const resolveValue = (key: string): unknown => {
+    if (key === 'trip_type') return tripType
+    if (key === 'border_entry') return fields.border_entry || fields.entry_point
+    if (key === 'border_exit') return fields.border_exit || fields.exit_point
+    if (key === 'route') {
+      if (hasPrefillValue(fields.route)) return String(fields.route).trim()
+      const corridorJoin = (prefill.routeCorridor || [])
+        .map((s) => String(s ?? '').trim())
+        .filter(Boolean)
+        .join(' → ')
+      return corridorJoin || undefined
+    }
+    return fields[key]
+  }
+
+  for (const key of step.prefillKeys) {
+    const value = resolveValue(key)
+    if (!hasPrefillValue(value)) continue
+    if (seen.has(key)) continue
+    seen.add(key)
+    lines.push(`${getMoPortalFieldLabel(key)}: ${String(value).trim()}`)
+  }
+  return lines.join('\n')
+}
+
 /** Geometry point used for portal border entry/exit copy-paste fields. */
 export interface PortalBorderPoint {
   lat: number
@@ -1512,11 +1731,15 @@ function hasMeaningfulRouteString(route: string): boolean {
   return /[A-Za-z0-9]/.test(t)
 }
 
-/** Resolves portal field label: config.fieldMapping first, then shared fallbacks. */
+/** Resolves portal field label: MO playbook labels, then config.fieldMapping, then fallbacks. */
 export function resolvePortalFieldLabel(
   key: string,
-  config?: PortalStateConfig | null
+  config?: PortalStateConfig | null,
+  stateCode?: string | null
 ): string {
+  if (isMissouriPortal(stateCode ?? null, config)) {
+    if (MO_PORTAL_FIELD_LABELS[key]) return MO_PORTAL_FIELD_LABELS[key]
+  }
   if (config?.fieldMapping?.[key]) return config.fieldMapping[key]
   return PREFILL_FIELD_LABELS[key] || key
 }
@@ -1526,6 +1749,7 @@ export function resolvePortalFieldLabel(
  * Lines: "{Portal field label}: {value}" using config.fieldMapping labels when available.
  * Always includes trip type; includes route/corridor when present even if not in fieldMapping;
  * includes border, axles, vehicle, carrier, driver when present.
+ * Missouri uses MO field order + MoDOT-oriented labels (see MO_PORTAL_FIELD_ORDER).
  */
 export function buildPortalClipboardPacket(
   prefill: PrefillPackage,
@@ -1540,13 +1764,56 @@ export function buildPortalClipboardPacket(
       : 'Single trip')
   const lines: string[] = []
   const seen = new Set<string>()
+  const mo = isMissouriPortal(prefill.state, config)
 
   const pushLine = (key: string, value: unknown, labelOverride?: string) => {
     if (!hasPrefillValue(value)) return
     if (seen.has(key)) return
     seen.add(key)
-    const label = labelOverride || resolvePortalFieldLabel(key, config)
+    const label =
+      labelOverride ||
+      resolvePortalFieldLabel(key, config, prefill.state)
     lines.push(`${label}: ${String(value).trim()}`)
+  }
+
+  const routeFromPrefillOrCorridor = (): string => {
+    if (hasPrefillValue(fields.route)) return String(fields.route).trim()
+    return (prefill.routeCorridor || [])
+      .map((s) => String(s ?? '').trim())
+      .filter(Boolean)
+      .join(' → ')
+  }
+
+  // Missouri: fixed MoDOT-oriented order and labels
+  if (mo) {
+    for (const key of MO_PORTAL_FIELD_ORDER) {
+      if (key === 'trip_type') {
+        pushLine(key, tripType, getMoPortalFieldLabel(key))
+        continue
+      }
+      if (key === 'route') {
+        pushLine(key, routeFromPrefillOrCorridor(), getMoPortalFieldLabel(key))
+        continue
+      }
+      if (key === 'border_entry') {
+        pushLine(
+          key,
+          fields.border_entry || fields.entry_point,
+          getMoPortalFieldLabel(key)
+        )
+        continue
+      }
+      if (key === 'border_exit') {
+        pushLine(
+          key,
+          fields.border_exit || fields.exit_point,
+          getMoPortalFieldLabel(key)
+        )
+        continue
+      }
+      pushLine(key, fields[key], getMoPortalFieldLabel(key))
+    }
+    return lines.join('\n')
   }
 
   // Mapped portal fields first (stable order from config.fieldMapping)
@@ -1556,16 +1823,9 @@ export function buildPortalClipboardPacket(
 
   // Always include route/corridor when present (even if config omits route in fieldMapping)
   if (!seen.has('route')) {
-    const corridorJoin = (prefill.routeCorridor || [])
-      .map((s) => String(s ?? '').trim())
-      .filter(Boolean)
-      .join(' → ')
-    const routeVal = hasPrefillValue(fields.route)
-      ? String(fields.route).trim()
-      : corridorJoin
     pushLine(
       'route',
-      routeVal,
+      routeFromPrefillOrCorridor(),
       config.fieldMapping?.route || 'Route corridor'
     )
   }
@@ -1595,6 +1855,8 @@ export function buildPortalClipboardPacket(
 /**
  * Completeness checklist for a portal filing kit (pass / warn only).
  * Missing items are warn with a short fix hint for the dispatcher.
+ * Missouri tweaks: prefer USDOT when carrier is thin; axles when requiresVehicleInfo;
+ * border checks for through / origin-exit / dest-entry roles (same roles as generic).
  */
 export function buildPortalCompletenessChecklist(
   prefill: PrefillPackage,
@@ -1608,6 +1870,7 @@ export function buildPortalCompletenessChecklist(
   const load = prefill.loadDetails || {}
   const originSt = String(load.origin_state ?? '').trim().toUpperCase()
   const destSt = String(load.destination_state ?? '').trim().toUpperCase()
+  const mo = isMissouriPortal(prefill.state, config)
   // Multi-state: corridor has 2+ codes, or origin≠dest, or explicit context
   const multiState =
     context?.multiState !== undefined
@@ -1636,13 +1899,13 @@ export function buildPortalCompletenessChecklist(
 
   add(
     'origin',
-    'Origin',
+    mo ? 'Origin (city, state / junction)' : 'Origin',
     hasPrefillValue(f.origin),
     'Set origin city/state on the permit request'
   )
   add(
     'destination',
-    'Destination',
+    mo ? 'Destination (city, state / junction)' : 'Destination',
     hasPrefillValue(f.destination),
     'Set destination city/state on the permit request'
   )
@@ -1654,7 +1917,7 @@ export function buildPortalCompletenessChecklist(
     hasPrefillValue(f.height)
   add(
     'dimensions',
-    'Weight + L/W/H',
+    mo ? 'Gross weight + L/W/H' : 'Weight + L/W/H',
     dimsOk,
     'Add weight and overall L/W/H on the permit request'
   )
@@ -1667,7 +1930,7 @@ export function buildPortalCompletenessChecklist(
     const routeOk = hasMeaningfulRouteString(routeStr)
     add(
       'route',
-      'Route corridor',
+      mo ? 'Requested route / corridor' : 'Route corridor',
       routeOk,
       'Run analysis so route corridor is saved on the request'
     )
@@ -1679,42 +1942,61 @@ export function buildPortalCompletenessChecklist(
   if (role === 'through') {
     add(
       'border',
-      'Border entry & exit',
+      mo ? 'Entry into Missouri & exit from Missouri' : 'Border entry & exit',
       entryOk && exitOk,
       'Re-run analysis with geometry so border entry/exit populate for through states'
     )
   } else if (role === 'origin') {
     add(
       'border',
-      'Border exit (origin state)',
+      mo ? 'Exit from Missouri (origin state)' : 'Border exit (origin state)',
       exitOk,
       'Re-run analysis with geometry so origin exit border populates'
     )
   } else if (role === 'destination') {
     add(
       'border',
-      'Border entry (destination state)',
+      mo ? 'Entry into Missouri (destination state)' : 'Border entry (destination state)',
       entryOk,
       'Re-run analysis with geometry so destination entry border populates'
     )
   }
 
-  const carrierOk =
-    hasPrefillValue(f.carrier_usdot) || hasPrefillValue(f.carrier_company)
-  add(
-    'carrier',
-    'Carrier USDOT or company',
-    carrierOk,
-    'Add USDOT on Profile / Permit Test carrier section'
-  )
+  // MO: prefer USDOT when carrier is thin (company alone is not enough)
+  if (mo) {
+    add(
+      'carrier',
+      'USDOT',
+      hasPrefillValue(f.carrier_usdot),
+      'Add USDOT on Profile / Permit Test carrier section'
+    )
+  } else {
+    const carrierOk =
+      hasPrefillValue(f.carrier_usdot) || hasPrefillValue(f.carrier_company)
+    add(
+      'carrier',
+      'Carrier USDOT or company',
+      carrierOk,
+      'Add USDOT on Profile / Permit Test carrier section'
+    )
+  }
 
   if (config.requiresVehicleInfo) {
     add(
       'vehicle',
-      'Vehicle ID / VIN',
+      mo ? 'Power unit ID / VIN' : 'Vehicle ID / VIN',
       hasPrefillValue(f.vehicle_id),
       'Add unit number or VIN on equipment / rig'
     )
+    // MO playbook: axles matter on Carrier Express when vehicle info is required
+    if (mo) {
+      add(
+        'axles',
+        'Number of axles',
+        hasPrefillValue(f.axles),
+        'Add axle count on equipment / rig'
+      )
+    }
   }
 
   const passCount = items.filter((i) => i.status === 'pass').length

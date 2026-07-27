@@ -19,10 +19,15 @@ import {
   buildPortalCompletenessChecklist,
   resolvePortalFieldLabel,
   PORTAL_TRIP_TYPES,
+  buildMoFilingSteps,
+  buildMoFilingStepClipboard,
+  MO_PORTAL_WALKTHROUGH,
+  getMoPortalFieldLabel,
   type RouteComparison,
   type PortalSubmissionRecord,
   type PrefillPackage,
   type PortalTripType,
+  type MoFilingStep,
 } from '@/lib/portal-assistant'
 import { formatLoadDisplay } from '@/lib/parse-dimension'
 import { formatPortalEquipmentSnapshot } from '@/lib/portal-equipment-display'
@@ -851,6 +856,22 @@ export default function PortalAssistPage() {
     await copyToClipboard('all', packet)
   }
 
+  const handleCopyMoStep = async (step: MoFilingStep) => {
+    if (!prefill) return
+    const packet = buildMoFilingStepClipboard(prefill, step, { tripType })
+    if (!packet) {
+      setCopiedKey(null)
+      setCopyStatus('Nothing to copy for this step yet')
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopyStatus(null)
+        copyTimeoutRef.current = null
+      }, 2000)
+      return
+    }
+    await copyToClipboard(`mo-step-${step.id}`, packet)
+  }
+
   const handleTripTypeChange = (next: PortalTripType) => {
     if (next === tripType) return
     setTripType(next)
@@ -1097,7 +1118,7 @@ export default function PortalAssistPage() {
                   <span>Paste &amp; pay on state site</span>
                 </div>
 
-                {/* Trip type for generatedFields + copy packet */}
+                {/* Trip type near MO step 2 (permit type) and generic copy packet */}
                 <div className="mb-4" data-testid="trip-type-control">
                   <span className={`${fieldLabelClass} block mb-2`}>TRIP TYPE</span>
                   <div className="flex flex-wrap gap-2">
@@ -1122,7 +1143,136 @@ export default function PortalAssistPage() {
                       Annual — not auto-matched yet; use for manual portal selection.
                     </p>
                   )}
+                  {selectedState === 'MO' && (
+                    <p className={`${fieldHintTinyClass} mt-1`}>
+                      Used as Permit type for MoDOT step 2 and Copy all.
+                    </p>
+                  )}
                 </div>
+
+                {/* MO-only: MoDOT Carrier Express playbook — numbered steps + walkthrough (not RPA) */}
+                {selectedState === 'MO' && (
+                  <div className="mb-4 space-y-4" data-testid="mo-playbook">
+                    <div data-testid="mo-filing-steps">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <span className={`${fieldLabelClass} block`}>
+                          MODOT CARRIER EXPRESS STEPS
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {config.portalUrl && (
+                            <a
+                              href={config.portalUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`${fieldHintTinyClass} underline hover:text-gray-700`}
+                              data-testid="mo-portal-link"
+                            >
+                              Open Carrier Express
+                            </a>
+                          )}
+                          {config.infoUrl && (
+                            <a
+                              href={config.infoUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`${fieldHintTinyClass} underline hover:text-gray-700`}
+                              data-testid="mo-info-link"
+                            >
+                              modot.org help
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <p className={`${fieldHintTinyClass} mb-2`}>
+                        Copy per step, then paste into MoDOT. Official Using MCE / OSOW guides
+                        live on{' '}
+                        {config.infoUrl ? (
+                          <a
+                            href={config.infoUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline hover:text-gray-700"
+                          >
+                            modot.org
+                          </a>
+                        ) : (
+                          'modot.org'
+                        )}{' '}
+                        — we do not invent click paths.
+                      </p>
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        data-testid="mo-copy-status"
+                        className={`${fieldHintTinyClass} mb-2 min-h-[1rem] ${
+                          copyStatus &&
+                          (copyStatus.startsWith('Copy failed') ||
+                            copyStatus.startsWith('Nothing to copy'))
+                            ? 'text-amber-800 sm:text-amber-700'
+                            : ''
+                        }`}
+                      >
+                        {copyStatus || ''}
+                      </div>
+                      <ol className="space-y-2 text-sm list-none pl-0">
+                        {buildMoFilingSteps(prefill).map((step) => {
+                          const keysHint =
+                            step.prefillKeys.length > 0
+                              ? step.prefillKeys
+                                  .map((k) => getMoPortalFieldLabel(k))
+                                  .join(', ')
+                              : null
+                          const stepPacket =
+                            step.prefillKeys.length > 0
+                              ? buildMoFilingStepClipboard(prefill, step, { tripType })
+                              : ''
+                          return (
+                            <li
+                              key={step.id}
+                              className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3"
+                              data-mo-step={step.id}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="font-medium text-gray-900">
+                                    {step.stepNumber}. {step.title}
+                                  </div>
+                                  {keysHint && (
+                                    <div className={`${fieldHintTinyClass} mt-0.5`}>
+                                      Prefill: {keysHint}
+                                    </div>
+                                  )}
+                                </div>
+                                {stepPacket ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyMoStep(step)}
+                                    className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
+                                    data-testid={`mo-step-copy-${step.id}`}
+                                    aria-label={`Copy step ${step.stepNumber}: ${step.title}`}
+                                  >
+                                    {copiedKey === `mo-step-${step.id}` ? 'Copied' : 'Copy'}
+                                  </button>
+                                ) : null}
+                              </div>
+                            </li>
+                          )
+                        })}
+                      </ol>
+                    </div>
+
+                    <div data-testid="mo-walkthrough">
+                      <span className={`${fieldLabelClass} block mb-2`}>
+                        POST-LOGIN WALKTHROUGH
+                      </span>
+                      <ol className={`list-decimal pl-5 space-y-1 text-sm ${bodyTextClass}`}>
+                        {MO_PORTAL_WALKTHROUGH.map((line, i) => (
+                          <li key={i}>{line}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  </div>
+                )}
 
                 {/* Completeness checklist (pass/warn) + copy-all nearby */}
                 {(() => {
@@ -1325,11 +1475,13 @@ export default function PortalAssistPage() {
                       </div>
                     )
                   })}
-                  {/* Trip type shown in mapping grid for copy */}
+                  {/* Trip type + extras: MO uses MoDOT labels via resolvePortalFieldLabel(config, state) */}
                   {(prefill.generatedFields as any).trip_type && (
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
                       <div className="flex items-start justify-between gap-2 mb-0.5">
-                        <div className={fieldLabelTinyClass}>{resolvePortalFieldLabel('trip_type')}</div>
+                        <div className={fieldLabelTinyClass}>
+                          {resolvePortalFieldLabel('trip_type', config, selectedState)}
+                        </div>
                         <button
                           type="button"
                           onClick={() =>
@@ -1337,7 +1489,7 @@ export default function PortalAssistPage() {
                           }
                           className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
                           data-copy-field="trip_type"
-                          aria-label="Copy Trip Type"
+                          aria-label={`Copy ${resolvePortalFieldLabel('trip_type', config, selectedState)}`}
                         >
                           {copiedKey === 'trip_type' ? 'Copied' : 'Copy'}
                         </button>
@@ -1349,7 +1501,9 @@ export default function PortalAssistPage() {
                   {(prefill.generatedFields as any).axles && (
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
                       <div className="flex items-start justify-between gap-2 mb-0.5">
-                        <div className={fieldLabelTinyClass}>Axles (from equip)</div>
+                        <div className={fieldLabelTinyClass}>
+                          {resolvePortalFieldLabel('axles', config, selectedState)}
+                        </div>
                         <button
                           type="button"
                           onClick={() =>
@@ -1357,7 +1511,7 @@ export default function PortalAssistPage() {
                           }
                           className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
                           data-copy-field="axles"
-                          aria-label="Copy Axles"
+                          aria-label={`Copy ${resolvePortalFieldLabel('axles', config, selectedState)}`}
                         >
                           {copiedKey === 'axles' ? 'Copied' : 'Copy'}
                         </button>
@@ -1368,7 +1522,9 @@ export default function PortalAssistPage() {
                   {(prefill.generatedFields as any).vehicle_id && (
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
                       <div className="flex items-start justify-between gap-2 mb-0.5">
-                        <div className={fieldLabelTinyClass}>Vehicle / VIN (from equip)</div>
+                        <div className={fieldLabelTinyClass}>
+                          {resolvePortalFieldLabel('vehicle_id', config, selectedState)}
+                        </div>
                         <button
                           type="button"
                           onClick={() =>
@@ -1379,7 +1535,7 @@ export default function PortalAssistPage() {
                           }
                           className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
                           data-copy-field="vehicle_id"
-                          aria-label="Copy Vehicle / VIN"
+                          aria-label={`Copy ${resolvePortalFieldLabel('vehicle_id', config, selectedState)}`}
                         >
                           {copiedKey === 'vehicle_id' ? 'Copied' : 'Copy'}
                         </button>
@@ -1390,7 +1546,9 @@ export default function PortalAssistPage() {
                   {(prefill.generatedFields as any).entry_point && (
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
                       <div className="flex items-start justify-between gap-2 mb-0.5">
-                        <div className={fieldLabelTinyClass}>Border Entry Point</div>
+                        <div className={fieldLabelTinyClass}>
+                          {resolvePortalFieldLabel('entry_point', config, selectedState)}
+                        </div>
                         <button
                           type="button"
                           onClick={() =>
@@ -1401,7 +1559,7 @@ export default function PortalAssistPage() {
                           }
                           className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
                           data-copy-field="entry_point"
-                          aria-label="Copy Border Entry Point"
+                          aria-label={`Copy ${resolvePortalFieldLabel('entry_point', config, selectedState)}`}
                         >
                           {copiedKey === 'entry_point' ? 'Copied' : 'Copy'}
                         </button>
@@ -1412,7 +1570,9 @@ export default function PortalAssistPage() {
                   {(prefill.generatedFields as any).exit_point && (
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
                       <div className="flex items-start justify-between gap-2 mb-0.5">
-                        <div className={fieldLabelTinyClass}>Border Exit Point</div>
+                        <div className={fieldLabelTinyClass}>
+                          {resolvePortalFieldLabel('exit_point', config, selectedState)}
+                        </div>
                         <button
                           type="button"
                           onClick={() =>
@@ -1423,7 +1583,7 @@ export default function PortalAssistPage() {
                           }
                           className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
                           data-copy-field="exit_point"
-                          aria-label="Copy Border Exit Point"
+                          aria-label={`Copy ${resolvePortalFieldLabel('exit_point', config, selectedState)}`}
                         >
                           {copiedKey === 'exit_point' ? 'Copied' : 'Copy'}
                         </button>
@@ -1436,7 +1596,9 @@ export default function PortalAssistPage() {
                     (prefill.generatedFields as any).border_summary && (
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3 sm:col-span-2">
                       <div className="flex items-start justify-between gap-2 mb-0.5">
-                        <div className={fieldLabelTinyClass}>Border Summary</div>
+                        <div className={fieldLabelTinyClass}>
+                          {resolvePortalFieldLabel('border_summary', config, selectedState)}
+                        </div>
                         <button
                           type="button"
                           onClick={() =>
@@ -1447,7 +1609,7 @@ export default function PortalAssistPage() {
                           }
                           className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
                           data-copy-field="border_summary"
-                          aria-label="Copy Border Summary"
+                          aria-label={`Copy ${resolvePortalFieldLabel('border_summary', config, selectedState)}`}
                         >
                           {copiedKey === 'border_summary' ? 'Copied' : 'Copy'}
                         </button>

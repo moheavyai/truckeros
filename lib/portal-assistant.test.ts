@@ -13,6 +13,15 @@ import {
   resolvePortalFieldLabel,
   hasPrefillValue,
   PORTAL_TRIP_TYPES,
+  isMissouriPortal,
+  isMoMultiStatePrefill,
+  getMoPortalFieldOrder,
+  getMoPortalFieldLabel,
+  MO_PORTAL_FIELD_ORDER,
+  MO_PORTAL_FIELD_LABELS,
+  MO_PORTAL_WALKTHROUGH,
+  buildMoFilingSteps,
+  buildMoFilingStepClipboard,
   type PrefillPackage,
 } from './portal-assistant'
 
@@ -1025,6 +1034,348 @@ describe('buildPortalCompletenessChecklist', () => {
     expect(prefill.generatedFields.route).toBeUndefined()
     const checklist = buildPortalCompletenessChecklist(prefill, STATE_PORTAL_CONFIGS.TX)
     expect(checklist.items.find((i) => i.id === 'route')?.status).toBe('warn')
+  })
+
+  it('MO completeness prefers USDOT and requires axles when requiresVehicleInfo', () => {
+    const thinCarrier = generatePortalPrefill(
+      {
+        origin_city: 'St. Louis',
+        origin_state: 'MO',
+        destination_city: 'Kansas City',
+        destination_state: 'MO',
+        weight: 90000,
+        length: 70,
+        width: 10,
+        height: 13.5,
+        route_corridor: ['MO'],
+        equipment: { unit_number: 'MO-1' },
+        cargo: { carrierDriver: { companyName: 'Thin Co' } },
+      },
+      'MO'
+    )
+    const thinCheck = buildPortalCompletenessChecklist(
+      thinCarrier,
+      STATE_PORTAL_CONFIGS.MO
+    )
+    // Company alone is not enough for MO — USDOT required
+    expect(thinCheck.items.find((i) => i.id === 'carrier')?.status).toBe('warn')
+    expect(thinCheck.items.find((i) => i.id === 'carrier')?.label).toBe('USDOT')
+    // Axles missing
+    expect(thinCheck.items.find((i) => i.id === 'axles')?.status).toBe('warn')
+    expect(thinCheck.items.find((i) => i.id === 'vehicle')?.status).toBe('pass')
+
+    const full = generatePortalPrefill(
+      {
+        origin_city: 'St. Louis',
+        origin_state: 'MO',
+        destination_city: 'Kansas City',
+        destination_state: 'MO',
+        weight: 90000,
+        length: 70,
+        width: 10,
+        height: 13.5,
+        route_corridor: ['MO'],
+        equipment: {
+          rig: { totalAxles: 5, tractor: { unit_number: 'MO-1' } },
+        },
+        cargo: { carrierDriver: { usdotNumber: '1234567', companyName: 'Full Co' } },
+      },
+      'MO'
+    )
+    const fullCheck = buildPortalCompletenessChecklist(full, STATE_PORTAL_CONFIGS.MO)
+    expect(fullCheck.items.find((i) => i.id === 'carrier')?.status).toBe('pass')
+    expect(fullCheck.items.find((i) => i.id === 'axles')?.status).toBe('pass')
+    expect(fullCheck.ready).toBe(true)
+  })
+})
+
+describe('Missouri Portal Assist playbook', () => {
+  const moCorridorRequest = {
+    origin_city: 'Tulsa',
+    origin_state: 'OK',
+    destination_city: 'Chicago',
+    destination_state: 'IL',
+    weight: 95000,
+    length: 75,
+    width: 11,
+    height: 13.5,
+    route_corridor: ['OK', 'MO', 'IL'],
+    permit_required_states: ['OK', 'MO', 'IL'],
+    border_crossings: [
+      {
+        fromState: 'OK',
+        toState: 'MO',
+        entry: { lat: 36.9, lon: -94.5, highway: 'I-44' },
+        exit: { lat: 37.0, lon: -94.4, highway: 'I-44' },
+      },
+      {
+        fromState: 'MO',
+        toState: 'IL',
+        entry: { lat: 38.6, lon: -90.2, highway: 'I-70' },
+        exit: { lat: 38.7, lon: -90.1, highway: 'I-70' },
+      },
+    ],
+    equipment: {
+      rig: {
+        totalAxles: 6,
+        tractor: { unit_number: 'PWR-9', vin: 'VINMO9' },
+      },
+    },
+    cargo: {
+      carrierDriver: {
+        companyName: 'Show-Me Haul',
+        usdotNumber: '7654321',
+        driverFullName: 'Pat Driver',
+      },
+    },
+  }
+
+  it('isMissouriPortal detects MO by state code and config', () => {
+    expect(isMissouriPortal('MO')).toBe(true)
+    expect(isMissouriPortal('mo')).toBe(true)
+    expect(isMissouriPortal('TX')).toBe(false)
+    expect(isMissouriPortal(null, STATE_PORTAL_CONFIGS.MO)).toBe(true)
+    expect(isMissouriPortal(null, STATE_PORTAL_CONFIGS.TX)).toBe(false)
+  })
+
+  it('exposes MO field order and MoDOT-oriented labels', () => {
+    expect(getMoPortalFieldOrder()).toEqual([...MO_PORTAL_FIELD_ORDER])
+    // Full order sequence locked (includes carrier_mc)
+    expect(MO_PORTAL_FIELD_ORDER.join(',')).toBe(
+      [
+        'trip_type',
+        'origin',
+        'destination',
+        'weight',
+        'length',
+        'width',
+        'height',
+        'axles',
+        'route',
+        'border_entry',
+        'border_exit',
+        'vehicle_id',
+        'carrier_usdot',
+        'carrier_mc',
+        'carrier_company',
+        'driver_name',
+      ].join(',')
+    )
+    expect(getMoPortalFieldLabel('trip_type')).toBe('Permit type')
+    expect(getMoPortalFieldLabel('origin')).toBe('Origin (city, state / junction)')
+    expect(getMoPortalFieldLabel('destination')).toBe(
+      'Destination (city, state / junction)'
+    )
+    expect(getMoPortalFieldLabel('weight')).toBe('Gross weight (lbs)')
+    expect(getMoPortalFieldLabel('length')).toBe('Overall length')
+    expect(getMoPortalFieldLabel('width')).toBe('Overall width')
+    expect(getMoPortalFieldLabel('height')).toBe('Overall height')
+    expect(getMoPortalFieldLabel('axles')).toBe('Number of axles')
+    expect(getMoPortalFieldLabel('route')).toBe('Requested route / corridor')
+    expect(getMoPortalFieldLabel('border_entry')).toBe('Entry into Missouri')
+    expect(getMoPortalFieldLabel('border_exit')).toBe('Exit from Missouri')
+    expect(getMoPortalFieldLabel('vehicle_id')).toBe('Power unit ID / VIN')
+    expect(getMoPortalFieldLabel('carrier_usdot')).toBe('USDOT')
+    expect(getMoPortalFieldLabel('carrier_mc')).toBe('MC number')
+    expect(getMoPortalFieldLabel('carrier_company')).toBe('Carrier name')
+    expect(getMoPortalFieldLabel('driver_name')).toBe('Driver name')
+    expect(MO_PORTAL_FIELD_LABELS.entry_point).toBe('Entry into Missouri')
+  })
+
+  it('buildPortalClipboardPacket uses MO order and labels when state is MO', () => {
+    const prefill = generatePortalPrefill(
+      {
+        ...moCorridorRequest,
+        cargo: {
+          carrierDriver: {
+            companyName: 'Show-Me Haul',
+            usdotNumber: '7654321',
+            mcNumber: 'MC-4242',
+            driverFullName: 'Pat Driver',
+          },
+        },
+      },
+      'MO'
+    )
+    const packet = buildPortalClipboardPacket(prefill, STATE_PORTAL_CONFIGS.MO, {
+      tripType: 'Single trip',
+    })
+    const lines = packet.split('\n')
+    // Permit type first
+    expect(lines[0]).toBe('Permit type: Single trip')
+    expect(packet).toContain('Origin (city, state / junction): Tulsa, OK')
+    expect(packet).toContain('Destination (city, state / junction): Chicago, IL')
+    expect(packet).toContain('Gross weight (lbs):')
+    expect(packet).toContain('Overall length:')
+    expect(packet).toContain('Overall width:')
+    expect(packet).toContain('Overall height:')
+    expect(packet).toContain('Number of axles: 6')
+    expect(packet).toContain('Requested route / corridor: OK → MO → IL')
+    expect(packet).toMatch(/Entry into Missouri:/)
+    expect(packet).toMatch(/Exit from Missouri:/)
+    expect(packet).toContain('Power unit ID / VIN: PWR-9')
+    expect(packet).toContain('USDOT: 7654321')
+    expect(packet).toContain('MC number: MC-4242')
+    expect(packet).toContain('Carrier name: Show-Me Haul')
+    expect(packet).toContain('Driver name: Pat Driver')
+    // Full present-field order: trip → origin → … → axles → route → borders → vehicle → usdot → mc → company → driver
+    const idx = (label: string) =>
+      lines.findIndex((l) => l.startsWith(label + ':') || l.startsWith(label))
+    expect(idx('Permit type')).toBeLessThan(idx('Origin (city, state / junction)'))
+    expect(idx('Number of axles')).toBeLessThan(idx('Requested route / corridor'))
+    expect(idx('USDOT')).toBeLessThan(idx('MC number'))
+    expect(idx('MC number')).toBeLessThan(idx('Carrier name'))
+    expect(idx('Carrier name')).toBeLessThan(idx('Driver name'))
+  })
+
+  it('generic clipboard path unchanged for non-MO states', () => {
+    const prefill = generatePortalPrefill(moCorridorRequest, 'OK')
+    const packet = buildPortalClipboardPacket(prefill, STATE_PORTAL_CONFIGS.OK)
+    expect(packet).not.toContain('Permit type:')
+    expect(packet).toContain('Trip Type: Single trip')
+    expect(packet).not.toContain('Entry into Missouri')
+  })
+
+  it('resolvePortalFieldLabel uses MO labels for MO config', () => {
+    expect(resolvePortalFieldLabel('origin', STATE_PORTAL_CONFIGS.MO)).toBe(
+      'Origin (city, state / junction)'
+    )
+    expect(resolvePortalFieldLabel('trip_type', STATE_PORTAL_CONFIGS.MO)).toBe(
+      'Permit type'
+    )
+    expect(resolvePortalFieldLabel('axles', STATE_PORTAL_CONFIGS.MO)).toBe(
+      'Number of axles'
+    )
+    // Non-MO still uses fieldMapping / fallbacks
+    expect(resolvePortalFieldLabel('origin', STATE_PORTAL_CONFIGS.TX)).toBe(
+      'Origin Location'
+    )
+  })
+
+  it('buildMoFilingSteps filters multiStateOnly for single-state MO and renumbers', () => {
+    const single = generatePortalPrefill(
+      {
+        origin_city: 'St. Louis',
+        origin_state: 'MO',
+        destination_city: 'Kansas City',
+        destination_state: 'MO',
+        weight: 90000,
+        length: 70,
+        width: 10,
+        height: 13.5,
+        route_corridor: ['MO'],
+        equipment: {},
+        cargo: {},
+      },
+      'MO'
+    )
+    expect(isMoMultiStatePrefill(single)).toBe(false)
+    const singleSteps = buildMoFilingSteps(single)
+    expect(singleSteps.find((s) => s.id === 'route_borders')).toBeUndefined()
+    expect(singleSteps.map((s) => s.id)).toEqual([
+      'login',
+      'start',
+      'origin_dest',
+      'dims_weight',
+      'axles_vehicle',
+      'carrier_driver',
+      'review_pay',
+    ])
+    expect(singleSteps.map((s) => s.stepNumber)).toEqual([1, 2, 3, 4, 5, 6, 7])
+
+    const multi = generatePortalPrefill(moCorridorRequest, 'MO')
+    expect(isMoMultiStatePrefill(multi)).toBe(true)
+    const multiSteps = buildMoFilingSteps(multi)
+    expect(multiSteps).toHaveLength(8)
+    expect(multiSteps.map((s) => s.stepNumber)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+    expect(multiSteps.find((s) => s.id === 'route_borders')?.prefillKeys).toEqual([
+      'route',
+      'border_entry',
+      'border_exit',
+    ])
+    expect(multiSteps.find((s) => s.id === 'carrier_driver')?.prefillKeys).toEqual([
+      'carrier_usdot',
+      'carrier_mc',
+      'carrier_company',
+      'driver_name',
+    ])
+    // Without prefill: multiState false → omit route step
+    const noPrefill = buildMoFilingSteps()
+    expect(noPrefill.find((s) => s.id === 'route_borders')).toBeUndefined()
+  })
+
+  it('buildMoFilingStepClipboard copies step keys with MO labels (od, dims, trip, axles, route, carrier)', () => {
+    const prefill = generatePortalPrefill(
+      {
+        ...moCorridorRequest,
+        cargo: {
+          carrierDriver: {
+            companyName: 'Show-Me Haul',
+            usdotNumber: '7654321',
+            mcNumber: 'MC-4242',
+            driverFullName: 'Pat Driver',
+          },
+        },
+      },
+      'MO'
+    )
+    const steps = buildMoFilingSteps(prefill)
+
+    const od = steps.find((s) => s.id === 'origin_dest')!
+    const odPacket = buildMoFilingStepClipboard(prefill, od)
+    expect(odPacket).toContain('Origin (city, state / junction): Tulsa, OK')
+    expect(odPacket).toContain('Destination (city, state / junction): Chicago, IL')
+    expect(odPacket).not.toContain('USDOT')
+
+    const dims = steps.find((s) => s.id === 'dims_weight')!
+    const dimsPacket = buildMoFilingStepClipboard(prefill, dims)
+    expect(dimsPacket).toContain('Overall length:')
+    expect(dimsPacket).toContain('Gross weight (lbs):')
+
+    const start = steps.find((s) => s.id === 'start')!
+    expect(buildMoFilingStepClipboard(prefill, start, { tripType: 'Round trip' })).toBe(
+      'Permit type: Round trip'
+    )
+
+    const axles = steps.find((s) => s.id === 'axles_vehicle')!
+    const axlesPacket = buildMoFilingStepClipboard(prefill, axles)
+    expect(axlesPacket).toContain('Number of axles: 6')
+    expect(axlesPacket).toContain('Power unit ID / VIN: PWR-9')
+
+    const route = steps.find((s) => s.id === 'route_borders')!
+    const routePacket = buildMoFilingStepClipboard(prefill, route)
+    expect(routePacket).toContain('Requested route / corridor: OK → MO → IL')
+    expect(routePacket).toMatch(/Entry into Missouri:/)
+    expect(routePacket).toMatch(/Exit from Missouri:/)
+
+    const carrier = steps.find((s) => s.id === 'carrier_driver')!
+    const carrierPacket = buildMoFilingStepClipboard(prefill, carrier)
+    expect(carrierPacket).toContain('USDOT: 7654321')
+    expect(carrierPacket).toContain('MC number: MC-4242')
+    expect(carrierPacket).toContain('Carrier name: Show-Me Haul')
+    expect(carrierPacket).toContain('Driver name: Pat Driver')
+
+    const login = steps.find((s) => s.id === 'login')!
+    expect(buildMoFilingStepClipboard(prefill, login)).toBe('')
+  })
+
+  it('MO walkthrough is static honest copy without invented menus', () => {
+    expect(MO_PORTAL_WALKTHROUGH.length).toBeGreaterThanOrEqual(5)
+    const joined = MO_PORTAL_WALKTHROUGH.join(' ')
+    expect(joined).toMatch(/sign in/i)
+    expect(joined).toMatch(/OSOW|oversize/i)
+    expect(joined).toMatch(/Single trip/i)
+    expect(joined).toMatch(/permit #/i)
+    // Do not invent exact nested menu paths
+    expect(joined).not.toMatch(/click File > Applications > New/i)
+  })
+
+  it('MO config points at Carrier Express login', () => {
+    const mo = STATE_PORTAL_CONFIGS.MO
+    expect(mo.portalUrl).toMatch(/modot\.mo\.gov/i)
+    expect(mo.portalSystemName).toMatch(/Carrier Express/i)
+    expect(mo.fieldMapping.origin).toBe('Origin (city, state / junction)')
+    expect(mo.requiresVehicleInfo).toBe(true)
   })
 })
 
