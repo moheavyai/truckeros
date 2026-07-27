@@ -18,6 +18,8 @@ import {
   buildPortalClipboardPacket,
   buildPortalCompletenessChecklist,
   resolvePortalFieldLabel,
+  VEHICLE_IDENTITY_PREFILL_KEYS,
+  hasPrefillValue,
   PORTAL_TRIP_TYPES,
   buildMoFilingSteps,
   buildMoFilingStepClipboard,
@@ -1519,6 +1521,33 @@ export default function PortalAssistPage() {
                       <div className="font-mono text-gray-900">{(prefill.generatedFields as any).axles}</div>
                     </div>
                   )}
+                  {/* Discrete tractor/trailer identity: Year, Make, Model, VIN, Plate, State */}
+                  {VEHICLE_IDENTITY_PREFILL_KEYS.map((idKey) => {
+                    const raw = (prefill.generatedFields as any)[idKey]
+                    if (!hasPrefillValue(raw)) return null
+                    const display = String(raw).trim()
+                    const portalLabel = resolvePortalFieldLabel(idKey, config, selectedState)
+                    return (
+                      <div
+                        key={idKey}
+                        className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3"
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-0.5">
+                          <div className={fieldLabelTinyClass}>{portalLabel}</div>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(idKey, display)}
+                            className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
+                            data-copy-field={idKey}
+                            aria-label={`Copy ${portalLabel}`}
+                          >
+                            {copiedKey === idKey ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                        <div className="font-mono break-words text-gray-900">{display}</div>
+                      </div>
+                    )
+                  })}
                   {(prefill.generatedFields as any).vehicle_id && (
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
                       <div className="flex items-start justify-between gap-2 mb-0.5">

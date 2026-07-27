@@ -12,6 +12,8 @@ import {
   buildPortalCompletenessChecklist,
   resolvePortalFieldLabel,
   hasPrefillValue,
+  formatVehicleYmm,
+  VEHICLE_IDENTITY_PREFILL_KEYS,
   PORTAL_TRIP_TYPES,
   isMissouriPortal,
   isMoMultiStatePrefill,
@@ -483,6 +485,116 @@ describe('generatePortalPrefill', () => {
     expect(prefill.generatedFields.overhang).toBe('front 3 ft / rear 4 ft')
   })
 
+  it('emits discrete tractor/trailer identity keys and ymm helpers from rig snapshot', () => {
+    const prefill = generatePortalPrefill(
+      {
+        origin_city: 'Omaha',
+        origin_state: 'NE',
+        destination_city: 'Fargo',
+        destination_state: 'ND',
+        weight: 95000,
+        length: 70,
+        width: 8.5,
+        height: 13.5,
+        route_corridor: ['NE', 'SD', 'ND'],
+        equipment: {
+          rig: {
+            totalAxles: 7,
+            tractor: {
+              unit_number: '4721',
+              year: 2019,
+              make: 'Peterbilt',
+              model: '389',
+              vin: '1XPBDP9X5HD123456',
+              license_plate: 'abc1234',
+              license_plate_state: 'tx',
+            },
+            trailers: [
+              {
+                profile_name: '53 SD',
+                year: 2018,
+                make: 'Fontaine',
+                model: 'Magnitude',
+                vin: '1UYVS2535CM111111',
+                license_plate: 'trl111',
+                license_plate_state: 'ne',
+              },
+              {
+                profile_name: 'Jeep',
+                year: 2020,
+                make: 'Trail King',
+                model: 'TK80',
+                vin: '1JJJJ2222',
+                license_plate: 'jeep9',
+                license_plate_state: 'ks',
+              },
+            ],
+          },
+        },
+        cargo: {},
+      },
+      'NE'
+    )
+    const f = prefill.generatedFields
+    expect(f.tractor_year).toBe(2019)
+    expect(f.tractor_make).toBe('Peterbilt')
+    expect(f.tractor_model).toBe('389')
+    expect(f.tractor_ymm).toBe('2019 Peterbilt 389')
+    expect(f.tractor_vin).toBe('1XPBDP9X5HD123456')
+    expect(f.tractor_plate).toBe('ABC1234')
+    expect(f.tractor_plate_state).toBe('TX')
+    expect(f.trailer_year).toBe(2018)
+    expect(f.trailer_make).toBe('Fontaine')
+    expect(f.trailer_model).toBe('Magnitude')
+    expect(f.trailer_ymm).toBe('2018 Fontaine Magnitude')
+    expect(f.trailer_vin).toBe('1UYVS2535CM111111')
+    expect(f.trailer_plate).toBe('TRL111')
+    expect(f.trailer_plate_state).toBe('NE')
+    // Second trailer only when values present
+    expect(f.trailer_2_year).toBe(2020)
+    expect(f.trailer_2_make).toBe('Trail King')
+    expect(f.trailer_2_model).toBe('TK80')
+    expect(f.trailer_2_ymm).toBe('2020 Trail King TK80')
+    expect(f.trailer_2_vin).toBe('1JJJJ2222')
+    expect(f.trailer_2_plate).toBe('JEEP9')
+    expect(f.trailer_2_plate_state).toBe('KS')
+    // Backward-compat summaries still present
+    expect(f.vehicle_id).toBe('4721')
+    expect(f.trailers).toContain('53 SD')
+    // Does not treat trailer_type as manufacturer make
+    const noMake = generatePortalPrefill(
+      {
+        origin_city: 'A',
+        origin_state: 'TX',
+        destination_city: 'B',
+        destination_state: 'OK',
+        weight: 1,
+        length: 1,
+        width: 1,
+        height: 1,
+        route_corridor: ['TX'],
+        equipment: {
+          rig: {
+            tractor: { unit_number: 'U1' },
+            trailers: [{ trailer_type: 'Flatbed', profile_name: 'T1' }],
+          },
+        },
+      },
+      'TX'
+    )
+    expect(noMake.generatedFields.trailer_make).toBeUndefined()
+    expect(noMake.generatedFields.trailer_ymm).toBeUndefined()
+  })
+
+  it('formatVehicleYmm joins only present parts', () => {
+    expect(formatVehicleYmm(2019, 'Peterbilt', '389')).toBe('2019 Peterbilt 389')
+    expect(formatVehicleYmm(null, 'Peterbilt', '389')).toBe('Peterbilt 389')
+    expect(formatVehicleYmm(2019, null, null)).toBe('2019')
+    expect(formatVehicleYmm(null, null, null)).toBeNull()
+    expect(VEHICLE_IDENTITY_PREFILL_KEYS).toContain('tractor_ymm')
+    expect(VEHICLE_IDENTITY_PREFILL_KEYS).toContain('trailer_plate_state')
+  })
+
   it('includes carrier and driver fields from cargo.carrierDriver snapshot', () => {
     const prefill = generatePortalPrefill(
       {
@@ -729,7 +841,17 @@ describe('buildPortalCompletenessChecklist', () => {
         height: 13.5,
         route_corridor: ['TX'],
         permit_required_states: [],
-        equipment: { unit_number: 'T-1' },
+        equipment: {
+          rig: {
+            tractor: {
+              unit_number: 'T-1',
+              vin: '1XPBTESTVIN000001',
+              year: 2019,
+              make: 'Peterbilt',
+              model: '389',
+            },
+          },
+        },
         cargo: {
           carrierDriver: { usdotNumber: '999', companyName: 'Co' },
         },
@@ -743,6 +865,7 @@ describe('buildPortalCompletenessChecklist', () => {
     expect(checklist.items.find((i) => i.id === 'dimensions')?.status).toBe('pass')
     expect(checklist.items.find((i) => i.id === 'carrier')?.status).toBe('pass')
     expect(checklist.items.find((i) => i.id === 'vehicle')?.status).toBe('pass')
+    expect(checklist.items.find((i) => i.id === 'vehicle_ymm')?.status).toBe('pass')
     // Single-state: no route corridor item required
     expect(checklist.items.find((i) => i.id === 'route')).toBeUndefined()
   })
@@ -1063,6 +1186,8 @@ describe('buildPortalCompletenessChecklist', () => {
     // Axles missing
     expect(thinCheck.items.find((i) => i.id === 'axles')?.status).toBe('warn')
     expect(thinCheck.items.find((i) => i.id === 'vehicle')?.status).toBe('pass')
+    // Soft note: year/make/model empty
+    expect(thinCheck.items.find((i) => i.id === 'vehicle_ymm')?.status).toBe('warn')
 
     const full = generatePortalPrefill(
       {
@@ -1076,7 +1201,18 @@ describe('buildPortalCompletenessChecklist', () => {
         height: 13.5,
         route_corridor: ['MO'],
         equipment: {
-          rig: { totalAxles: 5, tractor: { unit_number: 'MO-1' } },
+          rig: {
+            totalAxles: 5,
+            tractor: {
+              unit_number: 'MO-1',
+              year: 2020,
+              make: 'Kenworth',
+              model: 'W900',
+              vin: '1XKWDM9X5LJ123456',
+              license_plate: 'MOUNIT1',
+              license_plate_state: 'MO',
+            },
+          },
         },
         cargo: { carrierDriver: { usdotNumber: '1234567', companyName: 'Full Co' } },
       },
@@ -1085,7 +1221,98 @@ describe('buildPortalCompletenessChecklist', () => {
     const fullCheck = buildPortalCompletenessChecklist(full, STATE_PORTAL_CONFIGS.MO)
     expect(fullCheck.items.find((i) => i.id === 'carrier')?.status).toBe('pass')
     expect(fullCheck.items.find((i) => i.id === 'axles')?.status).toBe('pass')
+    expect(fullCheck.items.find((i) => i.id === 'vehicle')?.status).toBe('pass')
+    expect(fullCheck.items.find((i) => i.id === 'vehicle_ymm')?.status).toBe('pass')
     expect(fullCheck.ready).toBe(true)
+  })
+
+  it('warns when requiresVehicleInfo and both VIN and plate are missing', () => {
+    const prefill = generatePortalPrefill(
+      {
+        origin_city: 'Dallas',
+        origin_state: 'TX',
+        destination_city: 'Austin',
+        destination_state: 'TX',
+        weight: 80000,
+        length: 65,
+        width: 8.5,
+        height: 13.5,
+        route_corridor: ['TX'],
+        equipment: {
+          // No unit_number / vin / plate → vehicle_id empty
+          rig: { tractor: { num_axles: 3 } },
+        },
+        cargo: { carrierDriver: { companyName: 'Co', usdotNumber: '1' } },
+      },
+      'TX'
+    )
+    // No vehicle_id, vin, or plate
+    expect(prefill.generatedFields.vehicle_id).toBeUndefined()
+    expect(prefill.generatedFields.tractor_vin).toBeUndefined()
+    expect(prefill.generatedFields.tractor_plate).toBeUndefined()
+    const checklist = buildPortalCompletenessChecklist(prefill, STATE_PORTAL_CONFIGS.TX)
+    expect(checklist.items.find((i) => i.id === 'vehicle')?.status).toBe('warn')
+    expect(checklist.items.find((i) => i.id === 'vehicle_ymm')?.status).toBe('warn')
+    // Soft ymm note does not block ready by itself when vehicle is the only hard fail
+    // (ready still false because vehicle is hard warn)
+    expect(checklist.ready).toBe(false)
+
+    // Plate alone is enough for vehicle; soft ymm pass with year/make
+    const withPlate = generatePortalPrefill(
+      {
+        origin_city: 'Dallas',
+        origin_state: 'TX',
+        destination_city: 'Austin',
+        destination_state: 'TX',
+        weight: 80000,
+        length: 65,
+        width: 8.5,
+        height: 13.5,
+        route_corridor: ['TX'],
+        equipment: {
+          rig: {
+            tractor: {
+              license_plate: 'ABC123',
+              license_plate_state: 'TX',
+              year: 2018,
+              make: 'Freightliner',
+            },
+          },
+        },
+        cargo: { carrierDriver: { companyName: 'Co', usdotNumber: '1' } },
+      },
+      'TX'
+    )
+    const plateCheck = buildPortalCompletenessChecklist(withPlate, STATE_PORTAL_CONFIGS.TX)
+    expect(plateCheck.items.find((i) => i.id === 'vehicle')?.status).toBe('pass')
+    expect(plateCheck.items.find((i) => i.id === 'vehicle_ymm')?.status).toBe('pass')
+  })
+
+  it('treats missing year/make/model as soft note that does not block ready', () => {
+    const prefill = generatePortalPrefill(
+      {
+        origin_city: 'Dallas',
+        origin_state: 'TX',
+        destination_city: 'Austin',
+        destination_state: 'TX',
+        weight: 80000,
+        length: 65,
+        width: 8.5,
+        height: 13.5,
+        route_corridor: ['TX'],
+        equipment: {
+          rig: {
+            tractor: { unit_number: 'U9', vin: 'VINONLY12345678901' },
+          },
+        },
+        cargo: { carrierDriver: { companyName: 'Co', usdotNumber: '1' } },
+      },
+      'TX'
+    )
+    const checklist = buildPortalCompletenessChecklist(prefill, STATE_PORTAL_CONFIGS.TX)
+    expect(checklist.items.find((i) => i.id === 'vehicle')?.status).toBe('pass')
+    expect(checklist.items.find((i) => i.id === 'vehicle_ymm')?.status).toBe('warn')
+    expect(checklist.ready).toBe(true)
   })
 })
 
@@ -1140,7 +1367,7 @@ describe('Missouri Portal Assist playbook', () => {
 
   it('exposes MO field order and MoDOT-oriented labels', () => {
     expect(getMoPortalFieldOrder()).toEqual([...MO_PORTAL_FIELD_ORDER])
-    // Full order sequence locked (includes carrier_mc)
+    // Full order: dims/axles → vehicle identity → vehicle_id → route/borders → carrier
     expect(MO_PORTAL_FIELD_ORDER.join(',')).toBe(
       [
         'trip_type',
@@ -1151,10 +1378,31 @@ describe('Missouri Portal Assist playbook', () => {
         'width',
         'height',
         'axles',
+        'tractor_year',
+        'tractor_make',
+        'tractor_model',
+        'tractor_ymm',
+        'tractor_vin',
+        'tractor_plate',
+        'tractor_plate_state',
+        'trailer_year',
+        'trailer_make',
+        'trailer_model',
+        'trailer_ymm',
+        'trailer_vin',
+        'trailer_plate',
+        'trailer_plate_state',
+        'trailer_2_year',
+        'trailer_2_make',
+        'trailer_2_model',
+        'trailer_2_ymm',
+        'trailer_2_vin',
+        'trailer_2_plate',
+        'trailer_2_plate_state',
+        'vehicle_id',
         'route',
         'border_entry',
         'border_exit',
-        'vehicle_id',
         'carrier_usdot',
         'carrier_mc',
         'carrier_company',
@@ -1175,6 +1423,20 @@ describe('Missouri Portal Assist playbook', () => {
     expect(getMoPortalFieldLabel('border_entry')).toBe('Entry into Missouri')
     expect(getMoPortalFieldLabel('border_exit')).toBe('Exit from Missouri')
     expect(getMoPortalFieldLabel('vehicle_id')).toBe('Power unit ID / VIN')
+    expect(getMoPortalFieldLabel('tractor_year')).toBe('Power unit year')
+    expect(getMoPortalFieldLabel('tractor_make')).toBe('Power unit make')
+    expect(getMoPortalFieldLabel('tractor_model')).toBe('Power unit model')
+    expect(getMoPortalFieldLabel('tractor_ymm')).toBe('Power unit year/make/model')
+    expect(getMoPortalFieldLabel('tractor_vin')).toBe('Power unit VIN')
+    expect(getMoPortalFieldLabel('tractor_plate')).toBe('Power unit plate')
+    expect(getMoPortalFieldLabel('tractor_plate_state')).toBe('Power unit plate state')
+    expect(getMoPortalFieldLabel('trailer_year')).toBe('Trailer year')
+    expect(getMoPortalFieldLabel('trailer_make')).toBe('Trailer make')
+    expect(getMoPortalFieldLabel('trailer_model')).toBe('Trailer model')
+    expect(getMoPortalFieldLabel('trailer_ymm')).toBe('Trailer year/make/model')
+    expect(getMoPortalFieldLabel('trailer_vin')).toBe('Trailer VIN')
+    expect(getMoPortalFieldLabel('trailer_plate')).toBe('Trailer plate')
+    expect(getMoPortalFieldLabel('trailer_plate_state')).toBe('Trailer plate state')
     expect(getMoPortalFieldLabel('carrier_usdot')).toBe('USDOT')
     expect(getMoPortalFieldLabel('carrier_mc')).toBe('MC number')
     expect(getMoPortalFieldLabel('carrier_company')).toBe('Carrier name')
@@ -1186,6 +1448,30 @@ describe('Missouri Portal Assist playbook', () => {
     const prefill = generatePortalPrefill(
       {
         ...moCorridorRequest,
+        equipment: {
+          rig: {
+            totalAxles: 6,
+            tractor: {
+              unit_number: 'PWR-9',
+              vin: 'VINMO9',
+              year: 2021,
+              make: 'Peterbilt',
+              model: '579',
+              license_plate: 'mo999',
+              license_plate_state: 'mo',
+            },
+            trailers: [
+              {
+                year: 2017,
+                make: 'Landoll',
+                model: '455',
+                vin: 'TRLMO1',
+                license_plate: 'trlmo',
+                license_plate_state: 'mo',
+              },
+            ],
+          },
+        },
         cargo: {
           carrierDriver: {
             companyName: 'Show-Me Haul',
@@ -1210,6 +1496,18 @@ describe('Missouri Portal Assist playbook', () => {
     expect(packet).toContain('Overall width:')
     expect(packet).toContain('Overall height:')
     expect(packet).toContain('Number of axles: 6')
+    expect(packet).toContain('Power unit year: 2021')
+    expect(packet).toContain('Power unit make: Peterbilt')
+    expect(packet).toContain('Power unit model: 579')
+    expect(packet).toContain('Power unit year/make/model: 2021 Peterbilt 579')
+    expect(packet).toContain('Power unit VIN: VINMO9')
+    expect(packet).toContain('Power unit plate: MO999')
+    expect(packet).toContain('Power unit plate state: MO')
+    expect(packet).toContain('Trailer year: 2017')
+    expect(packet).toContain('Trailer make: Landoll')
+    expect(packet).toContain('Trailer VIN: TRLMO1')
+    expect(packet).toContain('Trailer plate: TRLMO')
+    expect(packet).toContain('Trailer plate state: MO')
     expect(packet).toContain('Requested route / corridor: OK → MO → IL')
     expect(packet).toMatch(/Entry into Missouri:/)
     expect(packet).toMatch(/Exit from Missouri:/)
@@ -1218,10 +1516,12 @@ describe('Missouri Portal Assist playbook', () => {
     expect(packet).toContain('MC number: MC-4242')
     expect(packet).toContain('Carrier name: Show-Me Haul')
     expect(packet).toContain('Driver name: Pat Driver')
-    // Full present-field order: trip → origin → … → axles → route → borders → vehicle → usdot → mc → company → driver
+    // Identity after axles, before route/borders
     const idx = (label: string) =>
       lines.findIndex((l) => l.startsWith(label + ':') || l.startsWith(label))
     expect(idx('Permit type')).toBeLessThan(idx('Origin (city, state / junction)'))
+    expect(idx('Number of axles')).toBeLessThan(idx('Power unit year'))
+    expect(idx('Power unit VIN')).toBeLessThan(idx('Requested route / corridor'))
     expect(idx('Number of axles')).toBeLessThan(idx('Requested route / corridor'))
     expect(idx('USDOT')).toBeLessThan(idx('MC number'))
     expect(idx('MC number')).toBeLessThan(idx('Carrier name'))

@@ -67,6 +67,29 @@ describe('Equipment page — smart trailer types + axle groups', () => {
     expect(source).toContain('Lift axle')
   })
 
+  it('exposes Year/Make/Model on tractor and trailer forms (not trailer_type as make)', () => {
+    const source = readEquipmentSource()
+    // Tractor form includes Year + Make + Model (VIN already present)
+    expect(source).toContain("['Year', 'year', 'number']")
+    expect(source).toContain("['Make', 'make', 'text']")
+    expect(source).toContain("['Model', 'model', 'text']")
+    expect(source).toContain("['Tractor VIN', 'vin', 'text']")
+    expect(source).toContain("['Trailer VIN', 'vin', 'text']")
+    // Card display: Year Make Model order
+    expect(source).toContain('[t.year, t.make, t.model].filter(Boolean).join')
+    expect(source).toContain('[tr.year, tr.make, tr.model].filter(Boolean).join')
+    // Meta save path persists manufacturer make/model/year separately from trailer_type
+    expect(source).toMatch(/type: 'trailer'[\s\S]*make: payloadData\.make \?\? null/)
+    expect(source).toContain('trailer_type:')
+    // saveTrailer structured notes keep make distinct from trailer_type
+    const saveStart = source.indexOf('async function saveTrailer()')
+    const saveSlice = source.slice(saveStart, saveStart + 2200)
+    expect(saveSlice).toContain('make: payloadData.make ?? null')
+    expect(saveSlice).toContain('model: payloadData.model ?? null')
+    expect(saveSlice).toContain('year: payloadData.year ?? null')
+    expect(saveSlice).toContain('trailer_type:')
+  })
+
   it('preserves spacing slot indices and seeds tractor 1-2 at 220', () => {
     const source = readEquipmentSource()
     expect(source).toContain('normalizeAxleSpacingSlots')

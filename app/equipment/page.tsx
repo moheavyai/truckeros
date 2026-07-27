@@ -754,9 +754,11 @@ export default function EquipmentPage() {
       type: 'trailer',
       name: safeProfileName(payloadData.profile_name),
       profile_name: safeProfileName(payloadData.profile_name),
+      // Manufacturer make (not trailer_type equipment class). Fallback keeps legacy column filled.
       make: payloadData.make || payloadData.trailer_type || null,
       license_plate: payloadData.license_plate || null,
       license_plate_state: payloadData.license_plate_state || null,
+      vin: payloadData.vin || null,
       model: payloadData.model || null,
       year: payloadData.year || null,
       length_ft: payloadData.overall_length_ft || null,
@@ -1287,6 +1289,7 @@ export default function EquipmentPage() {
                     ['Unit #', 'unit_number', 'text'],
                     ['Tractor VIN', 'vin', 'text'],
                     ['Empty Weight (lbs)', 'empty_weight_lbs', 'number'],
+                    ['Year', 'year', 'number'],
                     ['Make', 'make', 'text'],
                     ['Model', 'model', 'text'],
                   ].map(([label, key, type]) => (
@@ -1386,7 +1389,7 @@ export default function EquipmentPage() {
                   <div className="font-semibold text-base tracking-tight text-gray-900">{t.profile_name}</div>
                   <div className={`${mutedTextClass} text-xs mt-0.5 mb-2`}>
                     {t.unit_number ? `#${t.unit_number} · ` : ''}
-                    {[t.make, t.model, t.year].filter(Boolean).join(' ') || 'Tractor'}
+                    {[t.year, t.make, t.model].filter(Boolean).join(' ') || 'Tractor'}
                   </div>
 
                   <div className="flex flex-wrap gap-1.5 mb-2">
@@ -1466,6 +1469,9 @@ export default function EquipmentPage() {
                       ['Trailer VIN', 'vin', 'text'],
                       ['Empty Weight (lbs)', 'empty_weight_lbs', 'number'],
                       ['Extendable Extra (ft)', 'extendable_extra_ft', 'number'],
+                      ['Year', 'year', 'number'],
+                      ['Make', 'make', 'text'],
+                      ['Model', 'model', 'text'],
                     ] as [string, string, string][]
                   })().map(([label, key, type]) => (
                     <div key={key}>
@@ -1642,6 +1648,11 @@ export default function EquipmentPage() {
                         <>Kingpin: {tr.kingpin_distance_from_front_in || '—'} in · KP→axle: {tr.kingpin_to_first_axle_in || '—'} in</>
                       )}
                     </div>
+                    {[tr.year, tr.make, tr.model].some(Boolean) && (
+                      <div>
+                        {[tr.year, tr.make, tr.model].filter(Boolean).join(' ')}
+                      </div>
+                    )}
                     {formatLicensePlateDisplay(tr.license_plate, tr.license_plate_state) && (
                       <div>Plate: {formatLicensePlateDisplay(tr.license_plate, tr.license_plate_state)}</div>
                     )}

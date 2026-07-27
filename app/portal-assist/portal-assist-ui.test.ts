@@ -542,6 +542,15 @@ describe('Portal Assist — Missouri Carrier Express playbook', () => {
     expect(source).toContain("resolvePortalFieldLabel('exit_point', config, selectedState)")
   })
 
+  it('shows discrete vehicle identity fields with per-field Copy when present', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('VEHICLE_IDENTITY_PREFILL_KEYS')
+    expect(source).toContain('hasPrefillValue')
+    expect(source).toContain('VEHICLE_IDENTITY_PREFILL_KEYS.map')
+    expect(source).toContain('data-copy-field={idKey}')
+    expect(source).toContain('resolvePortalFieldLabel(idKey, config, selectedState)')
+  })
+
   it('places trip type control before MO playbook and references permit type', () => {
     const source = readSource(pagePath)
     const tripIdx = source.indexOf('data-testid="trip-type-control"')
