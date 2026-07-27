@@ -67,3 +67,12 @@ def test_load_details_accepts_manual_waypoints():
     assert wps[0]["lat"] == pytest.approx(40.5)
     assert wps[0]["name"] == "Pick A"
     assert wps[0]["source"] == "map"
+
+
+def test_load_details_rejects_waypoint_out_of_range():
+    with pytest.raises(ValidationError):
+        LoadDetails(
+            **_base_load(
+                manualWaypoints=[{"lat": 999.0, "lon": -95.7, "name": "bad"}]
+            )
+        )

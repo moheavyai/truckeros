@@ -48,6 +48,22 @@ class ManualWaypoint(BaseModel):
     name: str | None = None
     source: str | None = None
 
+    @field_validator("lat")
+    @classmethod
+    def lat_range(cls, v: float) -> float:
+        fv = float(v)
+        if not math.isfinite(fv) or not (-90.0 <= fv <= 90.0):
+            raise ValueError("lat must be finite and in [-90, 90]")
+        return fv
+
+    @field_validator("lon")
+    @classmethod
+    def lon_range(cls, v: float) -> float:
+        fv = float(v)
+        if not math.isfinite(fv) or not (-180.0 <= fv <= 180.0):
+            raise ValueError("lon must be finite and in [-180, 180]")
+        return fv
+
 
 class TractorProfile(BaseModel):
     """Partial Tractor from types/equipment.ts (for axle_spacings etc)."""
@@ -262,6 +278,8 @@ class LoadDetails(BaseModel):
             except (KeyError, TypeError, ValueError):
                 continue
             if not (math.isfinite(lat) and math.isfinite(lon)):
+                continue
+            if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
                 continue
             item: dict[str, Any] = {"lat": lat, "lon": lon, "is_via": True}
             if d.get("name"):

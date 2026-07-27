@@ -241,3 +241,38 @@ class TestPreferredHighwayLists:
         assert "US 136" in parsed["preferred"]
         assert "I-29" in parsed["preferred"]
         assert ["US 136", "I-29"] in parsed["preferred_or_groups"]
+
+    def test_through_place_does_not_cut_hwy_list(self):
+        """prefer US136 through Auburn then US75 keeps both highways."""
+        parsed = parse_special_instructions(
+            "prefer US136 through Auburn then US75",
+            origin_state="MO",
+            dest_state="NE",
+        )
+        assert "US 136" in parsed["preferred"]
+        assert "US 75" in parsed["preferred"]
+        assert parsed["preferred"].index("US 136") < parsed["preferred"].index("US 75")
+
+    def test_or_group_missing_honesty_not_injected_when_no_seed(self):
+        msg = format_missing_pref_warning(
+            "US 136 or I-29",
+            avoided=["IA"],
+            special_text="prefer US136 or I-29",
+            origin_state="MO",
+            dest_state="NE",
+            preferred_or_groups=[["US 136", "I-29"]],
+        )
+        assert "not injected" in msg
+        assert "via seeded" not in msg
+
+    def test_or_group_missing_honesty_via_seeded_when_place_named(self):
+        msg = format_missing_pref_warning(
+            "US 136 or I-29",
+            avoided=["IA"],
+            special_text="prefer US136 or I-29 through Auburn, NE",
+            origin_state="MO",
+            dest_state="NE",
+            preferred_or_groups=[["US 136", "I-29"]],
+        )
+        assert "via seeded" in msg
+        assert "not injected" not in msg

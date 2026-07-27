@@ -33,7 +33,7 @@ import math
 import re
 import time
 import traceback
-from typing import Any
+from typing import Any, Final
 
 import httpx
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
@@ -971,12 +971,46 @@ def _prefer_anchor_geo_ok(
     return (o in allowed) or (d in allowed)
 
 
+# Leading tokens that are never part of a county proper name (prepositions / prefer verbs).
+_COUNTY_NAME_STRIP: Final = frozenset({
+    "via", "through", "use", "take", "prefer", "near", "from", "enter",
+    "include", "including", "go", "pass", "by", "on", "the", "a", "an",
+})
+
+# Prefer-clause highway extraction: do NOT stop at through/from/enter (place prepositions),
+# so "prefer US136 through Auburn then US75" still yields both highways.
+_PREFER_CLAUSE_STOP = (
+    r"avoid|use|take|prefer|via|include|to|southern|northern|interstate|stay on"
+)
+_PREFER_CLAUSE_RE = re.compile(
+    rf"(?:^|[\s,.(]|\b)[^\w]*(use|take|prefer|via)[^\w]+([a-z0-9,\s&\-\/]+?)"
+    rf"(?=\s*(?:{_PREFER_CLAUSE_STOP})\b|\s*\.|$)",
+    re.IGNORECASE,
+)
+_HWY_TOKEN_RE = re.compile(r"\b(I-?\d+|US[-\s]?\d+)\b", re.IGNORECASE)
+
+
+def _optional_state_after(text: str, end: int) -> str | None:
+    """Parse optional ', ST' / ' ST' immediately after a city match end index."""
+    rest = text[end:]
+    m = re.match(
+        r"\s*,\s*([a-z]{2})\b|\s+([a-z]{2})\b(?=\s|$|[.,;])|\s*,\s*([a-z][a-z\s]+?)(?=\s*[.,;]|$)",
+        rest,
+        re.IGNORECASE,
+    )
+    if not m:
+        return None
+    raw = (m.group(1) or m.group(2) or m.group(3) or "").strip()
+    return _coerce_state_code(raw) or _get_state_code(raw, None)
+
+
 def extract_prefer_clause_places(
     special_text: str | None,
     preferred: list[str] | None = None,
     *,
     origin_state: str | None = None,
     dest_state: str | None = None,
+    avoided: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Extract user-named CITY_MAP places from prefer/use/take/via clauses.
@@ -984,12 +1018,14 @@ def extract_prefer_clause_places(
     Matches through/via/from/near/enter CITY (prefer context required).
     Product: user-named place > default highway anchor (e.g. Auburn beats Rock Port for US136).
     Does NOT fire on bare "from Dallas" / "away from X" without prefer verb.
+    Skips places whose CITY_MAP state is avoided, or when text state suffix mismatches map.
     """
     places: list[dict[str, Any]] = []
     t = (special_text or "").lower()
     if not t:
         return places
     pref_norm = [_normalize_hwy_token(p) for p in (preferred or []) if p]
+    av_set = {str(a).upper().strip() for a in (avoided or []) if a}
     city_keys = sorted(CITY_MAP.keys(), key=len, reverse=True)
     seen: set[str] = set()
     for city_key in city_keys:
@@ -1011,6 +1047,13 @@ def extract_prefer_clause_places(
             )
         if not matched:
             continue
+        lat, lon, st = CITY_MAP[city_key]
+        # Optional state suffix: "Auburn, AL" must not seed NE Auburn coords
+        stated = _optional_state_after(t, matched.end())
+        if stated and stated != st:
+            continue
+        if st in av_set:
+            continue
         # If city is the mapped anchor for a preferred hwy that failed geo, skip it.
         skip_geo = False
         for pref in pref_norm:
@@ -1024,7 +1067,6 @@ def extract_prefer_clause_places(
         if city_key in seen:
             continue
         seen.add(city_key)
-        lat, lon, st = CITY_MAP[city_key]
         places.append({
             "name": city_key.title(),
             "lat": lat,
@@ -1041,6 +1083,7 @@ def extract_county_vias(
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """
     MVP county seeding: "X County, ST" → COUNTY_MAP centroid if known.
+    Strips leading prefer/via/through verbs so "through Nemaha County, NE" seeds.
     Unknown counties → note only (no hard fail). Returns (vias, notes).
     """
     vias: list[dict[str, Any]] = []
@@ -1049,13 +1092,22 @@ def extract_county_vias(
     if not t.strip():
         return vias, notes
     av_set = {str(a).upper().strip() for a in (avoided or []) if a}
-    # "Nemaha County, NE" / "Nemaha County NE" / "Gage County, Nebraska"
+    # Multi-word county names; leading verbs stripped after match.
+    # "Nemaha County, NE" / "through Nemaha County NE" / "Gage County, Nebraska"
     county_re = re.compile(
-        r"\b([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+[Cc]ounty\s*,?\s*([A-Za-z]{2}|[A-Za-z]+(?:\s+[A-Za-z]+)?)\b",
+        r"\b((?:[A-Za-z]+\s+){0,3}[A-Za-z]+)\s+[Cc]ounty\s*,?\s*"
+        r"([A-Za-z]{2}|[A-Za-z]+(?:\s+[A-Za-z]+)?)\b",
     )
     seen: set[str] = set()
     for m in county_re.finditer(t):
-        cname = m.group(1).strip().lower()
+        raw_name = m.group(1).strip()
+        parts = [p for p in raw_name.split() if p]
+        while parts and parts[0].lower() in _COUNTY_NAME_STRIP:
+            parts.pop(0)
+        if not parts:
+            continue
+        cname = " ".join(parts).lower()
+        display = " ".join(p.title() for p in parts)
         st_raw = m.group(2).strip()
         st = _coerce_state_code(st_raw) or _get_state_code(st_raw, None)
         if not st:
@@ -1066,20 +1118,61 @@ def extract_county_vias(
             continue
         seen.add(key)
         if key not in COUNTY_MAP:
-            notes.append(f"Unknown county: {m.group(1).strip()} County, {st} (skipped)")
+            notes.append(f"Unknown county: {display} County, {st} (skipped)")
             continue
         lat, lon, cst = COUNTY_MAP[key]
         if cst in av_set:
-            notes.append(f"County {m.group(1).strip()} County, {st} in avoided state (skipped)")
+            notes.append(f"County {display} County, {st} in avoided state (skipped)")
             continue
         vias.append({
-            "name": f"{m.group(1).strip().title()} County, {st}",
+            "name": f"{display} County, {st}",
             "lat": lat,
             "lon": lon,
             "state": cst,
             "source": "county",
         })
     return vias, notes
+
+
+def _preferred_hwys_with_named_places(
+    special_text: str | None,
+    preferred: list[str] | None,
+) -> set[str]:
+    """Preferred hwys that share a prefer-clause window with a CITY_MAP place name."""
+    t = (special_text or "").lower()
+    pref_set = {_normalize_hwy_token(p) for p in (preferred or []) if p}
+    if not t or not pref_set:
+        return set()
+    city_keys = sorted(CITY_MAP.keys(), key=len, reverse=True)
+    out: set[str] = set()
+    for m in _PREFER_CLAUSE_RE.finditer(t):
+        phrase = (m.group(2) or "").lower()
+        window = (m.group(0) or "").lower()
+        has_place = False
+        for ck in city_keys:
+            if re.search(
+                rf"(?<!\baway )(?<!\bdepart )(?:from|near|through|enter|via)\s+{re.escape(ck)}\b",
+                window,
+            ) or re.search(rf"(?:^|[\s,.(])via\s+{re.escape(ck)}\b", window):
+                # State mismatch on this city → not a valid named place for suppression
+                mm = re.search(
+                    rf"(?:from|near|through|enter|via)\s+{re.escape(ck)}\b",
+                    window,
+                )
+                if mm:
+                    stated = _optional_state_after(window, mm.end())
+                    map_st = CITY_MAP[ck][2]
+                    if stated and stated != map_st:
+                        continue
+                has_place = True
+                break
+        if not has_place:
+            continue
+        for hm in _HWY_TOKEN_RE.finditer(phrase):
+            pref = _normalize_hwy_token(hm.group(1))
+            if pref in pref_set:
+                out.add(pref)
+    return out
 
 
 def seed_preferred_hwy_vias(
@@ -1090,23 +1183,26 @@ def seed_preferred_hwy_vias(
     origin_state: str | None = None,
     dest_state: str | None = None,
     existing: list[dict[str, Any]] | None = None,
+    preferred_or_groups: list[list[str]] | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Seed real via stops for preferred highways / prefer-clause places.
+    Seed real via stops for preferred highways / prefer-clause places / counties.
 
     Product rules:
     1) User-named place in prefer/use/via/through/from/enter > default hwy anchor
-       ("use US136 through Auburn, NE" → Auburn, not Rock Port).
+       ("use US136 through Auburn, NE" → Auburn, not Rock Port) — per-hwy suppression.
     2) Bare "prefer US136" (no place) → PREFERRED_HWY_VIA_ANCHORS (Rock Port).
-    3) Prefer-clause city scan does NOT fire on bare "from Chicago" / "away from X".
-
-    Only injects when anchor/place state is not avoided, geo gate passes (US 136),
-    and not a coord duplicate of existing vias / O/D / earlier seeds.
-    Prefer-via ownership is build_stops_from_load (not suggest_practical_vias).
+    3) Or-groups: do not seed default hwy anchors unless a place is named.
+    4) Places in avoided states are not seeded; fall back to non-avoided hwy anchors.
+    5) County centroids suppress anchors for hwys whose geo region includes the county.
     """
     vias: list[dict[str, Any]] = []
     av_set = {str(a).upper().strip() for a in (avoided or []) if a}
     pref_norm = [_normalize_hwy_token(p) for p in (preferred or []) if p]
+    or_members: set[str] = set()
+    for g in preferred_or_groups or []:
+        for p in g:
+            or_members.add(_normalize_hwy_token(p))
 
     def _try_append(city_key: str, *, source: str = "hwy_anchor") -> bool:
         if city_key not in CITY_MAP:
@@ -1126,36 +1222,70 @@ def seed_preferred_hwy_vias(
         vias.append(via)
         return True
 
-    # --- User places first (prefer-clause cities) ---
+    # --- User places first (prefer-clause cities); avoided states already filtered ---
     user_places = extract_prefer_clause_places(
         special_text,
         pref_norm,
         origin_state=origin_state,
         dest_state=dest_state,
+        avoided=list(av_set),
     )
     for place in user_places:
-        st = str(place.get("state") or "").upper()
-        if st in av_set:
-            continue
         if _via_coord_dup(place, vias) or _via_coord_dup(place, existing):
             continue
         vias.append(place)
 
-    # If user named a place in a prefer clause, do not also force default hwy anchors
-    # (Auburn wins over Rock Port for US136).
-    if user_places:
-        return vias
+    # County centroids (same ownership as prefer vias for anchor suppression)
+    county_vias, _ = extract_county_vias(special_text, list(av_set))
+    seeded_county_states: set[str] = set()
+    for cv in county_vias:
+        if _via_coord_dup(cv, vias) or _via_coord_dup(cv, existing):
+            continue
+        vias.append(cv)
+        st = str(cv.get("state") or "").upper()
+        if st:
+            seeded_county_states.add(st)
 
-    # --- Fall back to highway default anchors when no place named ---
+    hwys_with_place = _preferred_hwys_with_named_places(special_text, pref_norm)
+
     if not pref_norm:
         return vias
 
     for pref in pref_norm:
+        # Or-group members: never force a default hwy anchor (either path may satisfy).
+        # User places for the group are already seeded above when named.
+        if pref in or_members:
+            continue
         if not _prefer_anchor_geo_ok(pref, origin_state, dest_state):
             continue
         city_key = PREFERRED_HWY_VIA_ANCHORS.get(pref)
-        if city_key:
-            _try_append(city_key, source="hwy_anchor")
+        if not city_key:
+            continue
+        # Per-hwy: place named for this hwy and successfully seeded → suppress default anchor.
+        # If place was named but blocked by avoid/mismatch → fall back to anchor.
+        if pref in hwys_with_place:
+            attempted = extract_prefer_clause_places(
+                special_text,
+                [pref],
+                origin_state=origin_state,
+                dest_state=dest_state,
+                avoided=None,
+            )
+            allowed_places = extract_prefer_clause_places(
+                special_text,
+                [pref],
+                origin_state=origin_state,
+                dest_state=dest_state,
+                avoided=list(av_set),
+            )
+            if attempted and allowed_places:
+                continue  # user place seeded for this hwy
+            # attempted but all avoided / mismatch → fall through to anchor
+        # County on this hwy's geo corridor suppresses default anchor
+        geo = PREFERRED_HWY_GEO_STATES.get(pref)
+        if geo is not None and seeded_county_states & set(geo):
+            continue
+        _try_append(city_key, source="hwy_anchor")
 
     return vias
 
@@ -1167,17 +1297,42 @@ def format_missing_pref_warning(
     special_text: str | None = None,
     origin_state: str | None = None,
     dest_state: str | None = None,
+    preferred_or_groups: list[list[str]] | None = None,
 ) -> str:
     """
-    Honesty copy for a preferred hwy missing from primary geometry.
-    If we seeded (or would seed) a via for this hwy, do not claim "not injected".
+    Honesty copy for a preferred hwy (or or-group label) missing from primary geometry.
+    If we seeded (or would seed) a via for this pref/group, do not claim "not injected".
     """
+    # Or-group labels: "US 136 or I-29"
+    if re.search(r"\s+or\s+", pref, flags=re.IGNORECASE):
+        members = [
+            _normalize_hwy_token(p.strip())
+            for p in re.split(r"\s+or\s+", pref, flags=re.IGNORECASE)
+            if p.strip()
+        ]
+        group = [m for m in members if m]
+        seeds = seed_preferred_hwy_vias(
+            group,
+            avoided,
+            special_text,
+            origin_state=origin_state,
+            dest_state=dest_state,
+            preferred_or_groups=[group] if len(group) >= 2 else None,
+        )
+        if seeds:
+            return (
+                f"Preferred alternatives {pref} not on primary route "
+                f"(via seeded; not realized in geometry)"
+            )
+        return f"Preferred alternatives {pref} not on primary route (noted, not injected)"
+
     seeds = seed_preferred_hwy_vias(
         [pref],
         avoided,
         special_text,
         origin_state=origin_state,
         dest_state=dest_state,
+        preferred_or_groups=preferred_or_groups,
     )
     if seeds:
         return (
@@ -1273,26 +1428,26 @@ def parse_special_instructions(
             key = tok.lower()
             if key in CITY_MAP:
                 lat, lon, st = CITY_MAP[key]
+                # Optional state suffix mismatch: "Auburn, AL" must not seed NE coords
+                if nxt:
+                    stated = _coerce_state_code(nxt) or _get_state_code(nxt, None)
+                    if stated and stated != st:
+                        continue
                 inc = {"name": tok.title(), "lat": lat, "lon": lon, "state": st}
                 if not any(x["name"].lower() == inc["name"].lower() for x in included):
                     included.append(inc)
 
     # Prefer/use/take/via clauses ONLY → extract highways (no bare-text fallback: "avoid I-40" must not prefer I-40)
-    # Stop verbs exclude "then" so "US136 then US75" stays in one phrase (ordered list).
-    prefer_clause_re = re.compile(
-        r"(?:^|[\s,.(]|\b)[^\w]*(use|take|prefer|via)[^\w]+([a-z0-9,\s&\-\/]+?)"
-        r"(?=\s*(?:avoid|use|take|prefer|via|include|through|from|enter|to|southern|northern|interstate|stay on)\b|\s*\.|$)",
-        re.IGNORECASE,
-    )
-    hwy_token_re = re.compile(r"\b(I-?\d+|US[-\s]?\d+)\b", re.IGNORECASE)
-    for m in prefer_clause_re.finditer(t):
+    # Place prepositions (through/from/enter) do NOT cut the highway list so
+    # "prefer US136 through Auburn then US75" still yields both US 136 and US 75.
+    for m in _PREFER_CLAUSE_RE.finditer(t):
         phrase = m.group(2) or ""
         # "US136 or I-29" → preferred alternatives (or-group)
         or_parts = re.split(r"\s+or\s+", phrase, flags=re.IGNORECASE)
         if len(or_parts) > 1:
-            group: list[str] = []
+            group = []
             for part in or_parts:
-                for hm in hwy_token_re.finditer(part):
+                for hm in _HWY_TOKEN_RE.finditer(part):
                     pref = _normalize_hwy_token(hm.group(1))
                     if pref:
                         if pref not in group:
@@ -1300,12 +1455,11 @@ def parse_special_instructions(
                         if pref not in preferred:
                             preferred.append(pref)
             if len(group) >= 2:
-                # de-dupe identical or-groups
                 if group not in preferred_or_groups:
                     preferred_or_groups.append(group)
             continue
         # Ordered preferred: "US136 then US75" / "US136 and US75" / "US136, US75"
-        for hm in hwy_token_re.finditer(phrase):
+        for hm in _HWY_TOKEN_RE.finditer(phrase):
             pref = _normalize_hwy_token(hm.group(1))
             if pref and pref not in preferred:
                 preferred.append(pref)
@@ -1439,8 +1593,14 @@ def build_stops_from_load(
 
     parsed = parse_special_instructions(special, o_state, d_state)
     avoided = parsed.get("avoided", [])
-    included = list(parsed.get("included", []))
+    av_set = {str(a).upper().strip() for a in (avoided or []) if a}
+    # Never force include vias into avoided states (e.g. through Auburn when avoid NE)
+    included = [
+        i for i in list(parsed.get("included", []))
+        if str(i.get("state") or "").upper() not in av_set
+    ]
     preferred_hwys: list[str] = list(parsed.get("preferred") or [])
+    preferred_or_groups: list[list[str]] = list(parsed.get("preferred_or_groups") or [])
 
     # v0.3 World-Class: auto-suggest practical OSOW vias (hard-avoid aware) when specialInstructions present.
     # User "include" + manualRoute take precedence (suggested only augment when no explicit manual).
@@ -1468,6 +1628,8 @@ def build_stops_from_load(
                 except (KeyError, TypeError, ValueError):
                     continue
                 if not (math.isfinite(wlat) and math.isfinite(wlon)):
+                    continue
+                if not (-90.0 <= wlat <= 90.0 and -180.0 <= wlon <= 180.0):
                     continue
                 item: dict[str, Any] = {
                     "name": w.get("name") or "waypoint",
@@ -1512,9 +1674,10 @@ def build_stops_from_load(
         vias = forced
     else:
         # Prefer-via injection (single ownership here — not also in suggest_practical_vias):
-        # user places in prefer clauses first; else highway anchors (US 136→Rock Port, I-40→OKC).
+        # user places / counties first; per-hwy anchors when no place; or-groups skip anchors.
         # Respects avoided states, geo gate, and coord-dedupe vs includes + O/D + drops.
         # Still runs when has_explicit_drops so permit-test dest-as-drop keeps prefer anchors.
+        # Counties are seeded inside seed_preferred_hwy_vias (also suppress same-corridor anchors).
         for seed in seed_preferred_hwy_vias(
             preferred_hwys,
             avoided,
@@ -1522,14 +1685,10 @@ def build_stops_from_load(
             origin_state=o_state,
             dest_state=d_state,
             existing=included + od_refs,
+            preferred_or_groups=preferred_or_groups,
         ):
             if not _via_coord_dup(seed, included) and not _via_coord_dup(seed, od_refs):
                 included.append(seed)
-        # County MVP: known "X County, ST" → centroid via; unknown → note only (parser notes).
-        county_vias, _county_notes = extract_county_vias(special, avoided)
-        for cv in county_vias:
-            if not _via_coord_dup(cv, included) and not _via_coord_dup(cv, od_refs):
-                included.append(cv)
         # Lane-specific practical vias (AL→NE, KS→FL, …). Prefer-hwy anchors owned above only.
         # Skip when multi-drop (len > 1): pure multi-stop must not silently expand with
         # Joplin/Memphis/etc. Single dest-as-drop (permit-test) still gets practical vias.
@@ -2596,6 +2755,7 @@ async def _build_route_info_from_order(
                 special_text=special_for_honesty,
                 origin_state=o_st,
                 dest_state=d_st,
+                preferred_or_groups=preferred_or_groups,
             )
         )
 
@@ -2654,6 +2814,7 @@ async def _build_route_info_from_order(
                         special_text=special_for_honesty,
                         origin_state=o_st,
                         dest_state=d_st,
+                        preferred_or_groups=preferred_or_groups,
                     )
                     for p in missing_pref
                 )
@@ -2685,6 +2846,7 @@ async def _build_route_info_from_order(
                     special_text=special_for_honesty,
                     origin_state=o_st,
                     dest_state=d_st,
+                    preferred_or_groups=preferred_or_groups,
                 )
                 for p in missing_pref
             )

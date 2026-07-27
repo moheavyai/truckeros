@@ -425,3 +425,75 @@ def test_manual_waypoints_appear_as_vias_before_drops():
     drop_idx = next(i for i, s in enumerate(stops) if s.get("is_drop"))
     assert via_idx < drop_idx
     assert stops[-1].get("is_drop") is True
+
+
+def test_through_nemaha_county_seeds_centroid():
+    """County regex strips leading through/via; Nemaha County, NE seeds."""
+    load = {
+        "origin": {"city": "Kansas City", "state": "MO"},
+        "destination": {"city": "Lincoln", "state": "NE"},
+        "specialInstructions": "prefer US136 through Nemaha County, NE",
+    }
+    stops = build_stops_from_load(load, (39.0997, -94.5786), (40.8136, -96.7026))
+    vias = [s for s in stops if s.get("is_via")]
+    county = next((v for v in vias if "nemaha" in v["name"].lower()), None)
+    assert county is not None, f"Nemaha County missing; vias={[v['name'] for v in vias]}"
+    assert county["state"] == "NE"
+    # County on US136 corridor suppresses Rock Port double-via
+    assert not any("rock" in v["name"].lower() for v in vias)
+
+
+def test_or_group_does_not_seed_rock_port_anchor():
+    """prefer US136 or I-29: do not force Rock Port (either path may satisfy)."""
+    seeds = seed_preferred_hwy_vias(
+        ["US 136", "I-29"],
+        ["IA"],
+        "prefer US136 or I-29",
+        origin_state="MO",
+        dest_state="NE",
+        preferred_or_groups=[["US 136", "I-29"]],
+    )
+    assert not any("rock" in s["name"].lower() for s in seeds)
+
+    load = {
+        "origin": {"city": "Kansas City", "state": "MO"},
+        "destination": {"city": "Lincoln", "state": "NE"},
+        "specialInstructions": "prefer US136 or I-29",
+    }
+    stops = build_stops_from_load(load, (39.0997, -94.5786), (40.8136, -96.7026))
+    vias = [s for s in stops if s.get("is_via")]
+    assert not any("rock" in v["name"].lower() for v in vias)
+
+
+def test_avoided_place_falls_back_to_hwy_anchor():
+    """avoid NE + through Auburn → no Auburn; Rock Port (MO) still seeds for US136."""
+    load = {
+        "origin": {"city": "Kansas City", "state": "MO"},
+        "destination": {"city": "Omaha", "state": "NE"},
+        "specialInstructions": "avoid NE. prefer US136 through Auburn, NE",
+    }
+    # OD guard strips NE from avoided when dest is NE — use IL dest so NE stay avoided
+    load = {
+        "origin": {"city": "Kansas City", "state": "MO"},
+        "destination": {"city": "Chicago", "state": "IL"},
+        "specialInstructions": "avoid NE. prefer US136 through Auburn, NE",
+    }
+    stops = build_stops_from_load(load, (39.0997, -94.5786), (41.8781, -87.6298))
+    vias = [s for s in stops if s.get("is_via")]
+    assert not any("auburn" in v["name"].lower() for v in vias)
+    # Rock Port MO is non-avoided fallback for US136
+    assert any("rock" in v["name"].lower() and v.get("state") == "MO" for v in vias)
+
+
+def test_city_state_mismatch_skips_seed():
+    """Auburn, AL must not seed NE Auburn coords."""
+    seeds = seed_preferred_hwy_vias(
+        ["US 136"],
+        [],
+        "prefer US136 through Auburn, AL",
+        origin_state="MO",
+        dest_state="NE",
+    )
+    assert not any("auburn" in s["name"].lower() for s in seeds)
+    # No valid place → fall back to Rock Port
+    assert any("rock" in s["name"].lower() for s in seeds)
