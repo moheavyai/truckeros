@@ -628,3 +628,36 @@ describe('Portal Assist — Missouri Carrier Express playbook v3', () => {
     expect(source).toContain('handleCopyMoStep')
   })
 })
+
+describe('Portal Assist — CAPTURE safety + playbook wiring', () => {
+  it('exposes export-fields-help and CAPTURE.md docs path', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="export-fields-help"')
+    expect(source).toContain('lib/portal-playbooks/CAPTURE.md')
+  })
+
+  it('ships safety copy: no auto-fill, no credentials, no crawl', () => {
+    const source = readSource(pagePath)
+    expect(source).toMatch(/no auto-fill|no credentials|no crawl/i)
+    expect(source).toContain('no auto-fill, no credentials, no crawl')
+  })
+
+  it('does not embed executable capture/RPA payloads in page source', () => {
+    const source = readSource(pagePath)
+    // CAPTURE is docs-only (CAPTURE.md); page must not ship bookmarklet/IIFE/RPA
+    expect(source).not.toContain('javascript:')
+    expect(source).not.toContain('eval(')
+    expect(source).not.toContain('new Function')
+    expect(source).not.toContain('dangerouslySetInnerHTML')
+    expect(source).not.toContain('capturePortalFields')
+    expect(source).not.toContain("querySelectorAll('input:not([type=hidden]")
+  })
+
+  it('wires getPlaybook and prefers playbook.portalUrl / payLastIfMultiState', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain("import { getPlaybook } from '@/lib/portal-playbooks'")
+    expect(source).toContain('getPlaybook(selectedState)')
+    expect(source).toContain('playbook.portalUrl')
+    expect(source).toContain('playbook.flags?.payLastIfMultiState')
+  })
+})
