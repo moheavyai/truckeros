@@ -87,10 +87,32 @@ describe('Permit test page — OR-Tools dev chrome production gate', () => {
     expect(gated).toContain('Restart OR-Tools Service')
     expect(gated).toContain('OR-Tools: Connected')
     expect(gated).toContain('OR-Tools: Unreachable')
+    expect(gated).toContain('OR-Tools: Checking…')
     expect(gated).toContain('checkOrToolsHealth({ manual: true })')
     expect(gated).toContain('restartOrToolsService()')
     expect(gated).toMatch(/^\{isDevEnvironment\(\) && \(\(\) => \{/)
     expect(gated).toMatch(/\}\)\(\)\}$/)
+
+    // Compact single-row chrome: tight padding, status + actions co-located
+    expect(gated).toMatch(/px-3 py-1\.5/)
+    expect(gated).toContain('flex flex-wrap items-center')
+    expect(gated).toContain('gap-x-2 gap-y-1.5')
+    expect(gated).toContain('ml-auto')
+    expect(gated).not.toMatch(/flex flex-col gap-1 flex-1 min-w-\[200px\]/)
+
+    // Touch-friendly restart/test controls stay compact on sm+
+    expect(gated).toContain('min-h-[36px] sm:min-h-0')
+    expect(gated).toContain('touch-manipulation')
+
+    // Unreachable always-visible one-liner + full detail on title
+    expect(gated).toContain('unreachableTitle')
+    expect(gated).toContain('Port 8000 · may fall back to OSRM · use Restart')
+    expect(gated).toMatch(/title=\{bannerTitle\}|title=\{unreachableTitle\}/)
+    expect(gated).toContain('port 8000')
+    expect(gated).toContain('fall back to OSRM')
+
+    // Version/build truncates with explicit max-width
+    expect(gated).toContain('min-w-0 max-w-[8rem] sm:max-w-xs')
 
     // Button labels appear only once in the whole page (inside this gate)
     expect(countOccurrences(source, ": 'Test Connection'")).toBe(1)
@@ -109,6 +131,11 @@ describe('Permit test page — OR-Tools dev chrome production gate', () => {
     const messageBlock = gatedRestartMessageBlock(readPermitPageSource())
     expect(messageBlock).toMatch(/isDevEnvironment\(\)\s*&&\s*restartOrToolsMessage/)
     expect(messageBlock).toContain('npm run restart:ortools')
+    // Compact bar classes
+    expect(messageBlock).toMatch(/mt-1\.5 px-3 py-1\.5/)
+    // Fallback CLI suffix is conditional — not shown on success recovery
+    expect(messageBlock).toMatch(/!\/back online\/i\.test\(restartOrToolsMessage\)/)
+    expect(messageBlock).toContain("!restartOrToolsMessage.includes('restart:ortools')")
   })
 
   it('keeps health/restart handlers in page source for local use', () => {
