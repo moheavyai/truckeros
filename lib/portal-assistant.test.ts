@@ -14,6 +14,7 @@ import {
   hasPrefillValue,
   PORTAL_TRIP_TYPES,
   isMissouriPortal,
+  isMoMultiStatePrefill,
   getMoPortalFieldOrder,
   getMoPortalFieldLabel,
   MO_PORTAL_FIELD_ORDER,
@@ -1139,6 +1140,27 @@ describe('Missouri Portal Assist playbook', () => {
 
   it('exposes MO field order and MoDOT-oriented labels', () => {
     expect(getMoPortalFieldOrder()).toEqual([...MO_PORTAL_FIELD_ORDER])
+    // Full order sequence locked (includes carrier_mc)
+    expect(MO_PORTAL_FIELD_ORDER.join(',')).toBe(
+      [
+        'trip_type',
+        'origin',
+        'destination',
+        'weight',
+        'length',
+        'width',
+        'height',
+        'axles',
+        'route',
+        'border_entry',
+        'border_exit',
+        'vehicle_id',
+        'carrier_usdot',
+        'carrier_mc',
+        'carrier_company',
+        'driver_name',
+      ].join(',')
+    )
     expect(getMoPortalFieldLabel('trip_type')).toBe('Permit type')
     expect(getMoPortalFieldLabel('origin')).toBe('Origin (city, state / junction)')
     expect(getMoPortalFieldLabel('destination')).toBe(
@@ -1154,13 +1176,27 @@ describe('Missouri Portal Assist playbook', () => {
     expect(getMoPortalFieldLabel('border_exit')).toBe('Exit from Missouri')
     expect(getMoPortalFieldLabel('vehicle_id')).toBe('Power unit ID / VIN')
     expect(getMoPortalFieldLabel('carrier_usdot')).toBe('USDOT')
+    expect(getMoPortalFieldLabel('carrier_mc')).toBe('MC number')
     expect(getMoPortalFieldLabel('carrier_company')).toBe('Carrier name')
     expect(getMoPortalFieldLabel('driver_name')).toBe('Driver name')
     expect(MO_PORTAL_FIELD_LABELS.entry_point).toBe('Entry into Missouri')
   })
 
   it('buildPortalClipboardPacket uses MO order and labels when state is MO', () => {
-    const prefill = generatePortalPrefill(moCorridorRequest, 'MO')
+    const prefill = generatePortalPrefill(
+      {
+        ...moCorridorRequest,
+        cargo: {
+          carrierDriver: {
+            companyName: 'Show-Me Haul',
+            usdotNumber: '7654321',
+            mcNumber: 'MC-4242',
+            driverFullName: 'Pat Driver',
+          },
+        },
+      },
+      'MO'
+    )
     const packet = buildPortalClipboardPacket(prefill, STATE_PORTAL_CONFIGS.MO, {
       tripType: 'Single trip',
     })
@@ -1179,14 +1215,17 @@ describe('Missouri Portal Assist playbook', () => {
     expect(packet).toMatch(/Exit from Missouri:/)
     expect(packet).toContain('Power unit ID / VIN: PWR-9')
     expect(packet).toContain('USDOT: 7654321')
+    expect(packet).toContain('MC number: MC-4242')
     expect(packet).toContain('Carrier name: Show-Me Haul')
     expect(packet).toContain('Driver name: Pat Driver')
-    // Order: trip_type before origin, axles before route, USDOT before carrier name
+    // Full present-field order: trip → origin → … → axles → route → borders → vehicle → usdot → mc → company → driver
     const idx = (label: string) =>
       lines.findIndex((l) => l.startsWith(label + ':') || l.startsWith(label))
     expect(idx('Permit type')).toBeLessThan(idx('Origin (city, state / junction)'))
     expect(idx('Number of axles')).toBeLessThan(idx('Requested route / corridor'))
-    expect(idx('USDOT')).toBeLessThan(idx('Carrier name'))
+    expect(idx('USDOT')).toBeLessThan(idx('MC number'))
+    expect(idx('MC number')).toBeLessThan(idx('Carrier name'))
+    expect(idx('Carrier name')).toBeLessThan(idx('Driver name'))
   })
 
   it('generic clipboard path unchanged for non-MO states', () => {
@@ -1213,24 +1252,75 @@ describe('Missouri Portal Assist playbook', () => {
     )
   })
 
-  it('buildMoFilingSteps returns 7 numbered steps with expected keys', () => {
-    const steps = buildMoFilingSteps()
-    expect(steps).toHaveLength(7)
-    expect(steps.map((s) => s.stepNumber)).toEqual([1, 2, 3, 4, 5, 6, 7])
-    expect(steps[0].title).toMatch(/Login MoDOT Carrier Express/i)
-    expect(steps[1].title).toMatch(/OSOW|single-trip/i)
-    expect(steps[2].prefillKeys).toEqual(['origin', 'destination'])
-    expect(steps[3].prefillKeys).toEqual(['length', 'width', 'height', 'weight'])
-    expect(steps[4].prefillKeys).toEqual(['axles', 'vehicle_id'])
-    expect(steps[5].title).toMatch(/Route & MO entry\/exit/i)
-    expect(steps[5].prefillKeys).toEqual(['route', 'border_entry', 'border_exit'])
-    expect(steps[6].title).toMatch(/Review on MoDOT/i)
-    expect(steps[6].prefillKeys).toEqual([])
+  it('buildMoFilingSteps filters multiStateOnly for single-state MO and renumbers', () => {
+    const single = generatePortalPrefill(
+      {
+        origin_city: 'St. Louis',
+        origin_state: 'MO',
+        destination_city: 'Kansas City',
+        destination_state: 'MO',
+        weight: 90000,
+        length: 70,
+        width: 10,
+        height: 13.5,
+        route_corridor: ['MO'],
+        equipment: {},
+        cargo: {},
+      },
+      'MO'
+    )
+    expect(isMoMultiStatePrefill(single)).toBe(false)
+    const singleSteps = buildMoFilingSteps(single)
+    expect(singleSteps.find((s) => s.id === 'route_borders')).toBeUndefined()
+    expect(singleSteps.map((s) => s.id)).toEqual([
+      'login',
+      'start',
+      'origin_dest',
+      'dims_weight',
+      'axles_vehicle',
+      'carrier_driver',
+      'review_pay',
+    ])
+    expect(singleSteps.map((s) => s.stepNumber)).toEqual([1, 2, 3, 4, 5, 6, 7])
+
+    const multi = generatePortalPrefill(moCorridorRequest, 'MO')
+    expect(isMoMultiStatePrefill(multi)).toBe(true)
+    const multiSteps = buildMoFilingSteps(multi)
+    expect(multiSteps).toHaveLength(8)
+    expect(multiSteps.map((s) => s.stepNumber)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+    expect(multiSteps.find((s) => s.id === 'route_borders')?.prefillKeys).toEqual([
+      'route',
+      'border_entry',
+      'border_exit',
+    ])
+    expect(multiSteps.find((s) => s.id === 'carrier_driver')?.prefillKeys).toEqual([
+      'carrier_usdot',
+      'carrier_mc',
+      'carrier_company',
+      'driver_name',
+    ])
+    // Without prefill: multiState false → omit route step
+    const noPrefill = buildMoFilingSteps()
+    expect(noPrefill.find((s) => s.id === 'route_borders')).toBeUndefined()
   })
 
-  it('buildMoFilingStepClipboard copies only step keys with MO labels', () => {
-    const prefill = generatePortalPrefill(moCorridorRequest, 'MO')
+  it('buildMoFilingStepClipboard copies step keys with MO labels (od, dims, trip, axles, route, carrier)', () => {
+    const prefill = generatePortalPrefill(
+      {
+        ...moCorridorRequest,
+        cargo: {
+          carrierDriver: {
+            companyName: 'Show-Me Haul',
+            usdotNumber: '7654321',
+            mcNumber: 'MC-4242',
+            driverFullName: 'Pat Driver',
+          },
+        },
+      },
+      'MO'
+    )
     const steps = buildMoFilingSteps(prefill)
+
     const od = steps.find((s) => s.id === 'origin_dest')!
     const odPacket = buildMoFilingStepClipboard(prefill, od)
     expect(odPacket).toContain('Origin (city, state / junction): Tulsa, OK')
@@ -1241,6 +1331,29 @@ describe('Missouri Portal Assist playbook', () => {
     const dimsPacket = buildMoFilingStepClipboard(prefill, dims)
     expect(dimsPacket).toContain('Overall length:')
     expect(dimsPacket).toContain('Gross weight (lbs):')
+
+    const start = steps.find((s) => s.id === 'start')!
+    expect(buildMoFilingStepClipboard(prefill, start, { tripType: 'Round trip' })).toBe(
+      'Permit type: Round trip'
+    )
+
+    const axles = steps.find((s) => s.id === 'axles_vehicle')!
+    const axlesPacket = buildMoFilingStepClipboard(prefill, axles)
+    expect(axlesPacket).toContain('Number of axles: 6')
+    expect(axlesPacket).toContain('Power unit ID / VIN: PWR-9')
+
+    const route = steps.find((s) => s.id === 'route_borders')!
+    const routePacket = buildMoFilingStepClipboard(prefill, route)
+    expect(routePacket).toContain('Requested route / corridor: OK → MO → IL')
+    expect(routePacket).toMatch(/Entry into Missouri:/)
+    expect(routePacket).toMatch(/Exit from Missouri:/)
+
+    const carrier = steps.find((s) => s.id === 'carrier_driver')!
+    const carrierPacket = buildMoFilingStepClipboard(prefill, carrier)
+    expect(carrierPacket).toContain('USDOT: 7654321')
+    expect(carrierPacket).toContain('MC number: MC-4242')
+    expect(carrierPacket).toContain('Carrier name: Show-Me Haul')
+    expect(carrierPacket).toContain('Driver name: Pat Driver')
 
     const login = steps.find((s) => s.id === 'login')!
     expect(buildMoFilingStepClipboard(prefill, login)).toBe('')

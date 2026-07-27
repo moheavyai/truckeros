@@ -1044,6 +1044,7 @@ export const MO_PORTAL_FIELD_ORDER: readonly string[] = [
   'border_exit',
   'vehicle_id',
   'carrier_usdot',
+  'carrier_mc',
   'carrier_company',
   'driver_name',
 ] as const
@@ -1065,6 +1066,7 @@ export const MO_PORTAL_FIELD_LABELS: Record<string, string> = {
   exit_point: 'Exit from Missouri',
   vehicle_id: 'Power unit ID / VIN',
   carrier_usdot: 'USDOT',
+  carrier_mc: 'MC number',
   carrier_company: 'Carrier name',
   driver_name: 'Driver name',
 }
@@ -1112,11 +1114,35 @@ export interface MoFilingStep {
 }
 
 /**
- * Numbered MoDOT Carrier Express filing steps for the MO playbook panel.
- * Step 6 (route & entry/exit) is always listed; UI can still show it for single-state MO.
+ * Multi-state signal for MO playbook (corridor 2+ codes or origin≠dest).
+ * Matches buildPortalCompletenessChecklist multi-state detection.
  */
-export function buildMoFilingSteps(_prefill?: PrefillPackage | null): MoFilingStep[] {
-  return [
+export function isMoMultiStatePrefill(prefill?: PrefillPackage | null): boolean {
+  if (!prefill) return false
+  const corridorCodes = (prefill.routeCorridor || [])
+    .map((s) => String(s ?? '').trim())
+    .filter(Boolean)
+  if (corridorCodes.length > 1) return true
+  const load = prefill.loadDetails || {}
+  const originSt = String(load.origin_state ?? '').trim().toUpperCase()
+  const destSt = String(load.destination_state ?? '').trim().toUpperCase()
+  return (
+    !!originSt &&
+    !!destSt &&
+    originSt !== destSt &&
+    !/^(UNDEFINED|NULL)$/.test(originSt) &&
+    !/^(UNDEFINED|NULL)$/.test(destSt)
+  )
+}
+
+/**
+ * Numbered MoDOT Carrier Express filing steps for the MO playbook panel.
+ * Filters multiStateOnly steps (route & MO entry/exit) for single-state MO;
+ * renumbers remaining steps 1..N.
+ */
+export function buildMoFilingSteps(prefill?: PrefillPackage | null): MoFilingStep[] {
+  const multiState = isMoMultiStatePrefill(prefill)
+  const all: MoFilingStep[] = [
     {
       id: 'login',
       stepNumber: 1,
@@ -1148,19 +1174,27 @@ export function buildMoFilingSteps(_prefill?: PrefillPackage | null): MoFilingSt
       prefillKeys: ['axles', 'vehicle_id'],
     },
     {
-      id: 'route_borders',
+      id: 'carrier_driver',
       stepNumber: 6,
+      title: 'Carrier, USDOT & driver',
+      prefillKeys: ['carrier_usdot', 'carrier_mc', 'carrier_company', 'driver_name'],
+    },
+    {
+      id: 'route_borders',
+      stepNumber: 7,
       title: 'Route & MO entry/exit (if multi-state)',
       prefillKeys: ['route', 'border_entry', 'border_exit'],
       multiStateOnly: true,
     },
     {
       id: 'review_pay',
-      stepNumber: 7,
+      stepNumber: 8,
       title: 'Review on MoDOT → pay',
       prefillKeys: [],
     },
   ]
+  const filtered = all.filter((s) => !s.multiStateOnly || multiState)
+  return filtered.map((s, i) => ({ ...s, stepNumber: i + 1 }))
 }
 
 /**
