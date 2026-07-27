@@ -12,6 +12,7 @@ import {
   resolveStepTips,
   resolveStepTitle,
 } from './index'
+import type { PortalPlaybook } from './types'
 
 describe('PortalPlaybook registry', () => {
   it('getPlaybook returns MO playbook and null for unmapped states', () => {
@@ -120,5 +121,77 @@ describe('MO PortalPlaybook data (v3)', () => {
     for (const k of MO_PLAYBOOK.applicationKeys || []) {
       expect(keys.has(k) || MO_PLAYBOOK_FIELD_ORDER.includes(k)).toBe(true)
     }
+  })
+
+  it('resolveStepTips for trip_tab swaps multi-state border/Keypoint tip', () => {
+    const trip = MO_PLAYBOOK.steps.find((s) => s.id === 'trip_tab')!
+    const multiTips = resolveStepTips(trip, true)
+    const singleTips = resolveStepTips(trip, false)
+    expect(multiTips.join(' ')).toMatch(/Keypoint|border/i)
+    expect(multiTips.join(' ')).toMatch(/borders/i)
+    expect(singleTips.join(' ')).toMatch(/if needed/i)
+    expect(singleTips.join(' ')).not.toMatch(/for MO borders/i)
+    expect(multiTips).toContain('Optional Keypoint/map for MO borders')
+    expect(singleTips).toContain('Optional Keypoint/map if needed')
+  })
+
+  it('every MO_PLAYBOOK_FIELD_ORDER key exists in MO_PLAYBOOK.fields', () => {
+    const fieldKeys = new Set(MO_PLAYBOOK.fields.map((f) => f.key))
+    for (const key of MO_PLAYBOOK_FIELD_ORDER) {
+      expect(fieldKeys.has(key)).toBe(true)
+    }
+  })
+
+  it('field enumOptions match MO_PLAYBOOK.enums for tip/power unit selects', () => {
+    const byKey = Object.fromEntries(MO_PLAYBOOK.fields.map((f) => [f.key, f]))
+    const pairs: Array<{ key: string; enumKey: keyof NonNullable<typeof MO_PLAYBOOK.enums> }> = [
+      { key: 'tip_conveyance', enumKey: 'conveyance' },
+      { key: 'tip_travel', enumKey: 'travel' },
+      { key: 'tip_vehicle_type', enumKey: 'vehicleType' },
+      { key: 'power_unit_type', enumKey: 'powerUnitType' },
+    ]
+    for (const { key, enumKey } of pairs) {
+      const fieldOpts = byKey[key]?.enumOptions
+      const enumOpts = MO_PLAYBOOK.enums?.[enumKey]
+      expect(fieldOpts).toBeDefined()
+      expect(enumOpts).toBeDefined()
+      expect([...fieldOpts!]).toEqual([...enumOpts!])
+    }
+  })
+})
+
+describe('fieldOrderFromPlaybook (generic non-MO)', () => {
+  it('composes application+trip+payment keys with dedupe on overlap', () => {
+    const fixture: PortalPlaybook = {
+      stateCode: 'XX',
+      portalName: 'Test Portal',
+      portalUrl: 'https://example.test',
+      steps: [],
+      fields: [
+        { key: 'a', label: 'A' },
+        { key: 'b', label: 'B' },
+        { key: 'c', label: 'C' },
+        { key: 'd', label: 'D' },
+      ],
+      applicationKeys: ['a', 'b', 'shared'],
+      tripKeys: ['shared', 'c'],
+      paymentKeys: ['shared', 'd'],
+    }
+    expect(fieldOrderFromPlaybook(fixture)).toEqual(['a', 'b', 'shared', 'c', 'd'])
+  })
+
+  it('falls back to fields.map(key) when key groups are empty', () => {
+    const fixture: PortalPlaybook = {
+      stateCode: 'YY',
+      portalName: 'Empty Groups Portal',
+      portalUrl: 'https://example.test/yy',
+      steps: [],
+      fields: [
+        { key: 'first', label: 'First' },
+        { key: 'second', label: 'Second' },
+        { key: 'third', label: 'Third' },
+      ],
+    }
+    expect(fieldOrderFromPlaybook(fixture)).toEqual(['first', 'second', 'third'])
   })
 })
