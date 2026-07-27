@@ -10,9 +10,11 @@
  *
  * Runtime: maplibre-gl is loaded via dynamic import() inside useEffect so webpack/Next
  * interop cannot leave the default export undefined (top-level default import → Map crash).
- * Style URL: NEXT_PUBLIC_MAP_STYLE_URL or OpenFreeMap liberty default.
+ * Style URL: NEXT_PUBLIC_MAP_STYLE_URL (trimmed) or OpenFreeMap liberty default.
  * If primary style errors before first load, fall back once to demotiles (blank-canvas resilience).
- * After construct + style load: map.resize() + rAF double-resize for late flex/layout.
+ * Residual primary-style errors during the fallback switch are ignored; permanent fail only if
+ * the fallback style also errors after the transition settles.
+ * After construct + style load: immediate map.resize() + two rAF follow-up resizes for late layout.
  * onMapClick is optional Map v2 hook (unused in v1 UI). Drag-edit is not wired in v1.
  * LatLon [lat,lon] is converted to GeoJSON [lon,lat] only at this MapLibre boundary.
  */
@@ -54,7 +56,8 @@ const TILES_LOADING_MESSAGE = 'Loading map tiles…'
 
 function resolveMapStyle(): string {
   if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_MAP_STYLE_URL) {
-    return process.env.NEXT_PUBLIC_MAP_STYLE_URL
+    const trimmed = process.env.NEXT_PUBLIC_MAP_STYLE_URL.trim()
+    if (trimmed) return trimmed
   }
   return DEFAULT_MAP_STYLE
 }
@@ -73,8 +76,26 @@ function safeRemoveMap(map: MaplibreMap | null | undefined) {
   }
 }
 
-/** resize + requestAnimationFrame double-resize for late flex/grid layout. */
-function scheduleMapResize(map: MaplibreMap | null | undefined) {
+function cancelRafIds(rafIds: number[]) {
+  if (typeof cancelAnimationFrame === 'undefined') {
+    rafIds.length = 0
+    return
+  }
+  for (const id of rafIds) {
+    cancelAnimationFrame(id)
+  }
+  rafIds.length = 0
+}
+
+/**
+ * Immediate resize + two requestAnimationFrame follow-ups (three resizes total)
+ * so late flex/grid layout does not leave a blank canvas. Optional rafIds tracks
+ * rAF handles for cancelAnimationFrame on unmount.
+ */
+function scheduleMapResize(
+  map: MaplibreMap | null | undefined,
+  rafIds?: number[]
+) {
   if (!map) return
   try {
     map.resize()
@@ -82,20 +103,22 @@ function scheduleMapResize(map: MaplibreMap | null | undefined) {
     // map may already be removed
   }
   if (typeof requestAnimationFrame === 'undefined') return
-  requestAnimationFrame(() => {
+  const id1 = requestAnimationFrame(() => {
     try {
       map.resize()
     } catch {
       // ignore
     }
-    requestAnimationFrame(() => {
+    const id2 = requestAnimationFrame(() => {
       try {
         map.resize()
       } catch {
         // ignore
       }
     })
+    rafIds?.push(id2)
   })
+  rafIds?.push(id1)
 }
 
 export interface RouteMapProps {
@@ -105,6 +128,8 @@ export interface RouteMapProps {
   onMapClick?: (coords: { lat: number; lon: number }) => void
   /** Fires when canvas fails to load (null when cleared on remount success path). */
   onLoadError?: (message: string | null) => void
+  /** True after style `load` (primary or demotiles fallback); false on cleanup / fail. */
+  onStyleLoaded?: (loaded: boolean) => void
 }
 
 function buildMarkerElement(stop: RouteMapStop): HTMLDivElement {
@@ -194,6 +219,7 @@ export default function RouteMap({
   className,
   onMapClick,
   onLoadError,
+  onStyleLoaded,
 }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MaplibreMap | null>(null)
@@ -203,9 +229,16 @@ export default function RouteMap({
   onMapClickRef.current = onMapClick
   const onLoadErrorRef = useRef(onLoadError)
   onLoadErrorRef.current = onLoadError
+  const onStyleLoadedRef = useRef(onStyleLoaded)
+  onStyleLoadedRef.current = onStyleLoaded
   const styleReadyRef = useRef(false)
   /** One demotiles setStyle attempt per map instance (primary style error before load). */
   const styleFallbackTriedRef = useRef(false)
+  /**
+   * True while switching to demotiles: residual aborted-primary errors must not failLoad/teardown.
+   * Cleared after two rAF frames once setStyle has been issued.
+   */
+  const styleFallbackTransitionRef = useRef(false)
   /** Prevents duplicate loadError from construct + style error paths. */
   const loadErrorOnceRef = useRef(false)
   /** Bumps when map instance is ready so marker/line sync re-runs after async import. */
@@ -224,6 +257,8 @@ export default function RouteMap({
     }
     setLoadError(LOAD_ERROR_MESSAGE)
     onLoadErrorRef.current?.(LOAD_ERROR_MESSAGE)
+    setStyleLoaded(false)
+    onStyleLoadedRef.current?.(false)
   }
 
   // Init map once via dynamic import (webpack default interop safe)
@@ -232,6 +267,8 @@ export default function RouteMap({
 
     let cancelled = false
     let createdMap: MaplibreMap | null = null
+    const resizeRafIds: number[] = []
+    const fallbackTransitionRafIds: number[] = []
 
     ;(async () => {
       let mod: unknown
@@ -277,13 +314,18 @@ export default function RouteMap({
         mapRef.current = map
         styleReadyRef.current = false
         styleFallbackTriedRef.current = false
+        styleFallbackTransitionRef.current = false
         setStyleLoaded(false)
+        onStyleLoadedRef.current?.(false)
 
         const onLoad = () => {
+          if (cancelled || mapRef.current !== map) return
           styleReadyRef.current = true
+          styleFallbackTransitionRef.current = false
           setStyleLoaded(true)
+          onStyleLoadedRef.current?.(true)
           // Style paint often needs an explicit resize after flex layout settles
-          scheduleMapResize(map)
+          scheduleMapResize(map, resizeRafIds)
         }
         map.on('load', onLoad)
 
@@ -291,7 +333,8 @@ export default function RouteMap({
           onMapClickRef.current?.({ lat: e.lngLat.lat, lon: e.lngLat.lng })
         })
 
-        // Style/init failures: one demotiles fallback before permanent fail; post-load tile noise only logs
+        // Style/init failures: one demotiles fallback before permanent fail; post-load tile noise only logs.
+        // Residual primary errors during the setStyle transition must not tear down a healthy fallback.
         map.on('error', (e: { error?: Error; message?: string }) => {
           console.error('[RouteMap] map error', e?.error || e?.message || e)
           if (cancelled || loadErrorOnceRef.current) return
@@ -299,6 +342,7 @@ export default function RouteMap({
 
           if (!styleFallbackTriedRef.current) {
             styleFallbackTriedRef.current = true
+            styleFallbackTransitionRef.current = true
             console.warn(
               '[RouteMap] primary style failed; falling back to demotiles',
               FALLBACK_MAP_STYLE
@@ -306,12 +350,32 @@ export default function RouteMap({
             console.info('[RouteMap] using map style', FALLBACK_MAP_STYLE)
             try {
               map.setStyle(FALLBACK_MAP_STYLE)
+              // Ignore aborted-primary residuals through two frames; then arm permanent-fail path
+              if (typeof requestAnimationFrame !== 'undefined') {
+                const t1 = requestAnimationFrame(() => {
+                  const t2 = requestAnimationFrame(() => {
+                    if (!cancelled) styleFallbackTransitionRef.current = false
+                  })
+                  fallbackTransitionRafIds.push(t2)
+                })
+                fallbackTransitionRafIds.push(t1)
+              } else {
+                styleFallbackTransitionRef.current = false
+              }
               return
             } catch (setErr) {
               console.error('[RouteMap] fallback setStyle failed', setErr)
+              styleFallbackTransitionRef.current = false
+              // fall through to permanent fail (setStyle threw synchronously)
             }
           }
 
+          // Still switching styles — residual primary/abort noise only
+          if (styleFallbackTransitionRef.current) {
+            return
+          }
+
+          // Fallback style also failed (pre-load error after transition settled)
           failLoad('[RouteMap] map style failed to load', e?.error || e)
           safeRemoveMap(map)
           if (mapRef.current === map) mapRef.current = null
@@ -319,6 +383,7 @@ export default function RouteMap({
           mlRef.current = null
           setMapReady(false)
           setStyleLoaded(false)
+          onStyleLoadedRef.current?.(false)
         })
 
         if (cancelled) {
@@ -344,10 +409,17 @@ export default function RouteMap({
 
     return () => {
       cancelled = true
+      cancelRafIds(resizeRafIds)
+      cancelRafIds(fallbackTransitionRafIds)
       markersRef.current.forEach((m) => m.remove())
       markersRef.current = []
       styleReadyRef.current = false
       styleFallbackTriedRef.current = false
+      styleFallbackTransitionRef.current = false
+      // Strict Mode: clear sticky load-error so re-init is not stuck on the error overlay
+      loadErrorOnceRef.current = false
+      setLoadError(null)
+      onLoadErrorRef.current?.(null)
       const map = createdMap ?? mapRef.current
       safeRemoveMap(map)
       mapRef.current = null
@@ -355,13 +427,18 @@ export default function RouteMap({
       // Strict Mode: setup→cleanup→setup must clear mapReady so second setMapReady(true) retriggers sync
       setMapReady(false)
       setStyleLoaded(false)
+      onStyleLoadedRef.current?.(false)
     }
   }, [])
 
-  // Once after mapReady: resize + rAF double-resize (container may have been 0×0 at construct)
+  // Once after mapReady: immediate + two rAF resizes (container may have been 0×0 at construct)
   useEffect(() => {
     if (!mapReady || loadError) return
-    scheduleMapResize(mapRef.current)
+    const rafIds: number[] = []
+    scheduleMapResize(mapRef.current, rafIds)
+    return () => {
+      cancelRafIds(rafIds)
+    }
   }, [mapReady, loadError])
 
   // ResizeObserver: map.resize only — do not re-fit (preserves user pan/zoom).
@@ -480,6 +557,8 @@ export default function RouteMap({
       {!loadError && !styleLoaded && (
         <div
           className="absolute inset-0 z-10 flex items-center justify-center px-4 text-sm text-slate-500 bg-slate-100/80 pointer-events-none"
+          role="status"
+          aria-live="polite"
           data-testid="route-map-tiles-loading"
         >
           {TILES_LOADING_MESSAGE}

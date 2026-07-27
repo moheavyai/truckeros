@@ -160,7 +160,10 @@ describe('RouteMap MapLibre foundation', () => {
     const card = read(cardPath)
     expect(card).toContain('mapLoadFailed')
     expect(card).toContain('onLoadError')
-    expect(card).toContain('isIdleEmpty && !mapLoadFailed')
+    expect(card).toContain('onStyleLoaded')
+    expect(card).toContain('mapStyleLoaded')
+    // Idle hint only after style ready (no dual-stack with tiles loading)
+    expect(card).toContain('isIdleEmpty && !mapLoadFailed && mapStyleLoaded')
     expect(card).toContain('showCalculating')
     expect(card).toContain('isCalculating && !mapLoadFailed')
     expect(card).toContain("mapLoadFailed\n    ? 'Map failed to load'")
@@ -181,26 +184,44 @@ describe('RouteMap MapLibre foundation', () => {
     expect(resizeFn).not.toContain('fitToStops')
   })
 
-  it('resizes on style load and after mapReady (rAF double-resize for blank canvas)', () => {
+  it('resizes on style load and after mapReady (immediate + two rAF follow-ups)', () => {
     const source = read(mapPath)
     expect(source).toContain('scheduleMapResize')
+    expect(source).toContain('cancelRafIds')
+    expect(source).toContain('cancelAnimationFrame')
     expect(source).toContain('requestAnimationFrame')
     expect(source).toContain('map.resize()')
-    // on load path
+    // scheduleMapResize body: immediate resize then nested rAF pair (3 total)
+    const fnStart = source.indexOf('function scheduleMapResize')
+    expect(fnStart).toBeGreaterThanOrEqual(0)
+    const fnBody = source.slice(fnStart, fnStart + 900)
+    expect(fnBody).toMatch(/map\.resize\(\)[\s\S]*requestAnimationFrame\([\s\S]*map\.resize\(\)[\s\S]*requestAnimationFrame\([\s\S]*map\.resize\(\)/)
+    // on load path with cancelled / instance guard
+    expect(source).toMatch(/onLoad[\s\S]*cancelled[\s\S]*mapRef\.current !== map/)
     expect(source).toMatch(/onLoad[\s\S]*scheduleMapResize/)
-    // once after mapReady
-    expect(source).toMatch(/mapReady[\s\S]*scheduleMapResize|scheduleMapResize\(mapRef/)
+    // once after mapReady; rAF cancelled on effect cleanup
+    expect(source).toMatch(/scheduleMapResize\(mapRef/)
     expect(source).toContain('[mapReady, loadError]')
   })
 
-  it('falls back once to demotiles when primary style errors before load', () => {
+  it('falls back once to demotiles; ignores residual errors until transition settles', () => {
     const source = read(mapPath)
     expect(source).toContain('https://demotiles.maplibre.org/style.json')
     expect(source).toContain('FALLBACK_MAP_STYLE')
     expect(source).toContain('styleFallbackTriedRef')
+    expect(source).toContain('styleFallbackTransitionRef')
     expect(source).toContain('setStyle(FALLBACK_MAP_STYLE)')
     expect(source).toContain("console.info('[RouteMap] using map style'")
     expect(source).toContain('falling back to demotiles')
+    // Branch order: first error → setStyle + return; transition residual → return; then failLoad
+    expect(source).toMatch(
+      /!styleFallbackTriedRef\.current[\s\S]*setStyle\(FALLBACK_MAP_STYLE\)[\s\S]*return[\s\S]*styleFallbackTransitionRef\.current[\s\S]*return[\s\S]*failLoad\(/
+    )
+    // Strict Mode cleanup resets sticky load error
+    expect(source).toContain('loadErrorOnceRef.current = false')
+    expect(source).toContain('setLoadError(null)')
+    // trim whitespace-only env style URL
+    expect(source).toMatch(/NEXT_PUBLIC_MAP_STYLE_URL\.trim\(\)/)
   })
 
   it('shows Loading map tiles overlay until style load; permanent fail uses Map failed to load', () => {
@@ -210,6 +231,10 @@ describe('RouteMap MapLibre foundation', () => {
     expect(source).toContain('styleLoaded')
     expect(source).toContain('Map failed to load')
     expect(source).toContain('route-map-load-error')
+    // Overlay exclusivity gate
+    expect(source).toContain('!loadError && !styleLoaded')
+    expect(source).toContain('role="status"')
+    expect(source).toContain('aria-live="polite"')
   })
 
   it('enables cooperativeGestures only for coarse pointer', () => {
