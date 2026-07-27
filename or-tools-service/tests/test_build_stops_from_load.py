@@ -497,3 +497,36 @@ def test_city_state_mismatch_skips_seed():
     assert not any("auburn" in s["name"].lower() for s in seeds)
     # No valid place → fall back to Rock Port
     assert any("rock" in s["name"].lower() for s in seeds)
+
+
+def test_place_suppresses_nearest_hwy_only():
+    """Place next to I-40 must not suppress US136 Rock Port in same clause."""
+    seeds = seed_preferred_hwy_vias(
+        ["US 136", "I-40"],
+        [],
+        "prefer US136 and I-40 through Oklahoma City",
+        origin_state="MO",
+        dest_state="OK",
+    )
+    # OKC place for nearest I-40 → no OKC anchor double; Rock Port for US136 still ok
+    assert any("rock" in s["name"].lower() for s in seeds), (
+        f"US136 anchor should remain; seeds={[s['name'] for s in seeds]}"
+    )
+
+
+def test_manual_waypoints_with_manual_route_both_present():
+    """manualWaypoints forced vias coexist with manualRoute city vias."""
+    load = {
+        "origin": {"city": "A", "state": "MO"},
+        "destination": {"city": "B", "state": "NE"},
+        "manualRoute": ["memphis"],
+        "manualWaypoints": [
+            {"lat": 40.5, "lon": -95.7, "name": "Map Pick", "source": "map"},
+        ],
+    }
+    stops = build_stops_from_load(load, (39.0, -94.0), (41.0, -96.0))
+    vias = [s for s in stops if s.get("is_via")]
+    assert any(abs(v["lat"] - 40.5) < 0.01 for v in vias)
+    assert any("memphis" in v["name"].lower() for v in vias)
+    # Prefer anchors must not inject when manualRoute wins text path
+    assert not any("rock" in v["name"].lower() for v in vias)

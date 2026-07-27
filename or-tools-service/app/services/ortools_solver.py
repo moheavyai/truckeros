@@ -1134,11 +1134,56 @@ def extract_county_vias(
     return vias, notes
 
 
+def _parse_prefer_phrase_highways(phrase: str) -> tuple[list[str], list[list[str]]]:
+    """
+    Parse preferred highways from one prefer-clause phrase.
+
+    Precedence: split on ``then`` first (ordered segments), then parse ``or`` only
+    *within* each segment so:
+      - "US136 or I-29 then US75" → or-group [US136, I-29], required US75
+      - "US136 then US75 or I-29" → required US136, or-group [US75, I-29]
+    Returns (ordered preferred list, or_groups).
+    """
+    preferred: list[str] = []
+    or_groups: list[list[str]] = []
+    if not (phrase or "").strip():
+        return preferred, or_groups
+
+    segments = re.split(r"\s+then\s+", phrase, flags=re.IGNORECASE)
+    for seg in segments:
+        or_parts = re.split(r"\s+or\s+", seg, flags=re.IGNORECASE)
+        if len(or_parts) > 1:
+            group: list[str] = []
+            for part in or_parts:
+                for hm in _HWY_TOKEN_RE.finditer(part):
+                    pref = _normalize_hwy_token(hm.group(1))
+                    if not pref:
+                        continue
+                    if pref not in group:
+                        group.append(pref)
+                    if pref not in preferred:
+                        preferred.append(pref)
+            if len(group) >= 2 and group not in or_groups:
+                or_groups.append(group)
+        else:
+            for hm in _HWY_TOKEN_RE.finditer(seg):
+                pref = _normalize_hwy_token(hm.group(1))
+                if pref and pref not in preferred:
+                    preferred.append(pref)
+    return preferred, or_groups
+
+
 def _preferred_hwys_with_named_places(
     special_text: str | None,
     preferred: list[str] | None,
 ) -> set[str]:
-    """Preferred hwys that share a prefer-clause window with a CITY_MAP place name."""
+    """
+    Preferred hwys that have a CITY_MAP place named near them in a prefer clause.
+
+    Place suppress is scoped to the *nearest preceding* hwy token (else nearest overall),
+    not every hwy in the whole clause — so "prefer US136 and I-40 through Oklahoma City"
+    suppresses only I-40, not US136/Rock Port.
+    """
     t = (special_text or "").lower()
     pref_set = {_normalize_hwy_token(p) for p in (preferred or []) if p}
     if not t or not pref_set:
@@ -1146,32 +1191,46 @@ def _preferred_hwys_with_named_places(
     city_keys = sorted(CITY_MAP.keys(), key=len, reverse=True)
     out: set[str] = set()
     for m in _PREFER_CLAUSE_RE.finditer(t):
-        phrase = (m.group(2) or "").lower()
         window = (m.group(0) or "").lower()
-        has_place = False
-        for ck in city_keys:
-            if re.search(
-                rf"(?<!\baway )(?<!\bdepart )(?:from|near|through|enter|via)\s+{re.escape(ck)}\b",
-                window,
-            ) or re.search(rf"(?:^|[\s,.(])via\s+{re.escape(ck)}\b", window):
-                # State mismatch on this city → not a valid named place for suppression
-                mm = re.search(
-                    rf"(?:from|near|through|enter|via)\s+{re.escape(ck)}\b",
-                    window,
-                )
-                if mm:
-                    stated = _optional_state_after(window, mm.end())
-                    map_st = CITY_MAP[ck][2]
-                    if stated and stated != map_st:
-                        continue
-                has_place = True
-                break
-        if not has_place:
-            continue
-        for hm in _HWY_TOKEN_RE.finditer(phrase):
+        # Collect hwy tokens with span in this window
+        hwy_spans: list[tuple[int, int, str]] = []
+        for hm in _HWY_TOKEN_RE.finditer(window):
             pref = _normalize_hwy_token(hm.group(1))
             if pref in pref_set:
-                out.add(pref)
+                hwy_spans.append((hm.start(), hm.end(), pref))
+        if not hwy_spans:
+            continue
+        for ck in city_keys:
+            for pm in re.finditer(
+                rf"(?:from|near|through|enter|via)\s+{re.escape(ck)}\b",
+                window,
+            ):
+                # Reject "away from" / "depart from"
+                pre = window[max(0, pm.start() - 8) : pm.start()]
+                if pre.endswith("away ") or pre.endswith("depart "):
+                    continue
+                stated = _optional_state_after(window, pm.end())
+                map_st = CITY_MAP[ck][2]
+                if stated and stated != map_st:
+                    continue
+                place_start = pm.start()
+                # Prefer nearest *preceding* hwy; else nearest overall
+                best_pref: str | None = None
+                best_key: tuple[int, int] | None = None  # (0=preceding, dist) lower better
+                for hs, he, pref in hwy_spans:
+                    if he <= place_start:
+                        dist = place_start - he
+                        key = (0, dist)
+                    else:
+                        dist = hs - pm.end()
+                        if dist < 0:
+                            dist = 0
+                        key = (1, dist)
+                    if best_key is None or key < best_key:
+                        best_key = key
+                        best_pref = pref
+                if best_pref:
+                    out.add(best_pref)
     return out
 
 
@@ -1440,29 +1499,16 @@ def parse_special_instructions(
     # Prefer/use/take/via clauses ONLY → extract highways (no bare-text fallback: "avoid I-40" must not prefer I-40)
     # Place prepositions (through/from/enter) do NOT cut the highway list so
     # "prefer US136 through Auburn then US75" still yields both US 136 and US 75.
+    # then/or precedence: split `then` first into ordered segments; `or` only within a segment.
     for m in _PREFER_CLAUSE_RE.finditer(t):
         phrase = m.group(2) or ""
-        # "US136 or I-29" → preferred alternatives (or-group)
-        or_parts = re.split(r"\s+or\s+", phrase, flags=re.IGNORECASE)
-        if len(or_parts) > 1:
-            group = []
-            for part in or_parts:
-                for hm in _HWY_TOKEN_RE.finditer(part):
-                    pref = _normalize_hwy_token(hm.group(1))
-                    if pref:
-                        if pref not in group:
-                            group.append(pref)
-                        if pref not in preferred:
-                            preferred.append(pref)
-            if len(group) >= 2:
-                if group not in preferred_or_groups:
-                    preferred_or_groups.append(group)
-            continue
-        # Ordered preferred: "US136 then US75" / "US136 and US75" / "US136, US75"
-        for hm in _HWY_TOKEN_RE.finditer(phrase):
-            pref = _normalize_hwy_token(hm.group(1))
-            if pref and pref not in preferred:
+        seg_prefs, seg_groups = _parse_prefer_phrase_highways(phrase)
+        for pref in seg_prefs:
+            if pref not in preferred:
                 preferred.append(pref)
+        for group in seg_groups:
+            if group not in preferred_or_groups:
+                preferred_or_groups.append(group)
 
     # Preferences for notes
     if re.search(r"(southern|south|go south|prefer south)", t):
