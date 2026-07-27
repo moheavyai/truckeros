@@ -78,16 +78,38 @@ describe('Equipment page — smart trailer types + axle groups', () => {
     // Card display: Year Make Model order
     expect(source).toContain('[t.year, t.make, t.model].filter(Boolean).join')
     expect(source).toContain('[tr.year, tr.make, tr.model].filter(Boolean).join')
-    // Meta save path persists manufacturer make/model/year separately from trailer_type
-    expect(source).toMatch(/type: 'trailer'[\s\S]*make: payloadData\.make \?\? null/)
+    // Year integer clamp helpers
+    expect(source).toContain('function parseEquipmentYear')
+    expect(source).toContain('function emptyToNull')
+    expect(source).toContain('y < 1900 || y > 2100')
     expect(source).toContain('trailer_type:')
-    // saveTrailer structured notes keep make distinct from trailer_type
+  })
+
+  it('aligns trailer identity load/save on year/make/model and never make←trailer_type', () => {
+    const source = readEquipmentSource()
+    // Load path: manufacturer identity from year/make/model columns (not trailer_*)
+    expect(source).toContain('make: d.meta.make ?? d.row.make ?? null')
+    expect(source).toContain('model: d.meta.model ?? d.row.model ?? null')
+    expect(source).toContain('year: d.meta.year ?? d.row.year ?? null')
+    expect(source).not.toContain('make: d.meta.make ?? d.row.trailer_make')
+    expect(source).not.toContain('model: d.meta.model ?? d.row.trailer_model')
+    expect(source).not.toContain('year: d.meta.year ?? d.row.trailer_year')
+    // trailer_type still may use legacy trailer_make column for equipment class
+    expect(source).toContain('trailer_type: d.meta.trailer_type ?? d.row.trailer_make')
+
     const saveStart = source.indexOf('async function saveTrailer()')
-    const saveSlice = source.slice(saveStart, saveStart + 2200)
-    expect(saveSlice).toContain('make: payloadData.make ?? null')
-    expect(saveSlice).toContain('model: payloadData.model ?? null')
-    expect(saveSlice).toContain('year: payloadData.year ?? null')
-    expect(saveSlice).toContain('trailer_type:')
+    const saveSlice = source.slice(saveStart, saveStart + 2800)
+    expect(saveSlice).toContain('const identityYear = parseEquipmentYear(payloadData.year)')
+    expect(saveSlice).toContain('const identityMake = emptyToNull(payloadData.make)')
+    expect(saveSlice).toContain('const identityModel = emptyToNull(payloadData.model)')
+    expect(saveSlice).toContain('const identityVin = emptyToNull(payloadData.vin)')
+    // dbPayload + structured use identityMake — never trailer_type fallback
+    expect(saveSlice).toContain('make: identityMake')
+    expect(saveSlice).toContain('model: identityModel')
+    expect(saveSlice).toContain('year: identityYear')
+    expect(saveSlice).toContain('vin: identityVin')
+    expect(saveSlice).not.toMatch(/make:\s*payloadData\.make\s*\|\|\s*payloadData\.trailer_type/)
+    expect(saveSlice).toContain('never fall back to trailer_type')
   })
 
   it('preserves spacing slot indices and seeds tractor 1-2 at 220', () => {

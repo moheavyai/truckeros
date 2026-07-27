@@ -1121,13 +1121,18 @@ export interface CompletenessItem {
   status: CompletenessStatus
   /** Short fix hint when status is warn. */
   hint?: string
+  /** Soft notes (e.g. optional year/make/model) — not counted in hard "to fix". */
+  soft?: boolean
 }
 
 export interface CompletenessChecklist {
   items: CompletenessItem[]
   passCount: number
+  /** Hard warn count only (excludes soft notes) — used for "to fix" summary. */
   warnCount: number
-  /** True when every item passes. */
+  /** Soft optional notes (do not block ready). */
+  softWarnCount: number
+  /** True when every hard item passes (soft notes ignored). */
   ready: boolean
 }
 
@@ -1330,7 +1335,7 @@ export function buildMoFilingSteps(prefill?: PrefillPackage | null): MoFilingSte
     {
       id: 'axles_vehicle',
       stepNumber: 5,
-      title: 'Axles / vehicle ID',
+      title: 'Axles & vehicle identity',
       prefillKeys: [
         'axles',
         'tractor_year',
@@ -1347,6 +1352,13 @@ export function buildMoFilingSteps(prefill?: PrefillPackage | null): MoFilingSte
         'trailer_vin',
         'trailer_plate',
         'trailer_plate_state',
+        'trailer_2_year',
+        'trailer_2_make',
+        'trailer_2_model',
+        'trailer_2_ymm',
+        'trailer_2_vin',
+        'trailer_2_plate',
+        'trailer_2_plate_state',
         'vehicle_id',
       ],
     },
@@ -2077,12 +2089,13 @@ export function buildPortalCompletenessChecklist(
     id: string,
     label: string,
     ok: boolean,
-    hint: string
+    hint: string,
+    opts?: { soft?: boolean }
   ) => {
     items.push(
       ok
-        ? { id, label, status: 'pass' }
-        : { id, label, status: 'warn', hint }
+        ? { id, label, status: 'pass', soft: opts?.soft }
+        : { id, label, status: 'warn', hint, soft: opts?.soft }
     )
   }
 
@@ -2201,7 +2214,8 @@ export function buildPortalCompletenessChecklist(
       'vehicle_ymm',
       mo ? 'Power unit / trailer year-make-model' : 'Year / make / model',
       hasYmm,
-      'Optional: add year, make, and model on tractor or trailer for portal forms'
+      'Optional: add year, make, and model on tractor or trailer for portal forms',
+      { soft: true }
     )
     // MO playbook: axles matter on Carrier Express when vehicle info is required
     if (mo) {
@@ -2215,18 +2229,18 @@ export function buildPortalCompletenessChecklist(
   }
 
   const passCount = items.filter((i) => i.status === 'pass').length
-  // Soft notes (e.g. optional year/make/model) still show as warn but do not block ready
+  // Soft notes still appear as warn items but are excluded from "to fix" / ready
   const hardWarnCount = items.filter(
-    (i) => i.status === 'warn' && i.id !== 'vehicle_ymm'
+    (i) => i.status === 'warn' && !i.soft
   ).length
   const softWarnCount = items.filter(
-    (i) => i.status === 'warn' && i.id === 'vehicle_ymm'
+    (i) => i.status === 'warn' && !!i.soft
   ).length
-  const warnCount = hardWarnCount + softWarnCount
   return {
     items,
     passCount,
-    warnCount,
+    warnCount: hardWarnCount,
+    softWarnCount,
     ready: hardWarnCount === 0,
   }
 }

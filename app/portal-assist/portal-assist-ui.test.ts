@@ -437,6 +437,11 @@ describe('Portal Assist — Filing kit (copy, checklist, trip type, workflow)', 
     expect(source).toContain("item.status === 'pass'")
     expect(source).toContain("item.status === 'warn'")
     expect(source).toContain('text-amber-800 sm:text-amber-700')
+    // Soft notes excluded from hard "to fix" count
+    expect(source).toContain('checklist.warnCount > 0 ? ` · ${checklist.warnCount} to fix`')
+    expect(source).toContain('checklist.softWarnCount > 0')
+    expect(source).toContain('optional')
+    expect(source).toContain('item.soft')
   })
 
   it('shows trip type control and clears approval on change', () => {
@@ -546,7 +551,8 @@ describe('Portal Assist — Missouri Carrier Express playbook', () => {
     const source = readSource(pagePath)
     expect(source).toContain('VEHICLE_IDENTITY_PREFILL_KEYS')
     expect(source).toContain('hasPrefillValue')
-    expect(source).toContain('VEHICLE_IDENTITY_PREFILL_KEYS.map')
+    // Discrete fields in grid; *_ymm combined lines only in clipboard packet
+    expect(source).toContain("VEHICLE_IDENTITY_PREFILL_KEYS.filter((k) => !k.endsWith('_ymm'))")
     expect(source).toContain('data-copy-field={idKey}')
     expect(source).toContain('resolvePortalFieldLabel(idKey, config, selectedState)')
   })

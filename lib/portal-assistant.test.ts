@@ -719,6 +719,57 @@ describe('buildPortalClipboardPacket', () => {
     expect(packet).toContain('Trip Type: Single trip')
   })
 
+  it('includes non-MO discrete vehicle identity lines with generic labels', () => {
+    const prefill = generatePortalPrefill(
+      {
+        ...richRequest,
+        equipment: {
+          rig: {
+            totalAxles: 7,
+            tractor: {
+              unit_number: 'UNIT-1',
+              year: 2019,
+              make: 'Peterbilt',
+              model: '389',
+              vin: 'VIN123',
+              license_plate: 'abc1',
+              license_plate_state: 'ks',
+            },
+            trailers: [
+              {
+                year: 2018,
+                make: 'Fontaine',
+                model: 'Mag',
+                vin: 'TRLVIN1',
+                license_plate: 'trl1',
+                license_plate_state: 'ne',
+              },
+            ],
+          },
+        },
+      },
+      'KS'
+    )
+    const packet = buildPortalClipboardPacket(prefill, STATE_PORTAL_CONFIGS.KS)
+    expect(packet).toContain('Tractor year: 2019')
+    expect(packet).toContain('Tractor make: Peterbilt')
+    expect(packet).toContain('Tractor model: 389')
+    expect(packet).toContain('Tractor year/make/model: 2019 Peterbilt 389')
+    expect(packet).toContain('Tractor VIN: VIN123')
+    expect(packet).toContain('Tractor plate: ABC1')
+    expect(packet).toContain('Tractor plate state: KS')
+    expect(packet).toContain('Trailer year: 2018')
+    expect(packet).toContain('Trailer make: Fontaine')
+    expect(packet).toContain('Trailer VIN: TRLVIN1')
+    expect(packet).toContain('Trailer plate: TRL1')
+    expect(packet).toContain('Trailer plate state: NE')
+    // Identity after axles, before vehicle_id in generic extras path
+    const lines = packet.split('\n')
+    const idx = (label: string) => lines.findIndex((l) => l.startsWith(label + ':'))
+    expect(idx('Axles')).toBeLessThan(idx('Tractor year'))
+    expect(idx('Tractor VIN')).toBeLessThan(idx('Vehicle / VIN'))
+  })
+
   it('honors options.tripType override over generatedFields', () => {
     const prefill = generatePortalPrefill(richRequest, 'KS', { tripType: 'Single trip' })
     const packet = buildPortalClipboardPacket(prefill, STATE_PORTAL_CONFIGS.KS, {
@@ -1311,8 +1362,71 @@ describe('buildPortalCompletenessChecklist', () => {
     )
     const checklist = buildPortalCompletenessChecklist(prefill, STATE_PORTAL_CONFIGS.TX)
     expect(checklist.items.find((i) => i.id === 'vehicle')?.status).toBe('pass')
-    expect(checklist.items.find((i) => i.id === 'vehicle_ymm')?.status).toBe('warn')
+    const ymmItem = checklist.items.find((i) => i.id === 'vehicle_ymm')
+    expect(ymmItem?.status).toBe('warn')
+    expect(ymmItem?.soft).toBe(true)
+    // Soft notes excluded from hard "to fix" warnCount
+    expect(checklist.warnCount).toBe(0)
+    expect(checklist.softWarnCount).toBe(1)
     expect(checklist.ready).toBe(true)
+  })
+
+  it('passes vehicle check with trailer-only VIN or plate', () => {
+    const withTrailerVin = generatePortalPrefill(
+      {
+        origin_city: 'Dallas',
+        origin_state: 'TX',
+        destination_city: 'Austin',
+        destination_state: 'TX',
+        weight: 80000,
+        length: 65,
+        width: 8.5,
+        height: 13.5,
+        route_corridor: ['TX'],
+        equipment: {
+          rig: {
+            trailers: [{ vin: '1TRAILERONLYVIN001', year: 2017, make: 'Landoll' }],
+          },
+        },
+        cargo: { carrierDriver: { companyName: 'Co', usdotNumber: '1' } },
+      },
+      'TX'
+    )
+    expect(withTrailerVin.generatedFields.tractor_vin).toBeUndefined()
+    expect(withTrailerVin.generatedFields.trailer_vin).toBe('1TRAILERONLYVIN001')
+    const vinCheck = buildPortalCompletenessChecklist(
+      withTrailerVin,
+      STATE_PORTAL_CONFIGS.TX
+    )
+    expect(vinCheck.items.find((i) => i.id === 'vehicle')?.status).toBe('pass')
+    expect(vinCheck.items.find((i) => i.id === 'vehicle_ymm')?.status).toBe('pass')
+
+    const withTrailerPlate = generatePortalPrefill(
+      {
+        origin_city: 'Dallas',
+        origin_state: 'TX',
+        destination_city: 'Austin',
+        destination_state: 'TX',
+        weight: 80000,
+        length: 65,
+        width: 8.5,
+        height: 13.5,
+        route_corridor: ['TX'],
+        equipment: {
+          rig: {
+            trailers: [{ license_plate: 'trlonly', license_plate_state: 'tx' }],
+          },
+        },
+        cargo: { carrierDriver: { companyName: 'Co', usdotNumber: '1' } },
+      },
+      'TX'
+    )
+    expect(withTrailerPlate.generatedFields.trailer_plate).toBe('TRLONLY')
+    const plateCheck = buildPortalCompletenessChecklist(
+      withTrailerPlate,
+      STATE_PORTAL_CONFIGS.TX
+    )
+    expect(plateCheck.items.find((i) => i.id === 'vehicle')?.status).toBe('pass')
   })
 })
 
@@ -1638,9 +1752,54 @@ describe('Missouri Portal Assist playbook', () => {
     )
 
     const axles = steps.find((s) => s.id === 'axles_vehicle')!
+    expect(axles.title).toBe('Axles & vehicle identity')
+    expect(axles.prefillKeys).toEqual(
+      expect.arrayContaining([
+        'axles',
+        'tractor_vin',
+        'trailer_vin',
+        'trailer_2_vin',
+        'trailer_2_year',
+        'trailer_2_plate',
+        'vehicle_id',
+      ])
+    )
     const axlesPacket = buildMoFilingStepClipboard(prefill, axles)
     expect(axlesPacket).toContain('Number of axles: 6')
     expect(axlesPacket).toContain('Power unit ID / VIN: PWR-9')
+    expect(axlesPacket).toContain('Power unit VIN: VINMO9')
+
+    // Step copy includes trailer_2_* when second trailer has values
+    const multiTrailerPrefill = generatePortalPrefill(
+      {
+        ...moCorridorRequest,
+        equipment: {
+          rig: {
+            totalAxles: 8,
+            tractor: {
+              unit_number: 'PWR-9',
+              vin: 'VINMO9',
+              year: 2021,
+              make: 'Peterbilt',
+            },
+            trailers: [
+              { vin: 'TRL1', year: 2018, make: 'Fontaine', license_plate: 't1', license_plate_state: 'mo' },
+              { vin: 'TRL2', year: 2019, make: 'Trail King', license_plate: 't2', license_plate_state: 'ks' },
+            ],
+          },
+        },
+      },
+      'MO'
+    )
+    const multiSteps = buildMoFilingSteps(multiTrailerPrefill)
+    const multiAxles = multiSteps.find((s) => s.id === 'axles_vehicle')!
+    const multiPacket = buildMoFilingStepClipboard(multiTrailerPrefill, multiAxles)
+    expect(multiPacket).toContain('Trailer VIN: TRL1')
+    expect(multiPacket).toContain('Trailer 2 VIN: TRL2')
+    expect(multiPacket).toContain('Trailer 2 year: 2019')
+    expect(multiPacket).toContain('Trailer 2 make: Trail King')
+    expect(multiPacket).toContain('Trailer 2 plate: T2')
+    expect(multiPacket).toContain('Trailer 2 plate state: KS')
 
     const route = steps.find((s) => s.id === 'route_borders')!
     const routePacket = buildMoFilingStepClipboard(prefill, route)

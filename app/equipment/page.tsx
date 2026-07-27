@@ -297,6 +297,7 @@ export default function EquipmentPage() {
           has_lift_axle: !!d.meta.has_lift_axle,
           is_extendable: !!d.meta.is_extendable,
           extendable_extra_ft: d.meta.extendable_extra_ft ?? 0,
+          // trailer_type = equipment class; legacy column trailer_make stored type, not manufacturer
           trailer_type: d.meta.trailer_type ?? d.row.trailer_make ?? null,
           license_plate: d.meta.license_plate ?? d.row.license_plate ?? null,
           license_plate_state: normalizeLicensePlateState(d.meta.license_plate_state ?? d.row.license_plate_state) ?? null,
@@ -304,9 +305,10 @@ export default function EquipmentPage() {
           empty_weight_lbs: d.meta.empty_weight_lbs ?? null,
           width_ft: d.meta.width_ft ?? null,
           deck_height_ft: d.meta.deck_height_ft ?? null,
-          make: d.meta.make ?? d.row.trailer_make ?? null,
-          model: d.meta.model ?? d.row.trailer_model ?? null,
-          year: d.meta.year ?? d.row.trailer_year ?? null,
+          // Manufacturer identity: same year/make/model columns as write path (never trailer_*)
+          make: d.meta.make ?? d.row.make ?? null,
+          model: d.meta.model ?? d.row.model ?? null,
+          year: d.meta.year ?? d.row.year ?? null,
           notes: d.plainNotes || null,
           created_at: d.row.created_at,
           updated_at: d.row.updated_at,
@@ -406,6 +408,23 @@ export default function EquipmentPage() {
    */
   function safeProfileName(input: any): string {
     return ((input ?? '') + '').trim()
+  }
+
+  /** Trimmed string or null — cleared identity fields must not stick as "". */
+  function emptyToNull(input: any): string | null {
+    if (input == null) return null
+    const s = String(input).trim()
+    return s ? s : null
+  }
+
+  /** Integer model year in [1900, 2100], else null (no decimals / absurd years). */
+  function parseEquipmentYear(input: any): number | null {
+    if (input == null || input === '') return null
+    const n = typeof input === 'number' ? input : parseInt(String(input).trim(), 10)
+    if (!Number.isFinite(n)) return null
+    const y = Math.trunc(n)
+    if (y < 1900 || y > 2100) return null
+    return y
   }
 
   function axleSpacingForDb(input: any): string[] | null {
@@ -615,6 +634,10 @@ export default function EquipmentPage() {
     }
 
     const plainNotes = payloadData.notes || ''
+    const identityYear = parseEquipmentYear(payloadData.year)
+    const identityMake = emptyToNull(payloadData.make)
+    const identityModel = emptyToNull(payloadData.model)
+    const identityVin = emptyToNull(payloadData.vin)
     const structured = {
       _v: 1,
       type: 'tractor',
@@ -624,14 +647,14 @@ export default function EquipmentPage() {
       wheelbase_in: payloadData.wheelbase_in ?? null,
       axle_spacings: payloadData.axle_spacings ?? null,
       fifth_wheel_from_rear_in: payloadData.fifth_wheel_from_rear_in ?? null,
-      unit_number: payloadData.unit_number ?? null,
+      unit_number: emptyToNull(payloadData.unit_number),
       license_plate: payloadData.license_plate ?? null,
       license_plate_state: payloadData.license_plate_state ?? null,
-      vin: payloadData.vin ?? null,
+      vin: identityVin,
       empty_weight_lbs: payloadData.empty_weight_lbs ?? null,
-      year: payloadData.year ?? null,
-      make: payloadData.make ?? null,
-      model: payloadData.model ?? null,
+      year: identityYear,
+      make: identityMake,
+      model: identityModel,
       _notes: plainNotes,
     }
 
@@ -642,13 +665,13 @@ export default function EquipmentPage() {
       type: 'tractor',
       name: safeProfileName(payloadData.profile_name),
       profile_name: safeProfileName(payloadData.profile_name),
-      unit_number: payloadData.unit_number || null,
+      unit_number: emptyToNull(payloadData.unit_number),
       license_plate: payloadData.license_plate || null,
       license_plate_state: payloadData.license_plate_state || null,
-      vin: payloadData.vin || null,
-      year: payloadData.year || null,
-      make: payloadData.make || null,
-      model: payloadData.model || null,
+      vin: identityVin,
+      year: identityYear,
+      make: identityMake,
+      model: identityModel,
       axles: payloadData.num_axles || null,
       axle_spacing: axleSpacingForDb(payloadData.axle_spacings),
       notes: `RIGBUILDER:v1:${JSON.stringify(structured)}`,
@@ -723,6 +746,11 @@ export default function EquipmentPage() {
     }
 
     const plainNotes = payloadData.notes || ''
+    // Manufacturer identity only — never copy trailer_type into make
+    const identityYear = parseEquipmentYear(payloadData.year)
+    const identityMake = emptyToNull(payloadData.make)
+    const identityModel = emptyToNull(payloadData.model)
+    const identityVin = emptyToNull(payloadData.vin)
     const structured = {
       _v: 1,
       type: 'trailer',
@@ -737,13 +765,13 @@ export default function EquipmentPage() {
       trailer_type: formatTrailerTypeLabel(payloadData.trailer_type) || payloadData.trailer_type || null,
       license_plate: payloadData.license_plate ?? null,
       license_plate_state: payloadData.license_plate_state ?? null,
-      vin: payloadData.vin ?? null,
+      vin: identityVin,
       empty_weight_lbs: payloadData.empty_weight_lbs ?? null,
       width_ft: payloadData.width_ft ?? null,
       deck_height_ft: payloadData.deck_height_ft ?? null,
-      make: payloadData.make ?? null,
-      model: payloadData.model ?? null,
-      year: payloadData.year ?? null,
+      make: identityMake,
+      model: identityModel,
+      year: identityYear,
       _notes: plainNotes,
     }
 
@@ -754,13 +782,13 @@ export default function EquipmentPage() {
       type: 'trailer',
       name: safeProfileName(payloadData.profile_name),
       profile_name: safeProfileName(payloadData.profile_name),
-      // Manufacturer make (not trailer_type equipment class). Fallback keeps legacy column filled.
-      make: payloadData.make || payloadData.trailer_type || null,
+      // Manufacturer make only — never fall back to trailer_type (equipment class)
+      make: identityMake,
       license_plate: payloadData.license_plate || null,
       license_plate_state: payloadData.license_plate_state || null,
-      vin: payloadData.vin || null,
-      model: payloadData.model || null,
-      year: payloadData.year || null,
+      vin: identityVin,
+      model: identityModel,
+      year: identityYear,
       length_ft: payloadData.overall_length_ft || null,
       axles: payloadData.num_axles || null,
       axle_spacing: axleSpacingForDb(payloadData.axle_spacings),
@@ -1308,6 +1336,19 @@ export default function EquipmentPage() {
                           type={type as any}
                           value={(editingTractor as any)[key] ?? ''}
                           onChange={(e) => {
+                            if (key === 'year') {
+                              const raw = e.target.value
+                              if (raw === '') {
+                                setEditingTractor({ ...editingTractor, year: null })
+                                return
+                              }
+                              const n = parseInt(raw, 10)
+                              setEditingTractor({
+                                ...editingTractor,
+                                year: Number.isFinite(n) ? n : null,
+                              })
+                              return
+                            }
                             const v = type === 'number' ? parseFloat(e.target.value) || null : e.target.value
                             if (key === 'num_axles') {
                               const numVal = Number(v) || null
@@ -1318,6 +1359,9 @@ export default function EquipmentPage() {
                               setEditingTractor({ ...editingTractor, [key]: v })
                             }
                           }}
+                          min={key === 'year' ? 1900 : undefined}
+                          max={key === 'year' ? 2100 : undefined}
+                          step={key === 'year' ? 1 : undefined}
                           className={inputMtClass}
                         />
                       )}
@@ -1480,6 +1524,19 @@ export default function EquipmentPage() {
                         type={type as any}
                         value={(editingTrailer as any)[key] ?? ''}
                         onChange={(e) => {
+                        if (key === 'year') {
+                          const raw = e.target.value
+                          if (raw === '') {
+                            setEditingTrailer({ ...editingTrailer, year: null })
+                            return
+                          }
+                          const n = parseInt(raw, 10)
+                          setEditingTrailer({
+                            ...editingTrailer,
+                            year: Number.isFinite(n) ? n : null,
+                          })
+                          return
+                        }
                         const v = type === 'number' ? parseFloat(e.target.value) || null : e.target.value
                         if (key === 'num_axles') {
                           const numVal = Number(v) || null
@@ -1489,6 +1546,9 @@ export default function EquipmentPage() {
                           setEditingTrailer({ ...editingTrailer, [key]: v })
                         }
                       }}
+                        min={key === 'year' ? 1900 : undefined}
+                        max={key === 'year' ? 2100 : undefined}
+                        step={key === 'year' ? 1 : undefined}
                         className={inputMtClass}
                       />
                     </div>
