@@ -313,7 +313,8 @@ describe('Permit test page — axle weight distribution', () => {
     expect(nullPath).toContain("rigEmptyWeightLbs: ''")
     expect(nullPath).toContain("trailerWidthFt: ''")
     expect(nullPath).toContain("trailerDeckHeightFt: ''")
-    expect(nullPath).toContain("trailerLengthFt: ''")
+    // trailerLengthFt is a number on FormData (default 53) — clear with 0, not ''
+    expect(nullPath).toContain('trailerLengthFt: 0')
     expect(nullPath).toContain("year: ''")
     expect(nullPath).toContain("make: ''")
     expect(nullPath).toContain("model: ''")

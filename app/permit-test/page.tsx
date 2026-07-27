@@ -1397,7 +1397,8 @@ export default function PermitTestPage() {
           trailerMake: '',
           trailerModel: '',
           trailerYear: '',
-          trailerLengthFt: '',
+          // Number field (default 53 when rig selected) — clear to 0, not '' (FormData type)
+          trailerLengthFt: 0,
           kingpinSettingIn: 36,
           axleSpacing: '',
           // Synthetic layout when no rig (do not keep previous rig axle count/groups).
