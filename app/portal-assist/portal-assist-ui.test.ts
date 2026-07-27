@@ -499,13 +499,16 @@ describe('Portal Assist — Filing kit (copy, checklist, trip type, workflow)', 
   })
 })
 
-describe('Portal Assist — Missouri Carrier Express playbook', () => {
-  it('imports MO playbook helpers', () => {
+describe('Portal Assist — Missouri Carrier Express playbook v3', () => {
+  it('imports MO playbook helpers including pay-last', () => {
     const source = readSource(pagePath)
     expect(source).toContain('buildMoFilingSteps')
     expect(source).toContain('buildMoFilingStepClipboard')
     expect(source).toContain('getMoStepPrefillKeysWithValues')
     expect(source).toContain('getMoPortalFieldLabel')
+    expect(source).toContain('isMoMultiStatePrefill')
+    expect(source).toContain('MO_PAY_LAST_NOTE')
+    expect(source).toContain('MO_FEE_DISPLAY_NOTE')
     expect(source).toContain('type MoFilingStep')
   })
 
@@ -523,6 +526,17 @@ describe('Portal Assist — Missouri Carrier Express playbook', () => {
     expect(source).toContain('data-testid="mo-info-link"')
     expect(source).toContain('config.infoUrl')
     expect(source).toContain('modot.org')
+    expect(source).toMatch(/playbook v3|v3 enums/i)
+  })
+
+  it('shows multi-state pay-last banner and step guidance', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="mo-pay-last-banner"')
+    expect(source).toContain('isMoMultiStatePrefill(prefill)')
+    expect(source).toContain('MO_PAY_LAST_NOTE')
+    expect(source).toContain('MO_FEE_DISPLAY_NOTE')
+    expect(source).toContain('step.guidance')
+    expect(source).toContain('data-testid={`mo-step-guidance-${step.id}`}')
   })
 
   it('hides step Copy when packet empty and clears copiedKey on empty copy', () => {
@@ -566,7 +580,7 @@ describe('Portal Assist — Missouri Carrier Express playbook', () => {
     expect(source).toContain('Guidance for Single Trip selection and application tips in Copy all')
   })
 
-  it('renders Carrier Express path note (de-duped; Single Trip focus honesty)', () => {
+  it('renders Carrier Express path note (de-duped; Trip→Payment + Street Address honesty)', () => {
     const source = readSource(pagePath)
     expect(source).toContain('data-testid="mo-walkthrough"')
     expect(source).toContain('CARRIER EXPRESS SINGLE TRIP PATH')
@@ -574,8 +588,22 @@ describe('Portal Assist — Missouri Carrier Express playbook', () => {
     // De-duped: no full walkthrough list re-render of MO_PORTAL_WALKTHROUGH
     expect(source).not.toContain('MO_PORTAL_WALKTHROUGH.map')
     expect(source).toContain('Same path as numbered steps above')
+    expect(source).toContain('path source of truth')
+    expect(source).toMatch(/Application\s*\n?\s*enums → Trip Analyze → Review → Payment/)
+    expect(source).toMatch(/city\/state only/)
+    expect(source).toMatch(/Street Address on/)
     expect(source).toContain("tripType !== 'Single trip'")
     expect(source).toContain('Playbook is Single Trip')
+  })
+
+  it('shows MO extra field tiles for load/contact when present', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain("selectedState === 'MO'")
+    expect(source).toContain("'load_description'")
+    expect(source).toContain("'contact_name'")
+    expect(source).toContain("'carrier_email'")
+    expect(source).toContain('data-testid={`mo-extra-field-${extraKey}`}')
+    expect(source).toContain('MO Copy all packet includes full Application')
   })
 
   it('filters Prefill hints to keys with values', () => {
@@ -592,7 +620,7 @@ describe('Portal Assist — Missouri Carrier Express playbook', () => {
     // Playbook block must not auto-open portal on render
     const playbookStart = source.indexOf('data-testid="mo-playbook"')
     expect(playbookStart).toBeGreaterThan(-1)
-    const playbookSlice = source.slice(playbookStart, playbookStart + 3500)
+    const playbookSlice = source.slice(playbookStart, playbookStart + 4500)
     expect(playbookSlice).not.toContain('window.open')
     expect(playbookSlice).not.toContain('openStatePortals')
     // Steps use copy helpers, not portal automation

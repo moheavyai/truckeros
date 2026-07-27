@@ -25,6 +25,9 @@ import {
   buildMoFilingStepClipboard,
   getMoPortalFieldLabel,
   getMoStepPrefillKeysWithValues,
+  isMoMultiStatePrefill,
+  MO_PAY_LAST_NOTE,
+  MO_FEE_DISPLAY_NOTE,
   type RouteComparison,
   type PortalSubmissionRecord,
   type PrefillPackage,
@@ -1152,7 +1155,7 @@ export default function PortalAssistPage() {
                   )}
                 </div>
 
-                {/* MO-only: MoDOT Carrier Express playbook v2 — live Single Trip path (not RPA) */}
+                {/* MO-only: MoDOT Carrier Express playbook v3 — enums, Trip→Payment, pay-last (not RPA) */}
                 {selectedState === 'MO' && (
                   <div className="mb-4 space-y-4" data-testid="mo-playbook">
                     <div data-testid="mo-filing-steps">
@@ -1186,9 +1189,9 @@ export default function PortalAssistPage() {
                         </div>
                       </div>
                       <p className={`${fieldHintTinyClass} mb-2`}>
-                        Path mapped from live Carrier Express Single Trip screens. Copy per
-                        step or use Copy all, then paste into MoDOT — copy-assist only (no
-                        RPA). Guides on{' '}
+                        Path mapped from live Carrier Express Single Trip screens (v3 enums +
+                        Trip through Payment). Copy per step or use Copy all, then paste into
+                        MoDOT — copy-assist only (no RPA). Guides on{' '}
                         {config.infoUrl ? (
                           <a
                             href={config.infoUrl}
@@ -1203,6 +1206,18 @@ export default function PortalAssistPage() {
                         )}
                         .
                       </p>
+                      {isMoMultiStatePrefill(prefill) && (
+                        <div
+                          role="status"
+                          data-testid="mo-pay-last-banner"
+                          className="mb-2 rounded-lg border border-amber-600 sm:border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+                        >
+                          <div className="font-medium">{MO_PAY_LAST_NOTE}</div>
+                          <div className={`${fieldHintTinyClass} mt-0.5 text-amber-900`}>
+                            {MO_FEE_DISPLAY_NOTE}
+                          </div>
+                        </div>
+                      )}
                       <div
                         role="status"
                         aria-live="polite"
@@ -1251,6 +1266,16 @@ export default function PortalAssistPage() {
                                       Prefill: {keysHint}
                                     </div>
                                   )}
+                                  {step.guidance && step.guidance.length > 0 && (
+                                    <ul
+                                      className={`${fieldHintTinyClass} mt-1 list-disc pl-4 space-y-0.5`}
+                                      data-testid={`mo-step-guidance-${step.id}`}
+                                    >
+                                      {step.guidance.map((line) => (
+                                        <li key={line}>{line}</li>
+                                      ))}
+                                    </ul>
+                                  )}
                                 </div>
                                 {stepPacket ? (
                                   <button
@@ -1276,7 +1301,11 @@ export default function PortalAssistPage() {
                         CARRIER EXPRESS SINGLE TRIP PATH
                       </span>
                       <p className={`${fieldHintTinyClass} ${bodyTextClass}`}>
-                        Same path as numbered steps above (mapped from live Single Trip screens).
+                        Same path as numbered steps above (path source of truth). Application
+                        enums → Trip Analyze → Review → Payment
+                        {isMoMultiStatePrefill(prefill) ? ' (pay-last multi-state)' : ''}.
+                        Prefill origin/dest is often city/state only — enter Street Address on
+                        MoDOT Trip map when required.
                         {tripType !== 'Single trip' ? (
                           <>
                             {' '}
@@ -1471,6 +1500,9 @@ export default function PortalAssistPage() {
                 <span className={`${fieldLabelClass} block mb-2`}>PORTAL FIELD MAPPING</span>
                 <p className={`${fieldHintTinyClass} mb-2`}>
                   Copy individual values or use Copy all above, then paste into the state portal.
+                  {selectedState === 'MO'
+                    ? ' MO Copy all packet includes full Application + Trip fields; tiles below are a subset.'
+                    : ''}
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   {Object.entries(config.fieldMapping).map(([ourKey, portalLabel]) => {
@@ -1496,6 +1528,46 @@ export default function PortalAssistPage() {
                       </div>
                     )
                   })}
+                  {/* MO extras not in fieldMapping: load + payment contact tiles (full packet via Copy all) */}
+                  {selectedState === 'MO' &&
+                    (
+                      [
+                        'load_description',
+                        'contact_name',
+                        'carrier_email',
+                        'tip_vehicle_type',
+                      ] as const
+                    ).map((extraKey) => {
+                      const raw = (prefill.generatedFields as any)[extraKey]
+                      if (!hasPrefillValue(raw)) return null
+                      const portalLabel = resolvePortalFieldLabel(
+                        extraKey,
+                        config,
+                        selectedState
+                      )
+                      const display = String(raw)
+                      return (
+                        <div
+                          key={extraKey}
+                          className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3"
+                          data-testid={`mo-extra-field-${extraKey}`}
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-0.5">
+                            <div className={fieldLabelTinyClass}>{portalLabel}</div>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(extraKey, display)}
+                              className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
+                              data-copy-field={extraKey}
+                              aria-label={`Copy ${portalLabel}`}
+                            >
+                              {copiedKey === extraKey ? 'Copied' : 'Copy'}
+                            </button>
+                          </div>
+                          <div className="font-mono break-words text-gray-900">{display}</div>
+                        </div>
+                      )
+                    })}
                   {/* Trip type + extras: MO uses MoDOT labels via resolvePortalFieldLabel(config, state) */}
                   {(prefill.generatedFields as any).trip_type && (
                     <div className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3">
