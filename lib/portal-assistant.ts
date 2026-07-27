@@ -981,6 +981,27 @@ export const PREFILL_FIELD_LABELS: Record<string, string> = {
   border_role: 'Border Role',
   axles: 'Axles',
   vehicle_id: 'Vehicle / VIN',
+  tractor_year: 'Tractor year',
+  tractor_make: 'Tractor make',
+  tractor_model: 'Tractor model',
+  tractor_ymm: 'Tractor year/make/model',
+  tractor_vin: 'Tractor VIN',
+  tractor_plate: 'Tractor plate',
+  tractor_plate_state: 'Tractor plate state',
+  trailer_year: 'Trailer year',
+  trailer_make: 'Trailer make',
+  trailer_model: 'Trailer model',
+  trailer_ymm: 'Trailer year/make/model',
+  trailer_vin: 'Trailer VIN',
+  trailer_plate: 'Trailer plate',
+  trailer_plate_state: 'Trailer plate state',
+  trailer_2_year: 'Trailer 2 year',
+  trailer_2_make: 'Trailer 2 make',
+  trailer_2_model: 'Trailer 2 model',
+  trailer_2_ymm: 'Trailer 2 year/make/model',
+  trailer_2_vin: 'Trailer 2 VIN',
+  trailer_2_plate: 'Trailer 2 plate',
+  trailer_2_plate_state: 'Trailer 2 plate state',
   carrier_company: 'Carrier Company',
   carrier_usdot: 'USDOT',
   carrier_mc: 'MC Number',
@@ -996,6 +1017,102 @@ export const PREFILL_FIELD_LABELS: Record<string, string> = {
   special_notes: 'Special Notes',
 }
 
+/**
+ * Discrete tractor/trailer identity keys for prefill grid + clipboard.
+ * Primary trailer first; trailer_2_* only emitted when a second trailer has values.
+ */
+export const VEHICLE_IDENTITY_PREFILL_KEYS: readonly string[] = [
+  'tractor_year',
+  'tractor_make',
+  'tractor_model',
+  'tractor_ymm',
+  'tractor_vin',
+  'tractor_plate',
+  'tractor_plate_state',
+  'trailer_year',
+  'trailer_make',
+  'trailer_model',
+  'trailer_ymm',
+  'trailer_vin',
+  'trailer_plate',
+  'trailer_plate_state',
+  'trailer_2_year',
+  'trailer_2_make',
+  'trailer_2_model',
+  'trailer_2_ymm',
+  'trailer_2_vin',
+  'trailer_2_plate',
+  'trailer_2_plate_state',
+] as const
+
+/** Join year/make/model with only present parts (e.g. "2019 Peterbilt 389"). */
+export function formatVehicleYmm(
+  year?: number | string | null,
+  make?: string | null,
+  model?: string | null
+): string | null {
+  const parts: string[] = []
+  if (year != null && year !== '') {
+    const n = Number(year)
+    if (Number.isFinite(n) && n !== 0) parts.push(String(Math.trunc(n)))
+    else if (typeof year === 'string' && year.trim()) parts.push(year.trim())
+  }
+  const mk = make != null ? String(make).trim() : ''
+  const md = model != null ? String(model).trim() : ''
+  if (mk) parts.push(mk)
+  if (md) parts.push(md)
+  return parts.length ? parts.join(' ') : null
+}
+
+function pickVehicleField(obj: Record<string, any>, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const val = obj?.[key]
+    if (val == null || val === '') continue
+    const s = String(val).trim()
+    if (s) return s
+  }
+  return null
+}
+
+/**
+ * Emit discrete identity keys for tractor / trailer / trailer_2 into generatedFields.
+ * Only sets keys that have values. Does not use trailer_type as manufacturer make.
+ */
+function emitVehicleIdentityFields(
+  generated: Record<string, any>,
+  prefix: 'tractor' | 'trailer' | 'trailer_2',
+  vehicle: Record<string, any> | null | undefined
+): void {
+  if (!vehicle || typeof vehicle !== 'object') return
+
+  const yearRaw = vehicle.year
+  let yearOut: number | string | null = null
+  if (yearRaw != null && yearRaw !== '') {
+    const n = Number(yearRaw)
+    if (Number.isFinite(n) && n !== 0) yearOut = Math.trunc(n)
+    else if (typeof yearRaw === 'string' && yearRaw.trim()) yearOut = yearRaw.trim()
+  }
+  // Manufacturer make only — never fall back to trailer_type (equipment class)
+  const make = pickVehicleField(vehicle, 'make')
+  const model = pickVehicleField(vehicle, 'model')
+  const vin = pickVehicleField(vehicle, 'vin')
+  const plate = pickVehicleField(vehicle, 'license_plate', 'licensePlate')
+  const plateState = pickVehicleField(
+    vehicle,
+    'license_plate_state',
+    'licensePlateState'
+  )
+  const ymm = formatVehicleYmm(yearOut, make, model)
+
+  if (yearOut != null) generated[`${prefix}_year`] = yearOut
+  if (make) generated[`${prefix}_make`] = make
+  if (model) generated[`${prefix}_model`] = model
+  if (ymm) generated[`${prefix}_ymm`] = ymm
+  if (vin) generated[`${prefix}_vin`] = vin
+  if (plate) generated[`${prefix}_plate`] = plate.toUpperCase()
+  if (plateState) generated[`${prefix}_plate_state`] = plateState.toUpperCase()
+}
+
 export type CompletenessStatus = 'pass' | 'warn'
 
 export interface CompletenessItem {
@@ -1004,13 +1121,18 @@ export interface CompletenessItem {
   status: CompletenessStatus
   /** Short fix hint when status is warn. */
   hint?: string
+  /** Soft notes (e.g. optional year/make/model) — not counted in hard "to fix". */
+  soft?: boolean
 }
 
 export interface CompletenessChecklist {
   items: CompletenessItem[]
   passCount: number
+  /** Hard warn count only (excludes soft notes) — used for "to fix" summary. */
   warnCount: number
-  /** True when every item passes. */
+  /** Soft optional notes (do not block ready). */
+  softWarnCount: number
+  /** True when every hard item passes (soft notes ignored). */
   ready: boolean
 }
 
@@ -1039,10 +1161,32 @@ export const MO_PORTAL_FIELD_ORDER: readonly string[] = [
   'width',
   'height',
   'axles',
+  // Vehicle identity after dims/weight/axles, before route/borders
+  'tractor_year',
+  'tractor_make',
+  'tractor_model',
+  'tractor_ymm',
+  'tractor_vin',
+  'tractor_plate',
+  'tractor_plate_state',
+  'trailer_year',
+  'trailer_make',
+  'trailer_model',
+  'trailer_ymm',
+  'trailer_vin',
+  'trailer_plate',
+  'trailer_plate_state',
+  'trailer_2_year',
+  'trailer_2_make',
+  'trailer_2_model',
+  'trailer_2_ymm',
+  'trailer_2_vin',
+  'trailer_2_plate',
+  'trailer_2_plate_state',
+  'vehicle_id',
   'route',
   'border_entry',
   'border_exit',
-  'vehicle_id',
   'carrier_usdot',
   'carrier_mc',
   'carrier_company',
@@ -1065,6 +1209,27 @@ export const MO_PORTAL_FIELD_LABELS: Record<string, string> = {
   entry_point: 'Entry into Missouri',
   exit_point: 'Exit from Missouri',
   vehicle_id: 'Power unit ID / VIN',
+  tractor_year: 'Power unit year',
+  tractor_make: 'Power unit make',
+  tractor_model: 'Power unit model',
+  tractor_ymm: 'Power unit year/make/model',
+  tractor_vin: 'Power unit VIN',
+  tractor_plate: 'Power unit plate',
+  tractor_plate_state: 'Power unit plate state',
+  trailer_year: 'Trailer year',
+  trailer_make: 'Trailer make',
+  trailer_model: 'Trailer model',
+  trailer_ymm: 'Trailer year/make/model',
+  trailer_vin: 'Trailer VIN',
+  trailer_plate: 'Trailer plate',
+  trailer_plate_state: 'Trailer plate state',
+  trailer_2_year: 'Trailer 2 year',
+  trailer_2_make: 'Trailer 2 make',
+  trailer_2_model: 'Trailer 2 model',
+  trailer_2_ymm: 'Trailer 2 year/make/model',
+  trailer_2_vin: 'Trailer 2 VIN',
+  trailer_2_plate: 'Trailer 2 plate',
+  trailer_2_plate_state: 'Trailer 2 plate state',
   carrier_usdot: 'USDOT',
   carrier_mc: 'MC number',
   carrier_company: 'Carrier name',
@@ -1170,8 +1335,32 @@ export function buildMoFilingSteps(prefill?: PrefillPackage | null): MoFilingSte
     {
       id: 'axles_vehicle',
       stepNumber: 5,
-      title: 'Axles / vehicle ID',
-      prefillKeys: ['axles', 'vehicle_id'],
+      title: 'Axles & vehicle identity',
+      prefillKeys: [
+        'axles',
+        'tractor_year',
+        'tractor_make',
+        'tractor_model',
+        'tractor_ymm',
+        'tractor_vin',
+        'tractor_plate',
+        'tractor_plate_state',
+        'trailer_year',
+        'trailer_make',
+        'trailer_model',
+        'trailer_ymm',
+        'trailer_vin',
+        'trailer_plate',
+        'trailer_plate_state',
+        'trailer_2_year',
+        'trailer_2_make',
+        'trailer_2_model',
+        'trailer_2_ymm',
+        'trailer_2_vin',
+        'trailer_2_plate',
+        'trailer_2_plate_state',
+        'vehicle_id',
+      ],
     },
     {
       id: 'carrier_driver',
@@ -1602,6 +1791,9 @@ export function generatePortalPrefill(
       generated.tractor_axles = tractor.num_axles || tractor.numAxles
     }
 
+    // Discrete power-unit identity (year/make/model/VIN/plate/state) for portal copy
+    emitVehicleIdentityFields(generated, 'tractor', tractor)
+
     const trailers = Array.isArray(rig.trailers) ? rig.trailers : []
     if (trailers.length > 0) {
       generated.trailer_count = trailers.length
@@ -1610,6 +1802,12 @@ export function generatePortalPrefill(
       if (trailerLen) generated.trailer_length = `${Number(trailerLen).toFixed(1)} ft`
       const trailerVin = primary.vin
       if (trailerVin && !generated.vehicle_id) generated.vehicle_id = trailerVin
+      // Primary trailer identity keys (trailer_*)
+      emitVehicleIdentityFields(generated, 'trailer', primary)
+      // Second trailer only when it has identity values
+      if (trailers.length > 1) {
+        emitVehicleIdentityFields(generated, 'trailer_2', trailers[1] as Record<string, any>)
+      }
       generated.trailers = trailers
         .map((tr: Record<string, any>, i: number) => {
           const name = tr.profile_name || tr.profileName || `Trailer ${i + 1}`
@@ -1836,8 +2034,11 @@ export function buildPortalClipboardPacket(
   pushLine('border_entry', borderEntry, resolvePortalFieldLabel('border_entry', config))
   pushLine('border_exit', borderExit, resolvePortalFieldLabel('border_exit', config))
 
-  // Vehicle / equipment extras when present
+  // Vehicle / equipment extras when present (identity after axles, before carrier)
   pushLine('axles', fields.axles)
+  for (const key of VEHICLE_IDENTITY_PREFILL_KEYS) {
+    pushLine(key, fields[key])
+  }
   pushLine('vehicle_id', fields.vehicle_id)
 
   // Carrier + driver when present
@@ -1888,12 +2089,13 @@ export function buildPortalCompletenessChecklist(
     id: string,
     label: string,
     ok: boolean,
-    hint: string
+    hint: string,
+    opts?: { soft?: boolean }
   ) => {
     items.push(
       ok
-        ? { id, label, status: 'pass' }
-        : { id, label, status: 'warn', hint }
+        ? { id, label, status: 'pass', soft: opts?.soft }
+        : { id, label, status: 'warn', hint, soft: opts?.soft }
     )
   }
 
@@ -1982,11 +2184,38 @@ export function buildPortalCompletenessChecklist(
   }
 
   if (config.requiresVehicleInfo) {
+    // Warn when both VIN and plate are missing (unit number / vehicle_id still counts as pass)
+    const hasVin =
+      hasPrefillValue(f.tractor_vin) ||
+      hasPrefillValue(f.trailer_vin) ||
+      hasPrefillValue(f.trailer_2_vin)
+    const hasPlate =
+      hasPrefillValue(f.tractor_plate) ||
+      hasPrefillValue(f.trailer_plate) ||
+      hasPrefillValue(f.trailer_2_plate)
+    const hasVehicleId = hasPrefillValue(f.vehicle_id)
     add(
       'vehicle',
-      mo ? 'Power unit ID / VIN' : 'Vehicle ID / VIN',
-      hasPrefillValue(f.vehicle_id),
-      'Add unit number or VIN on equipment / rig'
+      mo ? 'Power unit ID / VIN or plate' : 'Vehicle VIN or plate',
+      hasVin || hasPlate || hasVehicleId,
+      'Add VIN or license plate on equipment / rig (unit number also works)'
+    )
+    // Soft note when year/make/model are all empty on tractor and primary trailer
+    const hasYmm =
+      hasPrefillValue(f.tractor_year) ||
+      hasPrefillValue(f.tractor_make) ||
+      hasPrefillValue(f.tractor_model) ||
+      hasPrefillValue(f.tractor_ymm) ||
+      hasPrefillValue(f.trailer_year) ||
+      hasPrefillValue(f.trailer_make) ||
+      hasPrefillValue(f.trailer_model) ||
+      hasPrefillValue(f.trailer_ymm)
+    add(
+      'vehicle_ymm',
+      mo ? 'Power unit / trailer year-make-model' : 'Year / make / model',
+      hasYmm,
+      'Optional: add year, make, and model on tractor or trailer for portal forms',
+      { soft: true }
     )
     // MO playbook: axles matter on Carrier Express when vehicle info is required
     if (mo) {
@@ -2000,12 +2229,19 @@ export function buildPortalCompletenessChecklist(
   }
 
   const passCount = items.filter((i) => i.status === 'pass').length
-  const warnCount = items.filter((i) => i.status === 'warn').length
+  // Soft notes still appear as warn items but are excluded from "to fix" / ready
+  const hardWarnCount = items.filter(
+    (i) => i.status === 'warn' && !i.soft
+  ).length
+  const softWarnCount = items.filter(
+    (i) => i.status === 'warn' && !!i.soft
+  ).length
   return {
     items,
     passCount,
-    warnCount,
-    ready: warnCount === 0,
+    warnCount: hardWarnCount,
+    softWarnCount,
+    ready: hardWarnCount === 0,
   }
 }
 
