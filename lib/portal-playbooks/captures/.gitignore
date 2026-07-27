@@ -1,0 +1,5 @@
+# Raw portal field dumps from CAPTURE.md (bookmarklet / console).
+# Move curated fields into hand-authored playbooks (mo.ts, ne.ts, …).
+# Leave dumps untracked or keep them local only.
+*
+!.gitignore

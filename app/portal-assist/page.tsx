@@ -1344,7 +1344,13 @@ export default function PortalAssistPage() {
                           <li>Log into {playbook.portalName} yourself and open the form page.</li>
                           <li>Run the CAPTURE.md bookmarklet or console snippet (user click only).</li>
                           <li>
-                            Paste the JSON draft into a playbook file and set{' '}
+                            Snippet downloads a JSON file (and copies clipboard). Edge may save under
+                            Downloads — move into{' '}
+                            <code className="text-[10px]">lib/portal-playbooks/captures/</code> if
+                            staging (gitignored dumps).
+                          </li>
+                          <li>
+                            Curate into a playbook and set{' '}
                             <code className="text-[10px]">mapsFrom</code> to TruckerOS prefill keys.
                           </li>
                         </ol>
