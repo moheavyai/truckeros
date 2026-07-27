@@ -19,10 +19,16 @@ import {
   buildPortalCompletenessChecklist,
   resolvePortalFieldLabel,
   PORTAL_TRIP_TYPES,
+  isMissouriPortal,
+  buildMoFilingSteps,
+  buildMoFilingStepClipboard,
+  MO_PORTAL_WALKTHROUGH,
+  getMoPortalFieldLabel,
   type RouteComparison,
   type PortalSubmissionRecord,
   type PrefillPackage,
   type PortalTripType,
+  type MoFilingStep,
 } from '@/lib/portal-assistant'
 import { formatLoadDisplay } from '@/lib/parse-dimension'
 import { formatPortalEquipmentSnapshot } from '@/lib/portal-equipment-display'
@@ -851,6 +857,21 @@ export default function PortalAssistPage() {
     await copyToClipboard('all', packet)
   }
 
+  const handleCopyMoStep = async (step: MoFilingStep) => {
+    if (!prefill) return
+    const packet = buildMoFilingStepClipboard(prefill, step, { tripType })
+    if (!packet) {
+      setCopyStatus('Nothing to copy for this step yet')
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopyStatus(null)
+        copyTimeoutRef.current = null
+      }, 2000)
+      return
+    }
+    await copyToClipboard(`mo-step-${step.id}`, packet)
+  }
+
   const handleTripTypeChange = (next: PortalTripType) => {
     if (next === tripType) return
     setTripType(next)
@@ -1096,6 +1117,86 @@ export default function PortalAssistPage() {
                   <span aria-hidden="true">→</span>
                   <span>Paste &amp; pay on state site</span>
                 </div>
+
+                {/* MO-only: MoDOT Carrier Express playbook — numbered steps + walkthrough (not RPA) */}
+                {isMissouriPortal(selectedState, config) && (
+                  <div className="mb-4 space-y-4" data-testid="mo-playbook">
+                    <div data-testid="mo-filing-steps">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <span className={`${fieldLabelClass} block`}>
+                          MODOT CARRIER EXPRESS STEPS
+                        </span>
+                        {config.portalUrl && (
+                          <a
+                            href={config.portalUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`${fieldHintTinyClass} underline hover:text-gray-700`}
+                            data-testid="mo-portal-link"
+                          >
+                            Open Carrier Express
+                          </a>
+                        )}
+                      </div>
+                      <p className={`${fieldHintTinyClass} mb-2`}>
+                        Copy per step, then paste into MoDOT. Official Using MCE / OSOW help
+                        lives on modot.org — we do not invent click paths.
+                      </p>
+                      <ol className="space-y-2 text-sm list-none pl-0">
+                        {buildMoFilingSteps(prefill).map((step) => {
+                          const keysHint =
+                            step.prefillKeys.length > 0
+                              ? step.prefillKeys
+                                  .map((k) => getMoPortalFieldLabel(k))
+                                  .join(', ')
+                              : null
+                          return (
+                            <li
+                              key={step.id}
+                              className="rounded-xl border border-gray-500 sm:border-gray-300 bg-gray-50 p-3"
+                              data-mo-step={step.id}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="font-medium text-gray-900">
+                                    {step.stepNumber}. {step.title}
+                                  </div>
+                                  {keysHint && (
+                                    <div className={`${fieldHintTinyClass} mt-0.5`}>
+                                      Prefill: {keysHint}
+                                    </div>
+                                  )}
+                                </div>
+                                {step.prefillKeys.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyMoStep(step)}
+                                    className={`${fieldHintTinyClass} shrink-0 underline hover:text-gray-700`}
+                                    data-testid={`mo-step-copy-${step.id}`}
+                                    aria-label={`Copy step ${step.stepNumber}: ${step.title}`}
+                                  >
+                                    {copiedKey === `mo-step-${step.id}` ? 'Copied' : 'Copy'}
+                                  </button>
+                                )}
+                              </div>
+                            </li>
+                          )
+                        })}
+                      </ol>
+                    </div>
+
+                    <div data-testid="mo-walkthrough">
+                      <span className={`${fieldLabelClass} block mb-2`}>
+                        POST-LOGIN WALKTHROUGH
+                      </span>
+                      <ol className={`list-decimal pl-5 space-y-1 text-sm ${bodyTextClass}`}>
+                        {MO_PORTAL_WALKTHROUGH.map((line, i) => (
+                          <li key={i}>{line}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  </div>
+                )}
 
                 {/* Trip type for generatedFields + copy packet */}
                 <div className="mb-4" data-testid="trip-type-control">
