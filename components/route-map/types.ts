@@ -16,7 +16,7 @@ export type RouteMapStatus = 'idle' | 'calculating' | 'ready' | 'error'
 
 export type RouteMapChipTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
 
-/** Named [lat, lon] tuple — convert to GeoJSON [lon, lat] only at MapLibre boundary. */
+/** Named [lat, lon] tuple — Leaflet-native order; use as-is for markers/polyline. */
 export type LatLon = [lat: number, lon: number]
 
 export interface RouteMapStop {

@@ -31,6 +31,12 @@ body {
   overflow-x: clip;
 }
 
+/* Leaflet DivIcon reset — role-colored HTML markers own their chrome */
+.route-map-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
 /* RouteMapCard indeterminate progress — motion-safe translating bar */
 @keyframes route-map-indeterminate {
   0% {

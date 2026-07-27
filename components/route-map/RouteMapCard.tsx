@@ -1,8 +1,8 @@
 'use client'
 
 /**
- * Route card chrome: title, slim progress, chips, empty/error, MapLibre canvas.
- * Map canvas is dynamically imported with ssr:false so WebGL never hits SSR.
+ * Route card chrome: title, slim progress, chips, empty/error, Leaflet canvas.
+ * Map canvas is dynamically imported with ssr:false so Leaflet never hits SSR.
  */
 
 import dynamic from 'next/dynamic'
@@ -154,7 +154,7 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
           onStyleLoaded={setMapStyleLoaded}
         />
 
-        {/* Hide idle hint while tiles load or when MapLibre canvas itself failed */}
+        {/* Hide idle hint while tiles load or when map canvas itself failed */}
         {isIdleEmpty && !mapLoadFailed && mapStyleLoaded && (
           <div className="absolute inset-0 flex items-end justify-center pointer-events-none p-4">
             <p className="text-sm text-gray-600 bg-white/90 border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm">

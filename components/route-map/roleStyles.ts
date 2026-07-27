@@ -1,5 +1,5 @@
 /**
- * Shared marker/legend colors so MapLibre markers and card legend stay in sync.
+ * Shared marker/legend colors so Leaflet markers and card legend stay in sync.
  */
 import type { RouteMapStopRole } from './types'
 

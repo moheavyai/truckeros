@@ -1,6 +1,6 @@
 /**
  * Pure mapper: OR-Tools / agent option (+ optional form coords) → RouteMapViewModel.
- * No DOM / MapLibre dependency — unit-test friendly.
+ * No DOM / Leaflet dependency — unit-test friendly.
  *
  * Line geometry (v1): sequential stop coordinates as LatLon [lat, lon].
  * Extension: if legs later expose shape/geometry polylines, prefer those here.
