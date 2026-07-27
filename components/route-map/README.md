@@ -29,8 +29,8 @@ Allow:
 
 ### Blank canvas / layout troubleshooting
 
-1. **Container size** — `map.invalidateSize()` on `whenReady`, after `mapReady`, via `ResizeObserver`, and immediate + two rAF follow-ups.
-2. **Loading vs failure** — Until map ready: **Loading map tiles…**. Permanent: **Map failed to load** (import/construct failed).
+1. **Container size** — `map.invalidateSize()` on `whenReady`, after `mapReady`, via `ResizeObserver`, and immediate + two rAF follow-ups. If the first `fitToStops` ran at 0×0, re-fit once when the container becomes non-zero (`fitPendingUntilSized`).
+2. **Loading vs failure** — Until map `whenReady`: **Loading map…**. Permanent: **Map failed to load** (import/construct failed).
 3. **Tiles** — OSM tile hosts; check network tab if basemap is empty but markers appear.
 
 ## Architecture
@@ -53,7 +53,7 @@ Allow:
 
 Map engine (orthogonal to route status):
 
-- **tiles loading** — map not yet ready → “Loading map tiles…”
+- **map loading** — before Leaflet `whenReady` → “Loading map…”
 - **map ready** — Leaflet `whenReady`; markers/line may sync (`onStyleLoaded(true)` for card contract)
 - **map failed** — import/construct failed → “Map failed to load”
 

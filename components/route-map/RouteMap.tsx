@@ -10,6 +10,7 @@
  * Runtime: leaflet is loaded via dynamic import() inside useEffect (client only).
  * CSS is imported once here; parent uses dynamic(..., { ssr: false }).
  * After construct + ready: map.invalidateSize() + two rAF follow-ups + ResizeObserver.
+ * If the first fit ran at 0×0, re-fit once when the container becomes non-zero.
  * onMapClick is optional Map v2 hook (unused in v1 UI). Drag-edit is not wired in v1.
  * LatLon is [lat, lon] — Leaflet-native order (no GeoJSON swap at this boundary).
  */
@@ -47,13 +48,16 @@ const DEFAULT_CENTER: [number, number] = [39.8, -98.5]
 const DEFAULT_ZOOM = 3.2
 /** Bounds span below this (degrees) treated as coincident → single-stop zoom. */
 const NEAR_ZERO_BOUNDS_DEG = 1e-5
+/** Min client size (px) treated as a laid-out map container. */
+const MIN_SIZED_PX = 2
 
 const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 const OSM_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 
 const LOAD_ERROR_MESSAGE = 'Map failed to load'
-const TILES_LOADING_MESSAGE = 'Loading map tiles…'
+/** Clears on whenReady (map init), not full tile paint — keep copy accurate. */
+const MAP_LOADING_MESSAGE = 'Loading map…'
 
 const LINE_COLOR = '#2563eb'
 const LINE_WEIGHT = 4
@@ -79,37 +83,58 @@ function cancelRafIds(rafIds: number[]) {
   rafIds.length = 0
 }
 
+function isContainerSized(el: HTMLElement | null | undefined): boolean {
+  if (!el) return false
+  return el.clientWidth >= MIN_SIZED_PX && el.clientHeight >= MIN_SIZED_PX
+}
+
 /**
  * Immediate invalidateSize + two requestAnimationFrame follow-ups (three total)
  * so late flex/grid layout does not leave a blank/wrong-size canvas.
+ * Optional onAfter runs after the last invalidate (for one-shot re-fit when sized).
  */
 function scheduleMapInvalidate(
   map: LeafletMap | null | undefined,
-  rafIds?: number[]
+  rafIds?: number[],
+  onAfter?: () => void
 ) {
   if (!map) return
-  try {
-    map.invalidateSize()
-  } catch {
-    // map may already be removed
-  }
-  if (typeof requestAnimationFrame === 'undefined') return
-  const id1 = requestAnimationFrame(() => {
+  const runInvalidate = () => {
     try {
       map.invalidateSize()
     } catch {
-      // ignore
+      // map may already be removed
     }
+  }
+  runInvalidate()
+  if (typeof requestAnimationFrame === 'undefined') {
+    onAfter?.()
+    return
+  }
+  const id1 = requestAnimationFrame(() => {
+    runInvalidate()
     const id2 = requestAnimationFrame(() => {
-      try {
-        map.invalidateSize()
-      } catch {
-        // ignore
-      }
+      runInvalidate()
+      onAfter?.()
     })
     rafIds?.push(id2)
   })
   rafIds?.push(id1)
+}
+
+/**
+ * Stable fingerprint so parent-rebuilt stop/line arrays with same coords do not
+ * thrash markers + re-fit during calculating.
+ */
+export function routeMapGeometryFingerprint(
+  stops: RouteMapStop[],
+  linePositions: LatLon[]
+): string {
+  const stopPart = stops
+    .map((s) => `${s.id}\t${s.lat}\t${s.lon}\t${s.role}\t${s.name}`)
+    .join('|')
+  const linePart = linePositions.map((p) => `${p[0]},${p[1]}`).join(';')
+  return `${stopPart}#${linePart}`
 }
 
 export interface RouteMapProps {
@@ -119,7 +144,7 @@ export interface RouteMapProps {
   onMapClick?: (coords: { lat: number; lon: number }) => void
   /** Fires when canvas fails to load (null when cleared on remount success path). */
   onLoadError?: (message: string | null) => void
-  /** True after map is ready (tiles/init); false on cleanup / fail. */
+  /** True after map is ready (whenReady); false on cleanup / fail. */
   onStyleLoaded?: (loaded: boolean) => void
 }
 
@@ -144,6 +169,13 @@ function buildMarkerElement(stop: RouteMapStop): HTMLDivElement {
     'user-select:none',
   ].join(';')
   el.textContent = ROUTE_MAP_MARKER_GLYPH[stop.role]
+  return el
+}
+
+/** Text-only popup body — never pass untrusted names as HTML. */
+function buildPopupContent(stop: RouteMapStop): HTMLDivElement {
+  const el = document.createElement('div')
+  el.textContent = `${stop.role}: ${stop.name}`
   return el
 }
 
@@ -210,6 +242,15 @@ export default function RouteMap({
   onLoadErrorRef.current = onLoadError
   const onStyleLoadedRef = useRef(onStyleLoaded)
   onStyleLoadedRef.current = onStyleLoaded
+  /** Latest stops for one-shot re-fit after container sizes (avoids stale closure). */
+  const stopsRef = useRef(model.stops)
+  stopsRef.current = model.stops
+  /**
+   * True when the last fitToStops ran while the container was still ~0×0.
+   * Cleared after a successful re-fit once the container is sized.
+   * ResizeObserver must not re-fit on every resize (preserves user pan/zoom).
+   */
+  const fitPendingUntilSizedRef = useRef(false)
   /** Prevents duplicate loadError from construct paths. */
   const loadErrorOnceRef = useRef(false)
   /** Bumps when map instance is ready so marker/line sync re-runs after async import. */
@@ -217,6 +258,8 @@ export default function RouteMap({
   /** True after map whenReady (style-loaded contract for card idle hint). */
   const [styleLoaded, setStyleLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  const geometryKey = routeMapGeometryFingerprint(model.stops, model.linePositions)
 
   const failLoad = (reason: string, err?: unknown) => {
     if (loadErrorOnceRef.current) return
@@ -230,6 +273,27 @@ export default function RouteMap({
     onLoadErrorRef.current?.(LOAD_ERROR_MESSAGE)
     setStyleLoaded(false)
     onStyleLoadedRef.current?.(false)
+  }
+
+  /** Fit camera; if container not sized yet, arm one-shot re-fit for ResizeObserver / rAF. */
+  const applyCamera = (map: LeafletMap, L: LeafletNS, stops: RouteMapStop[]) => {
+    fitToStops(map, stops, L)
+    fitPendingUntilSizedRef.current = !isContainerSized(containerRef.current)
+  }
+
+  /** If a zero-size fit is pending and container is now sized, invalidate + re-fit once. */
+  const tryFitPendingIfSized = () => {
+    if (!fitPendingUntilSizedRef.current) return
+    const map = mapRef.current
+    const L = leafletRef.current
+    if (!map || !L || !isContainerSized(containerRef.current)) return
+    try {
+      map.invalidateSize()
+    } catch {
+      // ignore
+    }
+    fitToStops(map, stopsRef.current, L)
+    fitPendingUntilSizedRef.current = false
   }
 
   // Init map once via dynamic import (client only; no SSR / worker)
@@ -263,7 +327,6 @@ export default function RouteMap({
 
       try {
         leafletRef.current = L
-        console.info('[RouteMap] using OSM tiles', OSM_TILE_URL)
 
         const map = L.map(containerRef.current, {
           center: DEFAULT_CENTER,
@@ -292,7 +355,10 @@ export default function RouteMap({
           if (cancelled || mapRef.current !== map) return
           setStyleLoaded(true)
           onStyleLoadedRef.current?.(true)
-          scheduleMapInvalidate(map, resizeRafIds)
+          scheduleMapInvalidate(map, resizeRafIds, () => {
+            if (cancelled || mapRef.current !== map) return
+            tryFitPendingIfSized()
+          })
         }
         map.whenReady(onReady)
 
@@ -329,6 +395,7 @@ export default function RouteMap({
         }
         polylineRef.current = null
       }
+      fitPendingUntilSizedRef.current = false
       // Strict Mode: clear sticky load-error so re-init is not stuck on the error overlay
       loadErrorOnceRef.current = false
       setLoadError(null)
@@ -344,17 +411,19 @@ export default function RouteMap({
     }
   }, [])
 
-  // Once after mapReady: immediate + two rAF invalidates (container may have been 0×0 at construct)
+  // Once after mapReady: immediate + two rAF invalidates; re-fit if still pending
   useEffect(() => {
     if (!mapReady || loadError) return
     const rafIds: number[] = []
-    scheduleMapInvalidate(mapRef.current, rafIds)
+    scheduleMapInvalidate(mapRef.current, rafIds, () => {
+      tryFitPendingIfSized()
+    })
     return () => {
       cancelRafIds(rafIds)
     }
   }, [mapReady, loadError])
 
-  // ResizeObserver: invalidateSize only — do not re-fit (preserves user pan/zoom).
+  // ResizeObserver: always invalidateSize; re-fit only when fitPendingUntilSized (0×0 → sized).
   // Skip / disconnect when loadError so we never observe a detached-only error surface.
   useEffect(() => {
     if (loadError) return
@@ -366,6 +435,10 @@ export default function RouteMap({
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
         mapRef.current?.invalidateSize()
+        // One-shot re-fit only — not on every user resize (preserves pan/zoom)
+        if (fitPendingUntilSizedRef.current) {
+          tryFitPendingIfSized()
+        }
       }, 100)
     })
     ro.observe(el)
@@ -375,63 +448,53 @@ export default function RouteMap({
     }
   }, [loadError])
 
-  // Sync markers + polyline + bounds when model changes.
+  // Sync markers + polyline + bounds when geometry fingerprint changes.
   useEffect(() => {
     const map = mapRef.current
     const L = leafletRef.current
     if (!map || !L || !mapReady || loadError) return
 
-    let cancelled = false
+    markersRef.current.forEach((m) => m.remove())
+    markersRef.current = []
 
-    const apply = () => {
-      if (cancelled || mapRef.current !== map || leafletRef.current !== L) return
-
-      markersRef.current.forEach((m) => m.remove())
-      markersRef.current = []
-
-      for (const stop of model.stops) {
-        const el = buildMarkerElement(stop)
-        const icon = L.divIcon({
-          className: 'route-map-div-icon',
-          html: el.outerHTML,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
-          popupAnchor: [0, -14],
-        })
-        const marker = L.marker([stop.lat, stop.lon], { icon })
-          .bindPopup(`${stop.role}: ${stop.name}`, { closeButton: false, offset: [0, -8] })
-          .addTo(map)
-        markersRef.current.push(marker)
-      }
-
-      const line = model.linePositions
-
-      if (polylineRef.current) {
-        polylineRef.current.remove()
-        polylineRef.current = null
-      }
-
-      if (line.length >= 2) {
-        const latlngs = line.map(latLonToLatLng)
-        polylineRef.current = L.polyline(latlngs, {
-          color: LINE_COLOR,
-          weight: LINE_WEIGHT,
-          opacity: LINE_OPACITY,
-          lineJoin: 'round',
-          lineCap: 'round',
-        }).addTo(map)
-      }
-
-      // Re-fit only on model stop/line identity change (not on resize)
-      fitToStops(map, model.stops, L)
+    for (const stop of model.stops) {
+      const el = buildMarkerElement(stop)
+      const icon = L.divIcon({
+        className: 'route-map-div-icon',
+        html: el.outerHTML,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -14],
+      })
+      const marker = L.marker([stop.lat, stop.lon], { icon })
+        .bindPopup(buildPopupContent(stop), { closeButton: false, offset: [0, -8] })
+        .addTo(map)
+      markersRef.current.push(marker)
     }
 
-    apply()
+    const line = model.linePositions
 
-    return () => {
-      cancelled = true
+    if (polylineRef.current) {
+      polylineRef.current.remove()
+      polylineRef.current = null
     }
-  }, [model.stops, model.linePositions, mapReady, loadError])
+
+    if (line.length >= 2) {
+      const latlngs = line.map(latLonToLatLng)
+      polylineRef.current = L.polyline(latlngs, {
+        color: LINE_COLOR,
+        weight: LINE_WEIGHT,
+        opacity: LINE_OPACITY,
+        lineJoin: 'round',
+        lineCap: 'round',
+      }).addTo(map)
+    }
+
+    // Re-fit on geometry change; arm pending re-fit if container still 0×0
+    applyCamera(map, L, model.stops)
+    // geometryKey is the stable dep; model.stops/line used for latest values at same key
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fingerprint gates identity thrash
+  }, [geometryKey, mapReady, loadError])
 
   const containerClass =
     className ||
@@ -448,7 +511,7 @@ export default function RouteMap({
           aria-live="polite"
           data-testid="route-map-tiles-loading"
         >
-          {TILES_LOADING_MESSAGE}
+          {MAP_LOADING_MESSAGE}
         </div>
       )}
       {loadError && (

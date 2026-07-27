@@ -165,9 +165,8 @@ describe('RouteMap Leaflet foundation', () => {
     expect(card).toContain("mapLoadFailed\n    ? 'Map failed to load'")
   })
 
-  it('syncs markers, polyline, and guards short line; ResizeObserver invalidates only', () => {
+  it('syncs markers, polyline; ResizeObserver invalidates; one-shot re-fit only when pending', () => {
     const source = read(mapPath)
-    expect(source).toContain('cancelled')
     expect(source).toContain('line.length >= 2')
     expect(source).toContain('L.polyline')
     expect(source).toContain('L.marker')
@@ -175,12 +174,32 @@ describe('RouteMap Leaflet foundation', () => {
     expect(source).toContain('ROUTE_MAP_ROLE_HEX')
     expect(source).toContain('new ResizeObserver')
     expect(source).toContain('mapRef.current?.invalidateSize()')
-    // Resize must not re-fit — anchor on constructor, not file-header mentions
+    expect(source).toContain('fitPendingUntilSizedRef')
+    expect(source).toContain('tryFitPendingIfSized')
+    expect(source).toContain('applyCamera')
+    // Resize path: always invalidate; re-fit gated by fitPendingUntilSizedRef
     const resizeStart = source.indexOf('new ResizeObserver')
     expect(resizeStart).toBeGreaterThanOrEqual(0)
     const resizeFn = source.slice(resizeStart, source.indexOf('ro.observe', resizeStart))
     expect(resizeFn).toContain('.invalidateSize()')
-    expect(resizeFn).not.toContain('fitToStops')
+    expect(resizeFn).toContain('fitPendingUntilSizedRef')
+    expect(resizeFn).toContain('tryFitPendingIfSized')
+  })
+
+  it('uses stable geometry fingerprint deps (not raw stops/line array identity)', () => {
+    const source = read(mapPath)
+    expect(source).toContain('routeMapGeometryFingerprint')
+    expect(source).toContain('geometryKey')
+    expect(source).toMatch(/\[geometryKey,\s*mapReady,\s*loadError\]/)
+    expect(source).not.toMatch(/\[model\.stops,\s*model\.linePositions/)
+  })
+
+  it('binds popup via textContent (no HTML injection of stop.name)', () => {
+    const source = read(mapPath)
+    expect(source).toContain('buildPopupContent')
+    expect(source).toContain('el.textContent')
+    expect(source).toContain('bindPopup(buildPopupContent(stop)')
+    expect(source).not.toMatch(/bindPopup\(`\$\{stop\.role\}: \$\{stop\.name\}`/)
   })
 
   it('invalidates size on ready and after mapReady (immediate + two rAF follow-ups)', () => {
@@ -192,19 +211,26 @@ describe('RouteMap Leaflet foundation', () => {
     expect(source).toContain('map.invalidateSize()')
     const fnStart = source.indexOf('function scheduleMapInvalidate')
     expect(fnStart).toBeGreaterThanOrEqual(0)
-    const fnBody = source.slice(fnStart, fnStart + 900)
+    const fnBody = source.slice(fnStart, fnStart + 1200)
+    // immediate + nested rAF pair (three invalidates via runInvalidate helper)
+    expect(fnBody).toContain('runInvalidate')
+    expect(fnBody).toContain('map.invalidateSize()')
     expect(fnBody).toMatch(
-      /map\.invalidateSize\(\)[\s\S]*requestAnimationFrame\([\s\S]*map\.invalidateSize\(\)[\s\S]*requestAnimationFrame\([\s\S]*map\.invalidateSize\(\)/
+      /runInvalidate\(\)[\s\S]*requestAnimationFrame\([\s\S]*runInvalidate\(\)[\s\S]*requestAnimationFrame\([\s\S]*runInvalidate\(\)/
     )
+    expect(fnBody).toContain('onAfter')
     expect(source).toMatch(/onReady[\s\S]*cancelled[\s\S]*mapRef\.current !== map/)
     expect(source).toMatch(/onReady[\s\S]*scheduleMapInvalidate/)
     expect(source).toMatch(/scheduleMapInvalidate\(mapRef/)
     expect(source).toContain('[mapReady, loadError]')
+    // Re-fit after invalidate when zero-size fit was pending
+    expect(source).toMatch(/scheduleMapInvalidate\([\s\S]*tryFitPendingIfSized/)
   })
 
-  it('shows Loading map tiles overlay until ready; permanent fail uses Map failed to load', () => {
+  it('shows Loading map overlay until whenReady; permanent fail uses Map failed to load', () => {
     const source = read(mapPath)
-    expect(source).toContain('Loading map tiles…')
+    expect(source).toContain('Loading map…')
+    expect(source).not.toContain('Loading map tiles…')
     expect(source).toContain('route-map-tiles-loading')
     expect(source).toContain('styleLoaded')
     expect(source).toContain('Map failed to load')
@@ -255,6 +281,23 @@ describe('RouteMap Leaflet foundation', () => {
     expect(existsSync(path.join(process.cwd(), 'components', 'route-map', 'resolveMaplibreModule.ts'))).toBe(false)
     expect(existsSync(path.join(process.cwd(), 'public', 'maplibre-gl-worker.mjs'))).toBe(false)
     expect(existsSync(path.join(process.cwd(), 'public', 'maplibre-gl-shared.mjs'))).toBe(false)
+  })
+
+  it('package.json depends on leaflet and not maplibre-gl', () => {
+    const pkg = JSON.parse(read(path.join(process.cwd(), 'package.json'))) as {
+      dependencies?: Record<string, string>
+      devDependencies?: Record<string, string>
+    }
+    expect(pkg.dependencies?.leaflet).toBeTruthy()
+    expect(pkg.dependencies?.['maplibre-gl']).toBeUndefined()
+    expect(pkg.devDependencies?.['maplibre-gl']).toBeUndefined()
+    expect(pkg.devDependencies?.['@types/leaflet'] || pkg.dependencies?.['@types/leaflet']).toBeTruthy()
+  })
+
+  it('idle empty hint leaves bottom padding for OSM attribution', () => {
+    const card = read(cardPath)
+    expect(card).toContain('pb-10')
+    expect(card).toMatch(/attribution|OSM/i)
   })
 })
 
