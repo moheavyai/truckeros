@@ -115,15 +115,39 @@ describe('RouteMap MapLibre foundation', () => {
       /import\s*\{[^}]*\b(?:Map|Marker|Popup|NavigationControl|LngLatBounds)\b[^}]*\}\s*from\s*['"]maplibre-gl['"]/
     )
     expect(codeOnly).toMatch(/import\s+type\s*\{[\s\S]*?\bMap\s+as\s+MaplibreMap/)
-    // Dynamic import lives in the init effect path
-    const initIdx = codeOnly.indexOf('// Init map once')
-    const initSlice =
-      initIdx >= 0 ? codeOnly.slice(initIdx, initIdx + 2500) : codeOnly
-    expect(initSlice).toContain("import('maplibre-gl')")
-    expect(initSlice).toContain('resolveMaplibreModule')
-    expect(codeOnly).toContain('setMapReady(false)')
-    expect(codeOnly).toContain('setMapReady(true)')
-    expect(codeOnly).toContain('safeRemoveMap(createdMap)')
+    // Dynamic import must live in the mount-once init useEffect (empty deps).
+    // Anchor on non-comment code only — comments are stripped from codeOnly above.
+    const dynamicImportRe = /import\(['"]maplibre-gl['"]\)/g
+    const dynamicHits = [...codeOnly.matchAll(dynamicImportRe)]
+    expect(dynamicHits).toHaveLength(1)
+    const importIdx = dynamicHits[0].index ?? -1
+    expect(importIdx).toBeGreaterThanOrEqual(0)
+    // Neighborhood of the call: await import + resolve + cancel flag (init path markers)
+    const neighborhood = codeOnly.slice(Math.max(0, importIdx - 600), importIdx + 700)
+    expect(neighborhood).toMatch(/await\s+import\(['"]maplibre-gl['"]\)/)
+    expect(neighborhood).toContain('resolveMaplibreModule')
+    expect(neighborhood).toMatch(/let\s+cancelled\s*=\s*false/)
+    expect(neighborhood).toContain('createdMap')
+    expect(neighborhood).toContain('failLoad')
+    // Enclosing useEffect with empty dependency array (init-once, not ResizeObserver/model sync)
+    const beforeImport = codeOnly.slice(0, importIdx)
+    const effectStart = beforeImport.lastIndexOf('useEffect')
+    expect(effectStart).toBeGreaterThanOrEqual(0)
+    // Take from that useEffect through its empty-deps closer (survive comment-strip)
+    const fromEffect = codeOnly.slice(effectStart)
+    const emptyDepsMatch = fromEffect.match(
+      /^useEffect\s*\(\s*\(\)\s*=>[\s\S]*?\}\s*,\s*\[\s*\]\s*\)/
+    )
+    expect(emptyDepsMatch).not.toBeNull()
+    const initEffect = emptyDepsMatch![0]
+    expect(initEffect).toContain("import('maplibre-gl')")
+    expect(initEffect).toContain('resolveMaplibreModule')
+    expect(initEffect).toContain('safeRemoveMap(createdMap)')
+    expect(initEffect).toContain('setMapReady(true)')
+    expect(initEffect).toContain('setMapReady(false)')
+    // Not the ResizeObserver or model-sync effects
+    expect(initEffect).not.toContain('ResizeObserver')
+    expect(initEffect).not.toContain('model.linePositions')
     expect(codeOnly).toContain('Map failed to load')
     expect(codeOnly).toContain('route-map-load-error')
     // Error is overlay — map container ref stays mounted
