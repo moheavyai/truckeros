@@ -89,6 +89,22 @@ export function buildLoadDetails(body: Record<string, unknown>): LoadDetails {
     destinationLat: body.destinationLat != null ? Number(body.destinationLat) : undefined,
     destinationLon: body.destinationLon != null ? Number(body.destinationLon) : undefined,
     manualRoute: Array.isArray(body.manualRoute) ? (body.manualRoute as string[]) : undefined,
+    manualWaypoints: Array.isArray(body.manualWaypoints)
+      ? (body.manualWaypoints as Array<{ lat: number; lon: number; name?: string; source?: string }>)
+          .filter(
+            (w) =>
+              w != null &&
+              typeof w === 'object' &&
+              Number.isFinite(Number(w.lat)) &&
+              Number.isFinite(Number(w.lon))
+          )
+          .map((w) => ({
+            lat: Number(w.lat),
+            lon: Number(w.lon),
+            ...(typeof w.name === 'string' ? { name: w.name } : {}),
+            ...(typeof w.source === 'string' ? { source: w.source } : {}),
+          }))
+      : undefined,
     specialInstructions:
       typeof body.specialInstructions === 'string'
         ? body.specialInstructions

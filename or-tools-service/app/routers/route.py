@@ -82,6 +82,7 @@ async def optimize_route_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
             "axleWeights": load.get_axle_weights(),
             "overhangs": list(load.get_overhangs()),
             "manualRoute": load.get_manual_route(),
+            "manualWaypoints": load.get_manual_waypoints() or None,
             "rigSnapshot": load.get_rig_snapshot(),
             "selectedRigSnapshot": load.selectedRigSnapshot,
             "numAxles": load.get_num_axles(),

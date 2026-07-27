@@ -85,6 +85,10 @@ def test_rock_port_in_city_map():
     assert CITY_MAP["rockport"] == CITY_MAP["rock port"]
     assert PREFERRED_HWY_VIA_ANCHORS["US 136"] == "rock port"
     assert PREFERRED_HWY_VIA_ANCHORS["I-40"] == "oklahoma city"
+    assert "auburn" in CITY_MAP
+    assert CITY_MAP["auburn"][2] == "NE"
+    assert "beatrice" in CITY_MAP
+    assert CITY_MAP["beatrice"][2] == "NE"
 
 
 def test_prefer_us136_seeds_rock_port_via_mo_to_ne_avoid_ia():
@@ -365,3 +369,59 @@ def test_honesty_copy_via_seeded_vs_not_injected():
     )
     assert "not injected" in geo_msg
     assert "via seeded" not in geo_msg
+
+
+def test_use_us136_through_auburn_seeds_auburn_not_rock_port():
+    """User-named place in prefer clause beats default US136 Rock Port anchor."""
+    load = {
+        "origin": {"city": "Kansas City", "state": "MO"},
+        "destination": {"city": "Lincoln", "state": "NE"},
+        "specialInstructions": "avoid IA. Use US136 through Auburn, NE from MO border",
+    }
+    stops = build_stops_from_load(load, (39.0997, -94.5786), (40.8136, -96.7026))
+    vias = [s for s in stops if s.get("is_via")]
+    auburn = next((v for v in vias if "auburn" in v["name"].lower()), None)
+    assert auburn is not None, f"Auburn via missing; vias={[v['name'] for v in vias]}"
+    assert auburn["state"] == "NE"
+    assert auburn["lat"] == pytest.approx(40.3925, abs=0.02)
+    # Rock Port is not required when user named Auburn
+    rock = next((v for v in vias if "rock" in v["name"].lower()), None)
+    assert rock is None, f"Rock Port should not be forced when Auburn named; vias={[v['name'] for v in vias]}"
+
+
+def test_prefer_us136_alone_still_seeds_rock_port():
+    """Bare 'prefer US136' (no place) keeps highway default anchor Rock Port."""
+    load = {
+        "origin": {"city": "St Louis", "state": "MO"},
+        "destination": {"city": "Omaha", "state": "NE"},
+        "specialInstructions": "prefer US136",
+    }
+    stops = build_stops_from_load(load, (38.6270, -90.1994), (41.2565, -95.9345))
+    vias = [s for s in stops if s.get("is_via")]
+    assert any("rock" in v["name"].lower() and v["state"] == "MO" for v in vias)
+
+
+def test_manual_waypoints_appear_as_vias_before_drops():
+    """manualWaypoints schema → forced vias before drops."""
+    load = {
+        "origin": {"city": "Kansas City", "state": "MO"},
+        "destination": {"city": "Lincoln", "state": "NE"},
+        "manualWaypoints": [
+            {"lat": 40.5, "lon": -95.7, "name": "Map Pick A", "source": "map"},
+        ],
+        "drops": [
+            {"query": "Lincoln", "lat": 40.8136, "lon": -96.7026, "state": "NE"},
+        ],
+    }
+    stops = build_stops_from_load(load, (39.0997, -94.5786), (40.8136, -96.7026))
+    assert stops[0]["name"] == "origin"
+    vias = [s for s in stops if s.get("is_via")]
+    assert any("map pick" in v["name"].lower() or abs(v["lat"] - 40.5) < 0.01 for v in vias)
+    via_idx = next(
+        i
+        for i, s in enumerate(stops)
+        if s.get("is_via") and abs(s["lat"] - 40.5) < 0.01
+    )
+    drop_idx = next(i for i, s in enumerate(stops) if s.get("is_drop"))
+    assert via_idx < drop_idx
+    assert stops[-1].get("is_drop") is True

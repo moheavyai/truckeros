@@ -188,3 +188,56 @@ class TestAssessPreferenceEnforcement:
         assert "via seeded" in msg
         assert "not realized in geometry" in msg
         assert "not injected" not in msg
+
+    def test_or_group_satisfied_if_any_realized(self):
+        """US136 or I-29: either highway on route satisfies the or-group."""
+        h = assess_preference_enforcement(
+            avoided=["IA"],
+            preferred=["US 136", "I-29"],
+            route_corridor=["MO", "NE"],
+            highways=["I-29", "I-80"],
+            origin_state="MO",
+            dest_state="NE",
+            preferred_or_groups=[["US 136", "I-29"]],
+        )
+        assert h["missing_pref"] == []
+        assert h["enforced"] is True
+
+    def test_or_group_missing_if_none_realized(self):
+        h = assess_preference_enforcement(
+            avoided=[],
+            preferred=["US 136", "I-29"],
+            route_corridor=["MO", "KS", "NE"],
+            highways=["I-80"],
+            origin_state="MO",
+            dest_state="NE",
+            preferred_or_groups=[["US 136", "I-29"]],
+        )
+        assert any("or" in m.lower() for m in h["missing_pref"])
+        assert h["enforced"] is False
+
+    def test_ordered_preferred_both_required(self):
+        """US136 then US75 → both required (not or-group)."""
+        h = assess_preference_enforcement(
+            avoided=[],
+            preferred=["US 136", "US 75"],
+            route_corridor=["MO", "NE"],
+            highways=["US 136", "I-29"],
+            origin_state="MO",
+            dest_state="NE",
+        )
+        assert "US 75" in h["missing_pref"]
+        assert h["enforced"] is False
+
+
+class TestPreferredHighwayLists:
+    def test_then_ordered_preferred(self):
+        parsed = parse_special_instructions("prefer US136 then US75")
+        assert parsed["preferred"] == ["US 136", "US 75"]
+        assert parsed["preferred_or_groups"] == []
+
+    def test_or_group_preferred_alternatives(self):
+        parsed = parse_special_instructions("prefer US136 or I-29")
+        assert "US 136" in parsed["preferred"]
+        assert "I-29" in parsed["preferred"]
+        assert ["US 136", "I-29"] in parsed["preferred_or_groups"]
