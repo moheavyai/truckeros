@@ -19,8 +19,18 @@ npm run dev          # open /permit-test
 Allow map tiles + style hosts (defaults):
 
 - `https://tiles.openfreemap.org` (style + tiles)
+- `https://demotiles.maplibre.org` (automatic fallback style if primary fails before first load)
 
 If you override `NEXT_PUBLIC_MAP_STYLE_URL`, allow that host in Content-Security-Policy (`connect-src` / `img-src` / `worker-src` as needed).
+
+### Blank canvas troubleshooting
+
+If Permit Test shows Route **Ready** but the map area is solid gray (no tiles/markers):
+
+1. **Container size / resize** — MapLibre paints blank when constructed at 0×0. `RouteMap` calls `map.resize()` on style `load`, once after `mapReady`, via `ResizeObserver`, and a `requestAnimationFrame` double-resize for late flex layout.
+2. **Style / network** — Primary style is `NEXT_PUBLIC_MAP_STYLE_URL` or OpenFreeMap liberty. On style error before first `load`, the map falls back **once** to `https://demotiles.maplibre.org/style.json`. Check the console for `[RouteMap] using map style …` and any tile/CSP failures.
+3. **Loading vs failure** — Until style loads you should see **Loading map tiles…**. Permanent failure shows **Map failed to load** (construct/import still broken, or both primary and demotiles failed).
+4. **Env** — Set `NEXT_PUBLIC_MAP_STYLE_URL` only to a MapLibre-compatible style JSON URL; restart `npm run dev` after changing env.
 
 ## Architecture
 

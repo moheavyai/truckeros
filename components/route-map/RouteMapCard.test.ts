@@ -15,7 +15,8 @@ const adapterPath = path.join(process.cwd(), 'components', 'route-map', 'toRoute
 const cssPath = path.join(process.cwd(), 'app', 'globals.css')
 
 function read(filePath: string) {
-  return readFileSync(filePath, 'utf8')
+  // Normalize CRLF so source-inspection asserts match on Windows checkouts
+  return readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n')
 }
 
 describe('RouteMapCard structure', () => {
@@ -178,6 +179,37 @@ describe('RouteMap MapLibre foundation', () => {
     const resizeFn = resizeBlock.slice(0, resizeBlock.indexOf('ro.observe'))
     expect(resizeFn).toContain('.resize()')
     expect(resizeFn).not.toContain('fitToStops')
+  })
+
+  it('resizes on style load and after mapReady (rAF double-resize for blank canvas)', () => {
+    const source = read(mapPath)
+    expect(source).toContain('scheduleMapResize')
+    expect(source).toContain('requestAnimationFrame')
+    expect(source).toContain('map.resize()')
+    // on load path
+    expect(source).toMatch(/onLoad[\s\S]*scheduleMapResize/)
+    // once after mapReady
+    expect(source).toMatch(/mapReady[\s\S]*scheduleMapResize|scheduleMapResize\(mapRef/)
+    expect(source).toContain('[mapReady, loadError]')
+  })
+
+  it('falls back once to demotiles when primary style errors before load', () => {
+    const source = read(mapPath)
+    expect(source).toContain('https://demotiles.maplibre.org/style.json')
+    expect(source).toContain('FALLBACK_MAP_STYLE')
+    expect(source).toContain('styleFallbackTriedRef')
+    expect(source).toContain('setStyle(FALLBACK_MAP_STYLE)')
+    expect(source).toContain("console.info('[RouteMap] using map style'")
+    expect(source).toContain('falling back to demotiles')
+  })
+
+  it('shows Loading map tiles overlay until style load; permanent fail uses Map failed to load', () => {
+    const source = read(mapPath)
+    expect(source).toContain('Loading map tiles…')
+    expect(source).toContain('route-map-tiles-loading')
+    expect(source).toContain('styleLoaded')
+    expect(source).toContain('Map failed to load')
+    expect(source).toContain('route-map-load-error')
   })
 
   it('enables cooperativeGestures only for coarse pointer', () => {

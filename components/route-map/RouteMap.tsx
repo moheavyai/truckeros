@@ -11,6 +11,8 @@
  * Runtime: maplibre-gl is loaded via dynamic import() inside useEffect so webpack/Next
  * interop cannot leave the default export undefined (top-level default import → Map crash).
  * Style URL: NEXT_PUBLIC_MAP_STYLE_URL or OpenFreeMap liberty default.
+ * If primary style errors before first load, fall back once to demotiles (blank-canvas resilience).
+ * After construct + style load: map.resize() + rAF double-resize for late flex/layout.
  * onMapClick is optional Map v2 hook (unused in v1 UI). Drag-edit is not wired in v1.
  * LatLon [lat,lon] is converted to GeoJSON [lon,lat] only at this MapLibre boundary.
  */
@@ -39,6 +41,8 @@ export { resolveMaplibreModule } from './resolveMaplibreModule'
 export type { MaplibreRuntime } from './resolveMaplibreModule'
 
 const DEFAULT_MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
+/** Last-resort style when primary (env or OpenFreeMap) fails before first load. */
+const FALLBACK_MAP_STYLE = 'https://demotiles.maplibre.org/style.json'
 /** CONUS-ish default when no stops. */
 const DEFAULT_CENTER: [number, number] = [-98.5, 39.8]
 const DEFAULT_ZOOM = 3.2
@@ -46,6 +50,7 @@ const DEFAULT_ZOOM = 3.2
 const NEAR_ZERO_BOUNDS_DEG = 1e-5
 
 const LOAD_ERROR_MESSAGE = 'Map failed to load'
+const TILES_LOADING_MESSAGE = 'Loading map tiles…'
 
 function resolveMapStyle(): string {
   if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_MAP_STYLE_URL) {
@@ -66,6 +71,31 @@ function safeRemoveMap(map: MaplibreMap | null | undefined) {
   } catch {
     // ignore double-remove / already-destroyed
   }
+}
+
+/** resize + requestAnimationFrame double-resize for late flex/grid layout. */
+function scheduleMapResize(map: MaplibreMap | null | undefined) {
+  if (!map) return
+  try {
+    map.resize()
+  } catch {
+    // map may already be removed
+  }
+  if (typeof requestAnimationFrame === 'undefined') return
+  requestAnimationFrame(() => {
+    try {
+      map.resize()
+    } catch {
+      // ignore
+    }
+    requestAnimationFrame(() => {
+      try {
+        map.resize()
+      } catch {
+        // ignore
+      }
+    })
+  })
 }
 
 export interface RouteMapProps {
@@ -174,10 +204,14 @@ export default function RouteMap({
   const onLoadErrorRef = useRef(onLoadError)
   onLoadErrorRef.current = onLoadError
   const styleReadyRef = useRef(false)
+  /** One demotiles setStyle attempt per map instance (primary style error before load). */
+  const styleFallbackTriedRef = useRef(false)
   /** Prevents duplicate loadError from construct + style error paths. */
   const loadErrorOnceRef = useRef(false)
   /** Bumps when map instance is ready so marker/line sync re-runs after async import. */
   const [mapReady, setMapReady] = useState(false)
+  /** True after style `load` (primary or fallback) so tiles overlay can hide. */
+  const [styleLoaded, setStyleLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const failLoad = (reason: string, err?: unknown) => {
@@ -224,9 +258,11 @@ export default function RouteMap({
 
       try {
         mlRef.current = ml
+        const primaryStyle = resolveMapStyle()
+        console.info('[RouteMap] using map style', primaryStyle)
         const map = new ml.Map({
           container: containerRef.current,
-          style: resolveMapStyle(),
+          style: primaryStyle,
           center: DEFAULT_CENTER,
           zoom: DEFAULT_ZOOM,
           attributionControl: { compact: true },
@@ -240,9 +276,14 @@ export default function RouteMap({
         )
         mapRef.current = map
         styleReadyRef.current = false
+        styleFallbackTriedRef.current = false
+        setStyleLoaded(false)
 
         const onLoad = () => {
           styleReadyRef.current = true
+          setStyleLoaded(true)
+          // Style paint often needs an explicit resize after flex layout settles
+          scheduleMapResize(map)
         }
         map.on('load', onLoad)
 
@@ -250,17 +291,34 @@ export default function RouteMap({
           onMapClickRef.current?.({ lat: e.lngLat.lat, lon: e.lngLat.lng })
         })
 
-        // Style/init failures escalate once; post-load tile noise only logs
+        // Style/init failures: one demotiles fallback before permanent fail; post-load tile noise only logs
         map.on('error', (e: { error?: Error; message?: string }) => {
           console.error('[RouteMap] map error', e?.error || e?.message || e)
           if (cancelled || loadErrorOnceRef.current) return
           if (styleReadyRef.current) return
+
+          if (!styleFallbackTriedRef.current) {
+            styleFallbackTriedRef.current = true
+            console.warn(
+              '[RouteMap] primary style failed; falling back to demotiles',
+              FALLBACK_MAP_STYLE
+            )
+            console.info('[RouteMap] using map style', FALLBACK_MAP_STYLE)
+            try {
+              map.setStyle(FALLBACK_MAP_STYLE)
+              return
+            } catch (setErr) {
+              console.error('[RouteMap] fallback setStyle failed', setErr)
+            }
+          }
+
           failLoad('[RouteMap] map style failed to load', e?.error || e)
           safeRemoveMap(map)
           if (mapRef.current === map) mapRef.current = null
           createdMap = null
           mlRef.current = null
           setMapReady(false)
+          setStyleLoaded(false)
         })
 
         if (cancelled) {
@@ -289,14 +347,22 @@ export default function RouteMap({
       markersRef.current.forEach((m) => m.remove())
       markersRef.current = []
       styleReadyRef.current = false
+      styleFallbackTriedRef.current = false
       const map = createdMap ?? mapRef.current
       safeRemoveMap(map)
       mapRef.current = null
       mlRef.current = null
       // Strict Mode: setup→cleanup→setup must clear mapReady so second setMapReady(true) retriggers sync
       setMapReady(false)
+      setStyleLoaded(false)
     }
   }, [])
+
+  // Once after mapReady: resize + rAF double-resize (container may have been 0×0 at construct)
+  useEffect(() => {
+    if (!mapReady || loadError) return
+    scheduleMapResize(mapRef.current)
+  }, [mapReady, loadError])
 
   // ResizeObserver: map.resize only — do not re-fit (preserves user pan/zoom).
   // Skip / disconnect when loadError so we never observe a detached-only error surface.
@@ -319,7 +385,8 @@ export default function RouteMap({
     }
   }, [loadError])
 
-  // Sync markers + line + bounds when model changes (with load listener cleanup)
+  // Sync markers + line + bounds when model changes (with load listener cleanup).
+  // Also re-runs after fallback style load via map.once('load') / styleReadyRef.
   useEffect(() => {
     const map = mapRef.current
     const ml = mlRef.current
@@ -410,6 +477,14 @@ export default function RouteMap({
   return (
     <div className={`relative ${containerClass}`}>
       <div ref={containerRef} className="absolute inset-0" aria-hidden="true" />
+      {!loadError && !styleLoaded && (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center px-4 text-sm text-slate-500 bg-slate-100/80 pointer-events-none"
+          data-testid="route-map-tiles-loading"
+        >
+          {TILES_LOADING_MESSAGE}
+        </div>
+      )}
       {loadError && (
         <div
           className="absolute inset-0 z-10 flex items-center justify-center px-4 text-sm font-medium text-red-800 bg-red-50 border border-red-200"
