@@ -10,8 +10,10 @@
  *
  * Runtime: maplibre-gl is loaded via dynamic import() inside useEffect so webpack/Next
  * interop cannot leave the default export undefined (top-level default import → Map crash).
- * Style URL: NEXT_PUBLIC_MAP_STYLE_URL (trimmed) or OpenFreeMap liberty default.
- * If primary style errors before first load, fall back once to demotiles (blank-canvas resilience).
+ * Worker: configureMaplibreWorker() sets setWorkerUrl to a real JS asset (bundler ?url or
+ * public/maplibre-gl-worker.mjs) BEFORE new Map — avoids MIME text/html worker failures.
+ * Style URL: NEXT_PUBLIC_MAP_STYLE_URL (trimmed) or demotiles default (reliable local).
+ * If primary style errors before first load, fall back once to OpenFreeMap liberty.
  * Residual primary-style errors during the fallback switch are ignored; permanent fail only if
  * the fallback style also errors after the transition settles.
  * After construct + style load: immediate map.resize() + two rAF follow-up resizes for late layout.
@@ -35,16 +37,25 @@ import {
   ROUTE_MAP_ROLE_HEX,
 } from './roleStyles'
 import {
+  configureMaplibreWorker,
+  FALLBACK_MAP_STYLE,
+  resolveMapStyle,
+} from './configureMaplibreWorker'
+import {
   resolveMaplibreModule,
   type MaplibreRuntime,
 } from './resolveMaplibreModule'
 
 export { resolveMaplibreModule } from './resolveMaplibreModule'
 export type { MaplibreRuntime } from './resolveMaplibreModule'
+export {
+  configureMaplibreWorker,
+  DEFAULT_MAP_STYLE,
+  FALLBACK_MAP_STYLE,
+  PUBLIC_MAPLIBRE_WORKER_PATH,
+  resolveMapStyle,
+} from './configureMaplibreWorker'
 
-const DEFAULT_MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
-/** Last-resort style when primary (env or OpenFreeMap) fails before first load. */
-const FALLBACK_MAP_STYLE = 'https://demotiles.maplibre.org/style.json'
 /** CONUS-ish default when no stops. */
 const DEFAULT_CENTER: [number, number] = [-98.5, 39.8]
 const DEFAULT_ZOOM = 3.2
@@ -53,14 +64,6 @@ const NEAR_ZERO_BOUNDS_DEG = 1e-5
 
 const LOAD_ERROR_MESSAGE = 'Map failed to load'
 const TILES_LOADING_MESSAGE = 'Loading map tiles…'
-
-function resolveMapStyle(): string {
-  if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_MAP_STYLE_URL) {
-    const trimmed = process.env.NEXT_PUBLIC_MAP_STYLE_URL.trim()
-    if (trimmed) return trimmed
-  }
-  return DEFAULT_MAP_STYLE
-}
 
 function isCoarsePointer(): boolean {
   if (typeof window === 'undefined' || !window.matchMedia) return false
@@ -232,10 +235,10 @@ export default function RouteMap({
   const onStyleLoadedRef = useRef(onStyleLoaded)
   onStyleLoadedRef.current = onStyleLoaded
   const styleReadyRef = useRef(false)
-  /** One demotiles setStyle attempt per map instance (primary style error before load). */
+  /** One secondary setStyle attempt per map instance (primary style error before load). */
   const styleFallbackTriedRef = useRef(false)
   /**
-   * True while switching to demotiles: residual aborted-primary errors must not failLoad/teardown.
+   * True while switching secondary style: residual aborted-primary errors must not failLoad/teardown.
    * Cleared after two rAF frames once setStyle has been issued.
    */
   const styleFallbackTransitionRef = useRef(false)
@@ -293,6 +296,14 @@ export default function RouteMap({
 
       if (!containerRef.current || cancelled) return
 
+      // Worker URL must be real JS (not Next HTML) before Map construct
+      try {
+        await configureMaplibreWorker(mod)
+      } catch (workerErr) {
+        console.warn('[RouteMap] configureMaplibreWorker failed; Map may hang on tiles', workerErr)
+      }
+      if (cancelled || !containerRef.current) return
+
       try {
         mlRef.current = ml
         const primaryStyle = resolveMapStyle()
@@ -333,7 +344,7 @@ export default function RouteMap({
           onMapClickRef.current?.({ lat: e.lngLat.lat, lon: e.lngLat.lng })
         })
 
-        // Style/init failures: one demotiles fallback before permanent fail; post-load tile noise only logs.
+        // Style/init failures: one OpenFreeMap fallback before permanent fail; post-load tile noise only logs.
         // Residual primary errors during the setStyle transition must not tear down a healthy fallback.
         map.on('error', (e: { error?: Error; message?: string }) => {
           console.error('[RouteMap] map error', e?.error || e?.message || e)
@@ -344,7 +355,7 @@ export default function RouteMap({
             styleFallbackTriedRef.current = true
             styleFallbackTransitionRef.current = true
             console.warn(
-              '[RouteMap] primary style failed; falling back to demotiles',
+              '[RouteMap] primary style failed; falling back to OpenFreeMap liberty',
               FALLBACK_MAP_STYLE
             )
             console.info('[RouteMap] using map style', FALLBACK_MAP_STYLE)
