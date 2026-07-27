@@ -23,8 +23,8 @@ import {
   PORTAL_TRIP_TYPES,
   buildMoFilingSteps,
   buildMoFilingStepClipboard,
-  MO_PORTAL_WALKTHROUGH,
   getMoPortalFieldLabel,
+  getMoStepPrefillKeysWithValues,
   type RouteComparison,
   type PortalSubmissionRecord,
   type PrefillPackage,
@@ -1147,12 +1147,12 @@ export default function PortalAssistPage() {
                   )}
                   {selectedState === 'MO' && (
                     <p className={`${fieldHintTinyClass} mt-1`}>
-                      Used as Permit type for MoDOT step 2 and Copy all.
+                      Guidance for Single Trip selection and application tips in Copy all.
                     </p>
                   )}
                 </div>
 
-                {/* MO-only: MoDOT Carrier Express playbook — numbered steps + walkthrough (not RPA) */}
+                {/* MO-only: MoDOT Carrier Express playbook v2 — live Single Trip path (not RPA) */}
                 {selectedState === 'MO' && (
                   <div className="mb-4 space-y-4" data-testid="mo-playbook">
                     <div data-testid="mo-filing-steps">
@@ -1186,8 +1186,9 @@ export default function PortalAssistPage() {
                         </div>
                       </div>
                       <p className={`${fieldHintTinyClass} mb-2`}>
-                        Copy per step, then paste into MoDOT. Official Using MCE / OSOW guides
-                        live on{' '}
+                        Path mapped from live Carrier Express Single Trip screens. Copy per
+                        step or use Copy all, then paste into MoDOT — copy-assist only (no
+                        RPA). Guides on{' '}
                         {config.infoUrl ? (
                           <a
                             href={config.infoUrl}
@@ -1199,8 +1200,8 @@ export default function PortalAssistPage() {
                           </a>
                         ) : (
                           'modot.org'
-                        )}{' '}
-                        — we do not invent click paths.
+                        )}
+                        .
                       </p>
                       <div
                         role="status"
@@ -1218,9 +1219,15 @@ export default function PortalAssistPage() {
                       </div>
                       <ol className="space-y-2 text-sm list-none pl-0">
                         {buildMoFilingSteps(prefill).map((step) => {
+                          // Only list prefill keys that currently have values (no empty border noise)
+                          const keysWithValues = getMoStepPrefillKeysWithValues(
+                            prefill,
+                            step,
+                            { tripType }
+                          )
                           const keysHint =
-                            step.prefillKeys.length > 0
-                              ? step.prefillKeys
+                            keysWithValues.length > 0
+                              ? keysWithValues
                                   .map((k) => getMoPortalFieldLabel(k))
                                   .join(', ')
                               : null
@@ -1263,15 +1270,21 @@ export default function PortalAssistPage() {
                       </ol>
                     </div>
 
+                    {/* Path overview = same as numbered steps (no duplicate full list) */}
                     <div data-testid="mo-walkthrough">
                       <span className={`${fieldLabelClass} block mb-2`}>
-                        POST-LOGIN WALKTHROUGH
+                        CARRIER EXPRESS SINGLE TRIP PATH
                       </span>
-                      <ol className={`list-decimal pl-5 space-y-1 text-sm ${bodyTextClass}`}>
-                        {MO_PORTAL_WALKTHROUGH.map((line, i) => (
-                          <li key={i}>{line}</li>
-                        ))}
-                      </ol>
+                      <p className={`${fieldHintTinyClass} ${bodyTextClass}`}>
+                        Same path as numbered steps above (mapped from live Single Trip screens).
+                        {tripType !== 'Single trip' ? (
+                          <>
+                            {' '}
+                            Playbook is Single Trip–focused; selected trip type is{' '}
+                            <strong>{tripType}</strong> — adjust MoDOT menus if needed.
+                          </>
+                        ) : null}
+                      </p>
                     </div>
                   </div>
                 )}

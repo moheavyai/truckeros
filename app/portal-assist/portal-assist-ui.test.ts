@@ -504,7 +504,7 @@ describe('Portal Assist — Missouri Carrier Express playbook', () => {
     const source = readSource(pagePath)
     expect(source).toContain('buildMoFilingSteps')
     expect(source).toContain('buildMoFilingStepClipboard')
-    expect(source).toContain('MO_PORTAL_WALKTHROUGH')
+    expect(source).toContain('getMoStepPrefillKeysWithValues')
     expect(source).toContain('getMoPortalFieldLabel')
     expect(source).toContain('type MoFilingStep')
   })
@@ -557,26 +557,38 @@ describe('Portal Assist — Missouri Carrier Express playbook', () => {
     expect(source).toContain('resolvePortalFieldLabel(idKey, config, selectedState)')
   })
 
-  it('places trip type control before MO playbook and references permit type', () => {
+  it('places trip type control before MO playbook and references Single Trip / Copy all', () => {
     const source = readSource(pagePath)
     const tripIdx = source.indexOf('data-testid="trip-type-control"')
     const moIdx = source.indexOf('data-testid="mo-playbook"')
     expect(tripIdx).toBeGreaterThan(-1)
     expect(moIdx).toBeGreaterThan(tripIdx)
-    expect(source).toContain('Used as Permit type for MoDOT step 2 and Copy all')
+    expect(source).toContain('Guidance for Single Trip selection and application tips in Copy all')
   })
 
-  it('renders static MO walkthrough copy', () => {
+  it('renders Carrier Express path note (de-duped; Single Trip focus honesty)', () => {
     const source = readSource(pagePath)
     expect(source).toContain('data-testid="mo-walkthrough"')
-    expect(source).toContain('POST-LOGIN WALKTHROUGH')
-    expect(source).toContain('MO_PORTAL_WALKTHROUGH.map')
+    expect(source).toContain('CARRIER EXPRESS SINGLE TRIP PATH')
+    expect(source).not.toContain('POST-LOGIN WALKTHROUGH')
+    // De-duped: no full walkthrough list re-render of MO_PORTAL_WALKTHROUGH
+    expect(source).not.toContain('MO_PORTAL_WALKTHROUGH.map')
+    expect(source).toContain('Same path as numbered steps above')
+    expect(source).toContain("tripType !== 'Single trip'")
+    expect(source).toContain('Playbook is Single Trip')
+  })
+
+  it('filters Prefill hints to keys with values', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('getMoStepPrefillKeysWithValues')
+    expect(source).toContain('keysWithValues')
   })
 
   it('does not claim auto-click into MoDOT; playbook is copy-assist only', () => {
     const source = readSource(pagePath)
     expect(source.toLowerCase()).not.toContain('auto-click')
     expect(source).not.toMatch(/automate[sd]?\s+(filing|submission|modot)/i)
+    expect(source).toMatch(/copy-assist only \(no\s*\n?\s*RPA\)|copy-assist only \(no RPA\)/i)
     // Playbook block must not auto-open portal on render
     const playbookStart = source.indexOf('data-testid="mo-playbook"')
     expect(playbookStart).toBeGreaterThan(-1)

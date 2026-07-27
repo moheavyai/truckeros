@@ -29,6 +29,7 @@
 // to prevent Turbopack client bundle errors. This file must remain safe for both client and server.
 
 import { formatDimensionDisplay } from '@/lib/parse-dimension'
+import { classifyTrailerRole, normalizeTrailerTypeLabel } from '@/lib/trailer-types'
 
 export type PortalType = 'online' | 'gotpermits' | 'phone' | 'efee'
 
@@ -131,15 +132,15 @@ export const STATE_PORTAL_CONFIGS: Record<string, PortalStateConfig> = {
     portalSystemName: 'MoDOT Carrier Express',
     infoUrl: 'https://www.modot.org/',
     instructions:
-      'MoDOT Carrier Express (MCE) OSOW. Use the MO field packet and filing steps below; official Using MCE / OSOW guides live on modot.org. Note Missouri River crossings and I-70 restrictions.',
+      'MoDOT Carrier Express (MCE) Single Trip. Path and field labels mapped from live Carrier Express screens — copy packet into the portal (no RPA). Note Missouri River crossings and I-70 restrictions.',
     fieldMapping: {
-      origin: 'Origin (city, state / junction)',
-      destination: 'Destination (city, state / junction)',
-      weight: 'Gross weight (lbs)',
-      length: 'Overall length',
-      width: 'Overall width',
-      height: 'Overall height',
-      route: 'Requested route / corridor',
+      origin: 'Origin',
+      destination: 'Destination',
+      weight: 'GVW',
+      length: 'Overall Length',
+      width: 'Overall Width',
+      height: 'Overall Height',
+      route: 'Route corridor',
     },
     requiresVehicleInfo: true,
     typicalRestrictions: ['Missouri River bridge restrictions', 'I-70 weight postings near KC'],
@@ -1014,6 +1015,24 @@ export const PREFILL_FIELD_LABELS: Record<string, string> = {
   trip_type: 'Trip Type',
   rig_name: 'Rig Name',
   overhang: 'Overhang',
+  front_overhang: 'Front Overhang',
+  rear_overhang: 'Rear Overhang',
+  trailer_length: 'Trailer / Load Length',
+  load_description: 'Load Description',
+  load_pieces: 'Load Pieces / How Many',
+  serial_number: 'Serial Number',
+  piece_width: 'Piece Width',
+  piece_length: 'Piece Length',
+  piece_height: 'Piece Height',
+  power_unit_type: 'Power Unit Type',
+  unit_two_type: 'Unit Two Type',
+  highways: 'Highways',
+  tip_conveyance: 'Conveyance',
+  tip_description_list: 'Description list',
+  tip_for_hire: 'For Hire',
+  tip_travel: 'Travel',
+  tip_vehicle_type: 'Vehicle Type',
+  tip_booster: 'Booster unit',
   special_notes: 'Special Notes',
 }
 
@@ -1146,104 +1165,194 @@ export interface CompletenessChecklistContext {
 }
 
 // ---------------------------------------------------------------------------
-// Missouri (MoDOT Carrier Express) Portal Assist playbook — pure helpers
-// Clerk-facing field order/labels, filing steps, and static walkthrough.
+// Missouri (MoDOT Carrier Express) Portal Assist playbook v2 — pure helpers
+// Field order/labels locked from live Carrier Express Single Trip screens.
 // NOT browser RPA / auto-click into MoDOT.
 // ---------------------------------------------------------------------------
 
-/** Stable MO-ordered prefill keys for clipboard packet + field UI. */
+/** Application-tip + copyable-value keys in MoDOT Single Trip packet order. */
 export const MO_PORTAL_FIELD_ORDER: readonly string[] = [
+  // Permit type + application tips
   'trip_type',
-  'origin',
-  'destination',
-  'weight',
-  'length',
-  'width',
-  'height',
-  'axles',
-  // Vehicle identity after dims/weight/axles, before route/borders
-  'tractor_year',
+  'tip_conveyance',
+  'tip_description_list',
+  'tip_for_hire',
+  'tip_travel',
+  'tip_vehicle_type',
+  'tip_booster',
+  // Load
+  'load_description',
+  'load_pieces',
+  'serial_number',
+  'piece_width',
+  'piece_length',
+  'piece_height',
+  // Power unit
   'tractor_make',
-  'tractor_model',
-  'tractor_ymm',
-  'tractor_vin',
   'tractor_plate',
   'tractor_plate_state',
-  'trailer_year',
+  'tractor_vin',
+  'tractor_year',
+  'power_unit_type',
+  // Unit two (primary cargo trailer)
   'trailer_make',
-  'trailer_model',
-  'trailer_ymm',
-  'trailer_vin',
   'trailer_plate',
   'trailer_plate_state',
-  'trailer_2_year',
-  'trailer_2_make',
-  'trailer_2_model',
-  'trailer_2_ymm',
-  'trailer_2_vin',
-  'trailer_2_plate',
-  'trailer_2_plate_state',
-  'vehicle_id',
+  'trailer_vin',
+  'trailer_year',
+  'unit_two_type',
+  // Overall dims / weight / overhang / axles
+  'width',
+  'length',
+  'height',
+  'trailer_length',
+  'weight',
+  'front_overhang',
+  'rear_overhang',
+  'axles',
+  // Carrier (checklist requires USDOT)
+  'carrier_usdot',
+  'carrier_company',
+  'carrier_mc',
+  // Trip tab guidance
+  'origin',
+  'destination',
   'route',
+  'highways',
   'border_entry',
   'border_exit',
+] as const
+
+/** Prefill keys copied for MO Step 2 Application fields. */
+export const MO_APPLICATION_PREFILL_KEYS: readonly string[] = [
+  'trip_type',
+  'tip_conveyance',
+  'tip_description_list',
+  'tip_for_hire',
+  'tip_travel',
+  'tip_vehicle_type',
+  'tip_booster',
+  'load_description',
+  'load_pieces',
+  'serial_number',
+  'piece_width',
+  'piece_length',
+  'piece_height',
+  'tractor_make',
+  'tractor_plate',
+  'tractor_plate_state',
+  'tractor_vin',
+  'tractor_year',
+  'power_unit_type',
+  'trailer_make',
+  'trailer_plate',
+  'trailer_plate_state',
+  'trailer_vin',
+  'trailer_year',
+  'unit_two_type',
+  'width',
+  'length',
+  'height',
+  'trailer_length',
+  'weight',
+  'front_overhang',
+  'rear_overhang',
+  'axles',
   'carrier_usdot',
-  'carrier_mc',
   'carrier_company',
-  'driver_name',
+  'carrier_mc',
+] as const
+
+/** Prefill keys copied for MO Trip tab guidance (borders multi-state only). */
+export const MO_TRIP_TAB_PREFILL_KEYS: readonly string[] = [
+  'origin',
+  'destination',
+  'route',
+  'highways',
+  'border_entry',
+  'border_exit',
+] as const
+
+/** Border keys omitted from trip-tab prefill when single-state. */
+export const MO_BORDER_PREFILL_KEYS: readonly string[] = [
+  'border_entry',
+  'border_exit',
 ] as const
 
 /** MoDOT-oriented portal labels for MO packet / resolvePortalFieldLabel. */
 export const MO_PORTAL_FIELD_LABELS: Record<string, string> = {
-  trip_type: 'Permit type',
-  origin: 'Origin (city, state / junction)',
-  destination: 'Destination (city, state / junction)',
-  weight: 'Gross weight (lbs)',
-  length: 'Overall length',
-  width: 'Overall width',
-  height: 'Overall height',
-  axles: 'Number of axles',
-  route: 'Requested route / corridor',
-  border_entry: 'Entry into Missouri',
-  border_exit: 'Exit from Missouri',
-  entry_point: 'Entry into Missouri',
-  exit_point: 'Exit from Missouri',
+  tip_conveyance: 'Conveyance',
+  tip_description_list: 'Description list',
+  tip_for_hire: 'For Hire',
+  tip_travel: 'Travel',
+  tip_vehicle_type: 'Vehicle Type',
+  tip_booster: 'Booster unit',
+  load_description: 'Load Description',
+  load_pieces: 'Load Pieces / How Many',
+  serial_number: 'Serial Number',
+  piece_width: 'Piece Width',
+  piece_length: 'Piece Length',
+  piece_height: 'Piece Height',
+  tractor_make: 'Power Unit Make',
+  tractor_plate: 'Power Unit License Number',
+  tractor_plate_state: 'Power Unit License State',
+  tractor_vin: 'Power Unit VIN',
+  tractor_year: 'Power Unit Model Year',
+  tractor_model: 'Power Unit Model',
+  tractor_ymm: 'Power Unit year/make/model',
+  power_unit_type: 'Power Unit Type',
+  trailer_make: 'Unit Two Make',
+  trailer_plate: 'Unit Two License Number',
+  trailer_plate_state: 'Unit Two License State',
+  trailer_vin: 'Unit Two VIN',
+  trailer_year: 'Unit Two Model Year',
+  trailer_model: 'Unit Two Model',
+  trailer_ymm: 'Unit Two year/make/model',
+  unit_two_type: 'Unit Two Type',
+  trailer_2_year: 'Unit Three Model Year',
+  trailer_2_make: 'Unit Three Make',
+  trailer_2_model: 'Unit Three Model',
+  trailer_2_ymm: 'Unit Three year/make/model',
+  trailer_2_vin: 'Unit Three VIN',
+  trailer_2_plate: 'Unit Three License Number',
+  trailer_2_plate_state: 'Unit Three License State',
+  width: 'Overall Width',
+  length: 'Overall Length',
+  height: 'Overall Height',
+  trailer_length: 'Trailer/Load Length',
+  weight: 'GVW',
+  front_overhang: 'Front Overhang',
+  rear_overhang: 'Rear Overhang',
+  axles: 'Number of Axles',
+  origin: 'Origin',
+  destination: 'Destination',
+  route: 'Route corridor',
+  highways: 'Highways',
+  border_entry: 'MO entry border',
+  border_exit: 'MO exit border',
+  entry_point: 'MO entry border',
+  exit_point: 'MO exit border',
   vehicle_id: 'Power unit ID / VIN',
-  tractor_year: 'Power unit year',
-  tractor_make: 'Power unit make',
-  tractor_model: 'Power unit model',
-  tractor_ymm: 'Power unit year/make/model',
-  tractor_vin: 'Power unit VIN',
-  tractor_plate: 'Power unit plate',
-  tractor_plate_state: 'Power unit plate state',
-  trailer_year: 'Trailer year',
-  trailer_make: 'Trailer make',
-  trailer_model: 'Trailer model',
-  trailer_ymm: 'Trailer year/make/model',
-  trailer_vin: 'Trailer VIN',
-  trailer_plate: 'Trailer plate',
-  trailer_plate_state: 'Trailer plate state',
-  trailer_2_year: 'Trailer 2 year',
-  trailer_2_make: 'Trailer 2 make',
-  trailer_2_model: 'Trailer 2 model',
-  trailer_2_ymm: 'Trailer 2 year/make/model',
-  trailer_2_vin: 'Trailer 2 VIN',
-  trailer_2_plate: 'Trailer 2 plate',
-  trailer_2_plate_state: 'Trailer 2 plate state',
+  trip_type: 'Permit type',
   carrier_usdot: 'USDOT',
   carrier_mc: 'MC number',
   carrier_company: 'Carrier name',
   driver_name: 'Driver name',
 }
 
-/** Static post-login walkthrough (honest; no invented menu paths). */
+/**
+ * Live-mapped Carrier Express Single Trip walkthrough (from screenshots).
+ * Copy-assist only — no RPA / auto-click.
+ */
 export const MO_PORTAL_WALKTHROUGH: readonly string[] = [
-  'Open portal → sign in with carrier credentials',
-  'Choose OSOW / oversize overweight application',
-  'Single trip; one origin → one destination',
-  'Enter dims + weight; overweight needs axle weights/spacings when available',
-  'Enter route; use TruckerOS corridor + border points as request guidance',
-  'Submit/pay on MoDOT; paste permit # back into Portal Assist when issued',
+  'Login Carrier Express (mcs.modot.mo.gov)',
+  'Programs → Oversize/Overweight',
+  'New Application → Single Trip Permits → Single Trip',
+  'Step 1 Travel Dates (operator picks From/To; 7 moving days typical — no auto dates unless already set)',
+  'Step 2 Application fields (use packet below)',
+  'Trip tab — use TruckerOS origin/dest/corridor/highways/borders as guidance while building keypoints in MoDOT map',
+  'Review → Payment on MoDOT',
+  'Paste permit # back into Portal Assist when issued',
 ] as const
 
 export function isMissouriPortal(
@@ -1301,89 +1410,244 @@ export function isMoMultiStatePrefill(prefill?: PrefillPackage | null): boolean 
 }
 
 /**
- * Numbered MoDOT Carrier Express filing steps for the MO playbook panel.
- * Filters multiStateOnly steps (route & MO entry/exit) for single-state MO;
- * renumbers remaining steps 1..N.
+ * MoDOT Vehicle Type tip from tractor + trailer identity.
+ * tractor + trailer → "PowerUnit + 1 Unit"; tractor only → "PowerUnit".
+ * Empty string when equipment is unknown (omit from packet).
+ */
+export function buildMoVehicleTypeTip(prefill?: PrefillPackage | null): string {
+  const fields = prefill?.generatedFields || {}
+  const trailerCount = Number(fields.trailer_count)
+  // Tractor: discrete power-unit fields only (vehicle_id may be trailer VIN)
+  const hasTractor =
+    hasPrefillValue(fields.tractor_make) ||
+    hasPrefillValue(fields.tractor_vin) ||
+    hasPrefillValue(fields.tractor_year) ||
+    hasPrefillValue(fields.tractor_plate) ||
+    hasPrefillValue(fields.tractor_model) ||
+    hasPrefillValue(fields.tractor_ymm)
+  const hasTrailer =
+    (Number.isFinite(trailerCount) && trailerCount >= 1) ||
+    hasPrefillValue(fields.trailer_make) ||
+    hasPrefillValue(fields.trailer_vin) ||
+    hasPrefillValue(fields.trailer_plate) ||
+    hasPrefillValue(fields.trailer_year) ||
+    hasPrefillValue(fields.unit_two_type)
+
+  if (hasTractor && hasTrailer) {
+    const n =
+      Number.isFinite(trailerCount) && trailerCount > 1
+        ? Math.trunc(trailerCount)
+        : 1
+    return n === 1 ? 'PowerUnit + 1 Unit' : `PowerUnit + ${n} Units`
+  }
+  if (hasTractor) return 'PowerUnit'
+  if (hasTrailer) return '1 Unit'
+  // Unknown configuration — omit tip rather than invent PowerUnit + 1 Unit
+  return ''
+}
+
+/**
+ * Travel tip: multi-state → interstate commerce; else single-state MO intrastate note.
+ * Multi-state signal matches isMoMultiStatePrefill (corridor > 1 OR origin≠dest).
+ */
+export function buildMoTravelTip(
+  prefill?: PrefillPackage | null,
+  routeCorridor?: string[] | null
+): string {
+  const shell: PrefillPackage | null =
+    prefill || routeCorridor
+      ? {
+          state: prefill?.state || 'MO',
+          loadDetails: prefill?.loadDetails || {},
+          routeCorridor: routeCorridor ?? prefill?.routeCorridor ?? [],
+          permitRequiredStates: prefill?.permitRequiredStates || [],
+          generatedFields: prefill?.generatedFields || {},
+          humanApprovalRequired: false,
+          approvalNotes: [],
+        }
+      : null
+  if (isMoMultiStatePrefill(shell)) {
+    return 'Interstate commerce crossing state line'
+  }
+  return 'Intrastate option may apply (single-state MO)'
+}
+
+/** True when trailer_type is jeep/booster/dolly (not primary cargo deck). */
+export function isBoosterLikeTrailer(trailer: Record<string, any> | null | undefined): boolean {
+  if (!trailer || typeof trailer !== 'object') return false
+  const t = trailer.trailer_type ?? trailer.trailerType ?? trailer.type
+  const role = classifyTrailerRole(t)
+  if (role === 'jeep' || role === 'flip' || role === 'stinger') return true
+  const n = normalizeTrailerTypeLabel(t).toLowerCase()
+  return /\bbooster\b/.test(n) || /\bdolly\b/.test(n)
+}
+
+/**
+ * Prefer primary cargo trailer for Unit Two (skip jeep/booster when a later trailer exists).
+ */
+export function pickPrimaryCargoTrailer(
+  trailers: Record<string, any>[] | null | undefined
+): Record<string, any> | null {
+  if (!Array.isArray(trailers) || trailers.length === 0) return null
+  const main = trailers.find((tr) => !isBoosterLikeTrailer(tr))
+  return main || trailers[0]
+}
+
+/** Booster unit tip: Yes when equipment indicates jeep/booster/dolly; else No. */
+export function buildMoBoosterTip(prefill?: PrefillPackage | null, request?: any): string {
+  const equip = request?.equipment || prefill?.loadDetails?.equipment || {}
+  const rig = equip?.rig as Record<string, any> | undefined
+  const trailers = Array.isArray(rig?.trailers) ? rig!.trailers : []
+  for (const tr of trailers) {
+    if (isBoosterLikeTrailer(tr)) {
+      return 'Yes (equipment indicates booster/jeep)'
+    }
+  }
+  return 'No'
+}
+
+/**
+ * Map equipment trailer_type to a MoDOT-style Unit Two Type label.
+ * Specific deck types before generic RGN (e.g. "double drop" / lowboy before RGN).
+ */
+export function mapTrailerTypeToMoLabel(trailerType: unknown): string | null {
+  const raw = normalizeTrailerTypeLabel(trailerType)
+  if (!raw) return null
+  const n = raw.toLowerCase()
+  // Deck / lowboy / drop types first — before generic RGN match
+  if (n.includes('double drop') || n.includes('dbl drop')) return 'DOUBLE DROP TRLR'
+  if (n.includes('single drop')) return 'SINGLE DROP TRLR'
+  if (n.includes('lowboy') || n.includes('low boy')) return 'LOWBOY TRLR'
+  if (n.includes('step deck') || n.includes('stepdeck')) return 'STEP DECK TRLR'
+  if (n.includes('flatbed') || n.includes('flat bed')) return 'FLATBED TRLR'
+  if (n === 'rgn' || n.includes('removable gooseneck') || /\brgn\b/.test(n)) {
+    return 'RGN'
+  }
+  if (/\bjeep\b/.test(n)) return 'JEEP'
+  if (/\bflip\b/.test(n)) return 'FLIP AXLE'
+  if (/\bstinger\b/.test(n)) return 'STINGER'
+  // Plain uppercase tip from raw trailer_type
+  return raw.toUpperCase()
+}
+
+/**
+ * Prefill keys for a step that currently have values (for Prefill: hints UI).
+ * Filters empty keys so borders/tips don't clutter when absent.
+ */
+export function getMoStepPrefillKeysWithValues(
+  prefill: PrefillPackage | null | undefined,
+  step: MoFilingStep,
+  options?: ClipboardPacketOptions
+): string[] {
+  if (!prefill || !step.prefillKeys.length) return []
+  const fields = prefill.generatedFields || {}
+  const tripType =
+    options?.tripType ||
+    (typeof fields.trip_type === 'string' && fields.trip_type
+      ? fields.trip_type
+      : 'Single trip')
+
+  const resolveValue = (key: string): unknown => {
+    if (key === 'trip_type') return tripType
+    if (key === 'border_entry') return fields.border_entry || fields.entry_point
+    if (key === 'border_exit') return fields.border_exit || fields.exit_point
+    if (key === 'route') {
+      if (hasPrefillValue(fields.route)) return String(fields.route).trim()
+      const corridorJoin = (prefill.routeCorridor || [])
+        .map((s) => String(s ?? '').trim())
+        .filter(Boolean)
+        .join(' → ')
+      return corridorJoin || undefined
+    }
+    if (key === 'tip_vehicle_type' && !hasPrefillValue(fields.tip_vehicle_type)) {
+      return buildMoVehicleTypeTip(prefill)
+    }
+    if (key === 'tip_travel' && !hasPrefillValue(fields.tip_travel)) {
+      return buildMoTravelTip(prefill)
+    }
+    if (key === 'tip_booster' && !hasPrefillValue(fields.tip_booster)) {
+      return buildMoBoosterTip(prefill)
+    }
+    if (key === 'tip_conveyance' && !hasPrefillValue(fields.tip_conveyance)) {
+      return 'Hauled (typical hauled load)'
+    }
+    if (key === 'tip_description_list' && !hasPrefillValue(fields.tip_description_list)) {
+      return 'use OTHER — then free-text Load Description'
+    }
+    if (key === 'tip_for_hire' && !hasPrefillValue(fields.tip_for_hire)) {
+      return 'Yes (when for-hire carrier; override if private)'
+    }
+    return fields[key]
+  }
+
+  return step.prefillKeys.filter((key) => hasPrefillValue(resolveValue(key)))
+}
+
+/**
+ * Numbered MoDOT Carrier Express filing steps (v2 live path).
+ * Trip tab always shown for OD/corridor guidance; border keys only when multi-state.
  */
 export function buildMoFilingSteps(prefill?: PrefillPackage | null): MoFilingStep[] {
   const multiState = isMoMultiStatePrefill(prefill)
+  const tripKeys = multiState
+    ? [...MO_TRIP_TAB_PREFILL_KEYS]
+    : MO_TRIP_TAB_PREFILL_KEYS.filter(
+        (k) => !(MO_BORDER_PREFILL_KEYS as readonly string[]).includes(k)
+      )
   const all: MoFilingStep[] = [
     {
       id: 'login',
       stepNumber: 1,
-      title: 'Login MoDOT Carrier Express',
+      title: 'Login Carrier Express (mcs.modot.mo.gov)',
       prefillKeys: [],
     },
     {
-      id: 'start',
+      id: 'programs',
       stepNumber: 2,
-      title: 'Start new OSOW / single-trip application',
+      title: 'Programs → Oversize/Overweight',
+      prefillKeys: [],
+    },
+    {
+      id: 'new_app',
+      stepNumber: 3,
+      title: 'New Application → Single Trip Permits → Single Trip',
       prefillKeys: ['trip_type'],
     },
     {
-      id: 'origin_dest',
-      stepNumber: 3,
-      title: 'Origin & destination',
-      prefillKeys: ['origin', 'destination'],
-    },
-    {
-      id: 'dims_weight',
+      id: 'travel_dates',
       stepNumber: 4,
-      title: 'Dimensions & gross weight',
-      prefillKeys: ['length', 'width', 'height', 'weight'],
+      title: 'Step 1 Travel Dates (From/To; 7 moving days typical)',
+      prefillKeys: [],
     },
     {
-      id: 'axles_vehicle',
+      id: 'application',
       stepNumber: 5,
-      title: 'Axles & vehicle identity',
-      prefillKeys: [
-        'axles',
-        'tractor_year',
-        'tractor_make',
-        'tractor_model',
-        'tractor_ymm',
-        'tractor_vin',
-        'tractor_plate',
-        'tractor_plate_state',
-        'trailer_year',
-        'trailer_make',
-        'trailer_model',
-        'trailer_ymm',
-        'trailer_vin',
-        'trailer_plate',
-        'trailer_plate_state',
-        'trailer_2_year',
-        'trailer_2_make',
-        'trailer_2_model',
-        'trailer_2_ymm',
-        'trailer_2_vin',
-        'trailer_2_plate',
-        'trailer_2_plate_state',
-        'vehicle_id',
-      ],
+      title: 'Step 2 Application fields (use packet)',
+      prefillKeys: [...MO_APPLICATION_PREFILL_KEYS],
     },
     {
-      id: 'carrier_driver',
+      id: 'trip_tab',
       stepNumber: 6,
-      title: 'Carrier, USDOT & driver',
-      prefillKeys: ['carrier_usdot', 'carrier_mc', 'carrier_company', 'driver_name'],
-    },
-    {
-      id: 'route_borders',
-      stepNumber: 7,
-      title: 'Route & MO entry/exit (if multi-state)',
-      prefillKeys: ['route', 'border_entry', 'border_exit'],
-      multiStateOnly: true,
+      title: multiState
+        ? 'Trip tab — origin/dest/corridor/highways/borders for MoDOT map keypoints'
+        : 'Trip tab — origin/dest/corridor/highways for MoDOT map keypoints',
+      prefillKeys: tripKeys,
+      multiStateOnly: false, // trip guidance always shown; borders gated via prefillKeys
     },
     {
       id: 'review_pay',
+      stepNumber: 7,
+      title: 'Review → Payment on MoDOT',
+      prefillKeys: [],
+    },
+    {
+      id: 'paste_permit',
       stepNumber: 8,
-      title: 'Review on MoDOT → pay',
+      title: 'Paste permit # back into Portal Assist when issued',
       prefillKeys: [],
     },
   ]
-  const filtered = all.filter((s) => !s.multiStateOnly || multiState)
-  return filtered.map((s, i) => ({ ...s, stepNumber: i + 1 }))
+  return all.map((s, i) => ({ ...s, stepNumber: i + 1 }))
 }
 
 /**
@@ -1415,6 +1679,24 @@ export function buildMoFilingStepClipboard(
         .filter(Boolean)
         .join(' → ')
       return corridorJoin || undefined
+    }
+    if (key === 'tip_vehicle_type' && !hasPrefillValue(fields.tip_vehicle_type)) {
+      return buildMoVehicleTypeTip(prefill)
+    }
+    if (key === 'tip_travel' && !hasPrefillValue(fields.tip_travel)) {
+      return buildMoTravelTip(prefill)
+    }
+    if (key === 'tip_booster' && !hasPrefillValue(fields.tip_booster)) {
+      return buildMoBoosterTip(prefill)
+    }
+    if (key === 'tip_conveyance' && !hasPrefillValue(fields.tip_conveyance)) {
+      return 'Hauled (typical hauled load)'
+    }
+    if (key === 'tip_description_list' && !hasPrefillValue(fields.tip_description_list)) {
+      return 'use OTHER — then free-text Load Description'
+    }
+    if (key === 'tip_for_hire' && !hasPrefillValue(fields.tip_for_hire)) {
+      return 'Yes (when for-hire carrier; override if private)'
     }
     return fields[key]
   }
@@ -1797,16 +2079,20 @@ export function generatePortalPrefill(
     const trailers = Array.isArray(rig.trailers) ? rig.trailers : []
     if (trailers.length > 0) {
       generated.trailer_count = trailers.length
-      const primary = trailers[0] as Record<string, any>
+      // Prefer primary cargo deck for Unit Two (skip jeep/booster when later trailer exists)
+      const primary =
+        pickPrimaryCargoTrailer(trailers as Record<string, any>[]) ||
+        (trailers[0] as Record<string, any>)
       const trailerLen = primary.overall_length_ft ?? primary.overallLengthFt
       if (trailerLen) generated.trailer_length = `${Number(trailerLen).toFixed(1)} ft`
       const trailerVin = primary.vin
       if (trailerVin && !generated.vehicle_id) generated.vehicle_id = trailerVin
-      // Primary trailer identity keys (trailer_*)
+      // Primary cargo trailer identity keys (trailer_*)
       emitVehicleIdentityFields(generated, 'trailer', primary)
-      // Second trailer only when it has identity values
-      if (trailers.length > 1) {
-        emitVehicleIdentityFields(generated, 'trailer_2', trailers[1] as Record<string, any>)
+      // Second trailer: first other trailer with identity (often jeep when primary is main deck)
+      const secondary = (trailers as Record<string, any>[]).find((tr) => tr !== primary)
+      if (secondary) {
+        emitVehicleIdentityFields(generated, 'trailer_2', secondary)
       }
       generated.trailers = trailers
         .map((tr: Record<string, any>, i: number) => {
@@ -1839,13 +2125,117 @@ export function generatePortalPrefill(
     const front = Number(loadOverhangs.frontOfRigFt || 0) + Number(loadOverhangs.frontOfTrailerFt || 0)
     const rear = Number(loadOverhangs.rearFt || 0)
     if (front || rear) generated.overhang = `front ${front} ft / rear ${rear} ft`
-  } else if (cargo.overhang_front_ft || cargo.overhang_rear_ft || cargo.overhang) {
-    generated.overhang = cargo.overhang_front_ft || cargo.overhang_rear_ft || cargo.overhang
+    if (front) generated.front_overhang = formatPortalDimension(front) || `${front} ft`
+    if (rear) generated.rear_overhang = formatPortalDimension(rear) || `${rear} ft`
+  } else {
+    const frontRaw =
+      cargo.overhang_front_ft ?? cargo.overhangFrontFt ?? cargo.front_overhang ?? null
+    const rearRaw =
+      cargo.overhang_rear_ft ?? cargo.overhangRearFt ?? cargo.rear_overhang ?? null
+    if (frontRaw != null && frontRaw !== '' && Number(frontRaw) !== 0) {
+      generated.front_overhang =
+        formatPortalDimension(frontRaw) || `${frontRaw}`
+    }
+    if (rearRaw != null && rearRaw !== '' && Number(rearRaw) !== 0) {
+      generated.rear_overhang = formatPortalDimension(rearRaw) || `${rearRaw}`
+    }
+    if (cargo.overhang && !generated.front_overhang && !generated.rear_overhang) {
+      generated.overhang = cargo.overhang
+    } else if (generated.front_overhang || generated.rear_overhang) {
+      const bits: string[] = []
+      if (generated.front_overhang) bits.push(`front ${generated.front_overhang}`)
+      if (generated.rear_overhang) bits.push(`rear ${generated.rear_overhang}`)
+      generated.overhang = bits.join(' / ')
+    }
   }
 
   const trailerLen = pickEquipmentField(equip, 'trailer_length_ft', 'trailerLengthFt')
   if (trailerLen && !generated.trailer_length) {
     generated.trailer_length = `${Number(trailerLen).toFixed(1)} ft`
+  }
+
+  // Cargo: description, pieces, serial, piece dims (shared keys; used heavily by MO packet)
+  const cargoDesc =
+    pickEquipmentField(cargo, 'description', 'cargoDescription', 'load_description') ||
+    null
+  if (cargoDesc) generated.load_description = cargoDesc
+  const serial =
+    pickEquipmentField(cargo, 'serialNumber', 'serial_number', 'cargoSerialNumber') || null
+  if (serial) generated.serial_number = serial
+  const piecesRaw =
+    cargo.numberOfPieces ?? cargo.number_of_pieces ?? cargo.pieces ?? cargo.load_pieces
+  if (piecesRaw != null && piecesRaw !== '') {
+    const n = Number(piecesRaw)
+    generated.load_pieces = Number.isFinite(n) && n > 0 ? Math.trunc(n) : piecesRaw
+  } else {
+    // Default 1 piece when cargo snapshot exists but count omitted
+    if (cargo && (cargoDesc || serial || cargo.load || cargo.envelope)) {
+      generated.load_pieces = 1
+    }
+  }
+
+  // Piece dims: prefer cargo.load when present; else overall with note
+  const loadSlice = (cargo.load || {}) as Record<string, any>
+  const pieceLenRaw = loadSlice.lengthFt ?? loadSlice.length_ft ?? loadSlice.length
+  const pieceWidRaw = loadSlice.widthFt ?? loadSlice.width_ft ?? loadSlice.width
+  const pieceHtRaw = loadSlice.heightFt ?? loadSlice.height_ft ?? loadSlice.height
+  const overallLen = formatPortalDimension(request.length) || request.length
+  const overallWid = formatPortalDimension(request.width) || request.width
+  const overallHt = formatPortalDimension(request.height) || request.height
+  if (pieceLenRaw != null && pieceLenRaw !== '' && Number(pieceLenRaw) !== 0) {
+    generated.piece_length = formatPortalDimension(pieceLenRaw) || pieceLenRaw
+  } else if (overallLen != null && overallLen !== '') {
+    generated.piece_length = `${overallLen} (overall — load piece not set)`
+  }
+  if (pieceWidRaw != null && pieceWidRaw !== '' && Number(pieceWidRaw) !== 0) {
+    generated.piece_width = formatPortalDimension(pieceWidRaw) || pieceWidRaw
+  } else if (overallWid != null && overallWid !== '') {
+    generated.piece_width = `${overallWid} (overall — load piece not set)`
+  }
+  if (pieceHtRaw != null && pieceHtRaw !== '' && Number(pieceHtRaw) !== 0) {
+    generated.piece_height = formatPortalDimension(pieceHtRaw) || pieceHtRaw
+  } else if (overallHt != null && overallHt !== '') {
+    generated.piece_height = `${overallHt} (overall — load piece not set)`
+  }
+
+  // Highways from corridor builder (portal trip guidance)
+  const hwyList = Array.isArray(request.highways)
+    ? (request.highways as unknown[])
+        .map((h) => String(h ?? '').trim())
+        .filter(Boolean)
+    : []
+  if (hwyList.length > 0) {
+    generated.highways = hwyList.join(', ')
+  }
+
+  // Power unit type only when tractor identity is present (not trailer-only vehicle_id)
+  const tractorObj = (rig?.tractor || null) as Record<string, any> | null
+  const tractorPresent = !!(
+    tractorObj &&
+    (pickVehicleField(tractorObj, 'vin', 'make', 'model', 'unit_number', 'unitNumber', 'license_plate', 'licensePlate') ||
+      (tractorObj.year != null && tractorObj.year !== '' && Number(tractorObj.year) !== 0) ||
+      hasPrefillValue(generated.tractor_vin) ||
+      hasPrefillValue(generated.tractor_make) ||
+      hasPrefillValue(generated.tractor_year) ||
+      hasPrefillValue(generated.tractor_plate))
+  )
+  if (tractorPresent) {
+    const tractorType =
+      pickVehicleField(tractorObj || {}, 'vehicle_type', 'vehicleType', 'type') || null
+    generated.power_unit_type = tractorType
+      ? String(tractorType).trim()
+      : 'TRUCK-TRACTOR'
+  }
+
+  // Unit Two Type from primary cargo trailer_type (skip jeep-first configs)
+  if (rig) {
+    const trailers = Array.isArray(rig.trailers) ? (rig.trailers as Record<string, any>[]) : []
+    const primary = pickPrimaryCargoTrailer(trailers)
+    if (primary) {
+      const tType = primary.trailer_type ?? primary.trailerType ?? primary.type
+      const mapped = mapTrailerTypeToMoLabel(tType)
+      if (mapped) generated.unit_two_type = mapped
+    }
   }
 
   const carrierDriver = (cargo.carrierDriver || {}) as Record<string, any>
@@ -1877,6 +2267,24 @@ export function generatePortalPrefill(
   }
   if (stateCode === 'MO') {
     generated.special_notes = 'Missouri River bridge analysis recommended'
+    // Application tips for MoDOT Step 2 (always present for MO packet)
+    generated.tip_conveyance = 'Hauled (typical hauled load)'
+    generated.tip_description_list = 'use OTHER — then free-text Load Description'
+    generated.tip_for_hire = 'Yes (when for-hire carrier; override if private)'
+    // Temporary prefill shell for tip helpers (full package assembled below)
+    const tipShell: PrefillPackage = {
+      state: stateCode,
+      loadDetails: request,
+      routeCorridor: request.route_corridor || [],
+      permitRequiredStates: request.permit_required_states || [],
+      generatedFields: generated,
+      humanApprovalRequired: false,
+      approvalNotes: [],
+    }
+    generated.tip_travel = buildMoTravelTip(tipShell, request.route_corridor || [])
+    const vehicleTip = buildMoVehicleTypeTip(tipShell)
+    if (vehicleTip) generated.tip_vehicle_type = vehicleTip
+    generated.tip_booster = buildMoBoosterTip(tipShell, request)
   }
   if (stateCode === 'GA') {
     generated.special_notes = 'Atlanta metro curfew check required'
@@ -2101,13 +2509,13 @@ export function buildPortalCompletenessChecklist(
 
   add(
     'origin',
-    mo ? 'Origin (city, state / junction)' : 'Origin',
+    mo ? 'Origin' : 'Origin',
     hasPrefillValue(f.origin),
     'Set origin city/state on the permit request'
   )
   add(
     'destination',
-    mo ? 'Destination (city, state / junction)' : 'Destination',
+    mo ? 'Destination' : 'Destination',
     hasPrefillValue(f.destination),
     'Set destination city/state on the permit request'
   )
@@ -2119,7 +2527,7 @@ export function buildPortalCompletenessChecklist(
     hasPrefillValue(f.height)
   add(
     'dimensions',
-    mo ? 'Gross weight + L/W/H' : 'Weight + L/W/H',
+    mo ? 'GVW + Overall L/W/H' : 'Weight + L/W/H',
     dimsOk,
     'Add weight and overall L/W/H on the permit request'
   )
@@ -2132,7 +2540,7 @@ export function buildPortalCompletenessChecklist(
     const routeOk = hasMeaningfulRouteString(routeStr)
     add(
       'route',
-      mo ? 'Requested route / corridor' : 'Route corridor',
+      mo ? 'Route corridor' : 'Route corridor',
       routeOk,
       'Run analysis so route corridor is saved on the request'
     )
@@ -2144,21 +2552,21 @@ export function buildPortalCompletenessChecklist(
   if (role === 'through') {
     add(
       'border',
-      mo ? 'Entry into Missouri & exit from Missouri' : 'Border entry & exit',
+      mo ? 'MO entry & exit borders' : 'Border entry & exit',
       entryOk && exitOk,
       'Re-run analysis with geometry so border entry/exit populate for through states'
     )
   } else if (role === 'origin') {
     add(
       'border',
-      mo ? 'Exit from Missouri (origin state)' : 'Border exit (origin state)',
+      mo ? 'MO exit border (origin state)' : 'Border exit (origin state)',
       exitOk,
       'Re-run analysis with geometry so origin exit border populates'
     )
   } else if (role === 'destination') {
     add(
       'border',
-      mo ? 'Entry into Missouri (destination state)' : 'Border entry (destination state)',
+      mo ? 'MO entry border (destination state)' : 'Border entry (destination state)',
       entryOk,
       'Re-run analysis with geometry so destination entry border populates'
     )
@@ -2221,7 +2629,7 @@ export function buildPortalCompletenessChecklist(
     if (mo) {
       add(
         'axles',
-        'Number of axles',
+        'Number of Axles',
         hasPrefillValue(f.axles),
         'Add axle count on equipment / rig'
       )
