@@ -68,6 +68,8 @@ function truncateChipLabel(label: string, max = 42): string {
 
 export default function RouteMapCard({ model, actions, className, onMapClick }: RouteMapCardProps) {
   const [mapLoadFailed, setMapLoadFailed] = useState(false)
+  /** Style tiles ready — suppress idle empty hint while map still shows "Loading map tiles…". */
+  const [mapStyleLoaded, setMapStyleLoaded] = useState(false)
   const isCalculating = model.status === 'calculating'
   const isError = model.status === 'error'
   /** Canvas dead → suppress calculating chrome; map failure is primary. */
@@ -95,7 +97,7 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
     <section
       className={className || ROUTE_MAP_CARD_DEFAULT_CLASS}
       aria-labelledby="route-map-card-title"
-      aria-busy={showCalculating || undefined}
+      aria-busy={showCalculating || (!mapStyleLoaded && !mapLoadFailed) || undefined}
       data-testid="route-map-card"
     >
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100">
@@ -149,10 +151,11 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
           model={model}
           onMapClick={onMapClick}
           onLoadError={(msg) => setMapLoadFailed(!!msg)}
+          onStyleLoaded={setMapStyleLoaded}
         />
 
-        {/* Hide idle hint when MapLibre canvas itself failed to load */}
-        {isIdleEmpty && !mapLoadFailed && (
+        {/* Hide idle hint while tiles load or when MapLibre canvas itself failed */}
+        {isIdleEmpty && !mapLoadFailed && mapStyleLoaded && (
           <div className="absolute inset-0 flex items-end justify-center pointer-events-none p-4">
             <p className="text-sm text-gray-600 bg-white/90 border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm">
               {model.message || 'Enter origin and destination to preview the route map'}
