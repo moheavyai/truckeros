@@ -1,5 +1,5 @@
 /**
- * Source-inspection tests for RouteMapCard chrome (no WebGL / MapLibre runtime).
+ * Source-inspection tests for RouteMapCard chrome + Leaflet RouteMap (no DOM / browser map).
  */
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'fs'
@@ -89,92 +89,65 @@ describe('RouteMapCard structure', () => {
   })
 })
 
-describe('RouteMap MapLibre foundation', () => {
-  it('uses MapLibre GL JS with demotiles default (no paid key)', () => {
+describe('RouteMap Leaflet foundation', () => {
+  it('uses Leaflet with OSM tiles (no paid key, no MapLibre worker)', () => {
     const source = read(mapPath)
-    const cfg = read(
-      path.join(process.cwd(), 'components', 'route-map', 'configureMaplibreWorker.ts')
-    )
-    expect(source).toContain("from 'maplibre-gl'")
-    expect(source).toContain("import 'maplibre-gl/dist/maplibre-gl.css'")
-    expect(source).toContain('configureMaplibreWorker')
-    expect(source).toContain('resolveMapStyle')
-    expect(source).toContain('DEFAULT_MAP_STYLE')
-    expect(cfg).toContain('demotiles.maplibre.org')
-    expect(cfg).toContain('NEXT_PUBLIC_MAP_STYLE_URL')
+    expect(source).toContain("from 'leaflet'")
+    expect(source).toContain("import 'leaflet/dist/leaflet.css'")
+    expect(source).toContain('openstreetmap.org')
+    expect(source).toContain('OSM_TILE_URL')
     expect(source).toContain('fitBounds')
-    expect(source).toMatch(/Why MapLibre|MapLibre \(not Leaflet\)/)
+    expect(source).toContain('invalidateSize')
+    expect(source).toMatch(/Why Leaflet|Leaflet \(v1\)/)
+    // MapLibre path fully removed
+    expect(source).not.toContain('maplibre')
+    expect(source).not.toContain('MapLibre')
+    expect(source).not.toContain('setWorkerUrl')
+    expect(source).not.toContain('configureMaplibreWorker')
   })
 
-  it('configures MapLibre worker before new Map (Next MIME text/html fix)', () => {
+  it('loads leaflet via dynamic import inside useEffect (client only)', () => {
     const source = read(mapPath)
-    expect(source).toContain('configureMaplibreWorker')
-    // Worker must be configured after import resolve and before Map construct
-    expect(source).toMatch(
-      /await\s+import\(['"]maplibre-gl['"]\)[\s\S]*configureMaplibreWorker\([\s\S]*new\s+ml\.Map\(/
-    )
-    const cfg = read(
-      path.join(process.cwd(), 'components', 'route-map', 'configureMaplibreWorker.ts')
-    )
-    expect(cfg).toContain('setWorkerUrl')
-    expect(cfg).toContain('maplibre-gl-worker.mjs')
-    expect(cfg).toContain('PUBLIC_MAPLIBRE_WORKER_PATH')
-    expect(cfg).toContain('?url')
-    expect(cfg).toContain('demotiles.maplibre.org')
-  })
-
-  it('loads maplibre-gl via dynamic import (no top-level default value import)', () => {
-    // webpack/Next interop leaves default value imports of maplibre-gl undefined at runtime
-    const source = read(mapPath)
-    // Strip line + block comments so assertions do not match documentation only
     const codeOnly = source
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '')
-    // Ban value imports of maplibre-gl under any binding name (default / namespace).
-    // Type-only `import type { Map as MaplibreMap }` must still pass.
-    expect(codeOnly).not.toMatch(/import\s+[A-Za-z_$][\w$]*\s+from\s+['"]maplibre-gl['"]/)
-    expect(codeOnly).not.toMatch(/import\s+\*\s+as\s+[A-Za-z_$][\w$]*\s+from\s+['"]maplibre-gl['"]/)
-    // Named value import (no `type` keyword between import and `{`)
+    // Ban value imports of leaflet under any binding name (default / namespace).
+    // Type-only `import type { Map as LeafletMap }` must still pass.
+    expect(codeOnly).not.toMatch(/import\s+[A-Za-z_$][\w$]*\s+from\s+['"]leaflet['"]/)
+    expect(codeOnly).not.toMatch(/import\s+\*\s+as\s+[A-Za-z_$][\w$]*\s+from\s+['"]leaflet['"]/)
     expect(codeOnly).not.toMatch(
-      /import\s*\{[^}]*\b(?:Map|Marker|Popup|NavigationControl|LngLatBounds)\b[^}]*\}\s*from\s*['"]maplibre-gl['"]/
+      /import\s*\{[^}]*\b(?:map|tileLayer|marker|polyline|divIcon)\b[^}]*\}\s*from\s*['"]leaflet['"]/
     )
-    expect(codeOnly).toMatch(/import\s+type\s*\{[\s\S]*?\bMap\s+as\s+MaplibreMap/)
-    // Dynamic import must live in the mount-once init useEffect (empty deps).
-    // Anchor on non-comment code only — comments are stripped from codeOnly above.
-    const dynamicImportRe = /import\(['"]maplibre-gl['"]\)/g
+    expect(codeOnly).toMatch(/import\s+type\s*\{[\s\S]*?\bMap\s+as\s+LeafletMap/)
+    // Runtime dynamic import only (type-level typeof import('leaflet') may also appear)
+    const dynamicImportRe = /await\s+import\(['"]leaflet['"]\)/g
     const dynamicHits = [...codeOnly.matchAll(dynamicImportRe)]
     expect(dynamicHits).toHaveLength(1)
     const importIdx = dynamicHits[0].index ?? -1
     expect(importIdx).toBeGreaterThanOrEqual(0)
-    // Neighborhood of the call: await import + resolve + cancel flag (init path markers)
     const neighborhood = codeOnly.slice(Math.max(0, importIdx - 600), importIdx + 700)
-    expect(neighborhood).toMatch(/await\s+import\(['"]maplibre-gl['"]\)/)
-    expect(neighborhood).toContain('resolveMaplibreModule')
+    expect(neighborhood).toContain('resolveLeaflet')
     expect(neighborhood).toMatch(/let\s+cancelled\s*=\s*false/)
     expect(neighborhood).toContain('createdMap')
     expect(neighborhood).toContain('failLoad')
-    // Enclosing useEffect with empty dependency array (init-once, not ResizeObserver/model sync)
     const beforeImport = codeOnly.slice(0, importIdx)
     const effectStart = beforeImport.lastIndexOf('useEffect')
     expect(effectStart).toBeGreaterThanOrEqual(0)
-    // Take from that useEffect through its empty-deps closer (survive comment-strip)
     const fromEffect = codeOnly.slice(effectStart)
     const emptyDepsMatch = fromEffect.match(
       /^useEffect\s*\(\s*\(\)\s*=>[\s\S]*?\}\s*,\s*\[\s*\]\s*\)/
     )
     expect(emptyDepsMatch).not.toBeNull()
     const initEffect = emptyDepsMatch![0]
-    expect(initEffect).toContain("import('maplibre-gl')")
-    expect(initEffect).toContain('resolveMaplibreModule')
+    expect(initEffect).toContain("import('leaflet')")
+    expect(initEffect).toContain('resolveLeaflet')
     expect(initEffect).toContain('safeRemoveMap(createdMap)')
     expect(initEffect).toContain('setMapReady(true)')
     expect(initEffect).toContain('setMapReady(false)')
-    // Not the ResizeObserver or model-sync effects
-    expect(initEffect).not.toContain('ResizeObserver')
+    expect(initEffect).not.toContain('new ResizeObserver')
     expect(initEffect).not.toContain('model.linePositions')
     expect(codeOnly).toContain('Map failed to load')
     expect(codeOnly).toContain('route-map-load-error')
-    // Error is overlay — map container ref stays mounted
     expect(codeOnly).toContain('ref={containerRef}')
     expect(codeOnly).toMatch(/loadError[\s\S]*route-map-load-error|route-map-load-error[\s\S]*loadError/)
   })
@@ -192,82 +165,89 @@ describe('RouteMap MapLibre foundation', () => {
     expect(card).toContain("mapLoadFailed\n    ? 'Map failed to load'")
   })
 
-  it('cleans up load listeners and guards short LineString setData', () => {
+  it('syncs markers, polyline; ResizeObserver invalidates; one-shot re-fit only when pending', () => {
     const source = read(mapPath)
-    expect(source).toContain("map.off('load'")
-    expect(source).toContain('cancelled')
-    expect(source).toContain('line.length < 2')
-    expect(source).toContain('removeRouteLine')
-    expect(source).toContain('ResizeObserver')
-    expect(source).toContain('mapRef.current?.resize()')
-    // Resize must not re-fit
-    const resizeBlock = source.slice(source.indexOf('ResizeObserver'))
-    const resizeFn = resizeBlock.slice(0, resizeBlock.indexOf('ro.observe'))
-    expect(resizeFn).toContain('.resize()')
-    expect(resizeFn).not.toContain('fitToStops')
+    expect(source).toContain('line.length >= 2')
+    expect(source).toContain('L.polyline')
+    expect(source).toContain('L.marker')
+    expect(source).toContain('L.divIcon')
+    expect(source).toContain('ROUTE_MAP_ROLE_HEX')
+    expect(source).toContain('new ResizeObserver')
+    expect(source).toContain('mapRef.current?.invalidateSize()')
+    expect(source).toContain('fitPendingUntilSizedRef')
+    expect(source).toContain('tryFitPendingIfSized')
+    expect(source).toContain('applyCamera')
+    // Resize path: always invalidate; re-fit gated by fitPendingUntilSizedRef
+    const resizeStart = source.indexOf('new ResizeObserver')
+    expect(resizeStart).toBeGreaterThanOrEqual(0)
+    const resizeFn = source.slice(resizeStart, source.indexOf('ro.observe', resizeStart))
+    expect(resizeFn).toContain('.invalidateSize()')
+    expect(resizeFn).toContain('fitPendingUntilSizedRef')
+    expect(resizeFn).toContain('tryFitPendingIfSized')
   })
 
-  it('resizes on style load and after mapReady (immediate + two rAF follow-ups)', () => {
+  it('uses stable geometry fingerprint deps (not raw stops/line array identity)', () => {
     const source = read(mapPath)
-    expect(source).toContain('scheduleMapResize')
+    expect(source).toContain('routeMapGeometryFingerprint')
+    expect(source).toContain('geometryKey')
+    expect(source).toMatch(/\[geometryKey,\s*mapReady,\s*loadError\]/)
+    expect(source).not.toMatch(/\[model\.stops,\s*model\.linePositions/)
+  })
+
+  it('binds popup via textContent (no HTML injection of stop.name)', () => {
+    const source = read(mapPath)
+    expect(source).toContain('buildPopupContent')
+    expect(source).toContain('el.textContent')
+    expect(source).toContain('bindPopup(buildPopupContent(stop)')
+    expect(source).not.toMatch(/bindPopup\(`\$\{stop\.role\}: \$\{stop\.name\}`/)
+  })
+
+  it('invalidates size on ready and after mapReady (immediate + two rAF follow-ups)', () => {
+    const source = read(mapPath)
+    expect(source).toContain('scheduleMapInvalidate')
     expect(source).toContain('cancelRafIds')
     expect(source).toContain('cancelAnimationFrame')
     expect(source).toContain('requestAnimationFrame')
-    expect(source).toContain('map.resize()')
-    // scheduleMapResize body: immediate resize then nested rAF pair (3 total)
-    const fnStart = source.indexOf('function scheduleMapResize')
+    expect(source).toContain('map.invalidateSize()')
+    const fnStart = source.indexOf('function scheduleMapInvalidate')
     expect(fnStart).toBeGreaterThanOrEqual(0)
-    const fnBody = source.slice(fnStart, fnStart + 900)
-    expect(fnBody).toMatch(/map\.resize\(\)[\s\S]*requestAnimationFrame\([\s\S]*map\.resize\(\)[\s\S]*requestAnimationFrame\([\s\S]*map\.resize\(\)/)
-    // on load path with cancelled / instance guard
-    expect(source).toMatch(/onLoad[\s\S]*cancelled[\s\S]*mapRef\.current !== map/)
-    expect(source).toMatch(/onLoad[\s\S]*scheduleMapResize/)
-    // once after mapReady; rAF cancelled on effect cleanup
-    expect(source).toMatch(/scheduleMapResize\(mapRef/)
+    const fnBody = source.slice(fnStart, fnStart + 1200)
+    // immediate + nested rAF pair (three invalidates via runInvalidate helper)
+    expect(fnBody).toContain('runInvalidate')
+    expect(fnBody).toContain('map.invalidateSize()')
+    expect(fnBody).toMatch(
+      /runInvalidate\(\)[\s\S]*requestAnimationFrame\([\s\S]*runInvalidate\(\)[\s\S]*requestAnimationFrame\([\s\S]*runInvalidate\(\)/
+    )
+    expect(fnBody).toContain('onAfter')
+    expect(source).toMatch(/onReady[\s\S]*cancelled[\s\S]*mapRef\.current !== map/)
+    expect(source).toMatch(/onReady[\s\S]*scheduleMapInvalidate/)
+    expect(source).toMatch(/scheduleMapInvalidate\(mapRef/)
     expect(source).toContain('[mapReady, loadError]')
+    // Re-fit after invalidate when zero-size fit was pending
+    expect(source).toMatch(/scheduleMapInvalidate\([\s\S]*tryFitPendingIfSized/)
   })
 
-  it('falls back once to OpenFreeMap; ignores residual errors until transition settles', () => {
+  it('shows Loading map overlay until whenReady; permanent fail uses Map failed to load', () => {
     const source = read(mapPath)
-    const cfg = read(
-      path.join(process.cwd(), 'components', 'route-map', 'configureMaplibreWorker.ts')
-    )
-    expect(cfg).toContain('demotiles.maplibre.org')
-    expect(cfg).toContain('openfreemap.org')
-    expect(source).toContain('FALLBACK_MAP_STYLE')
-    expect(source).toContain('styleFallbackTriedRef')
-    expect(source).toContain('styleFallbackTransitionRef')
-    expect(source).toContain('setStyle(FALLBACK_MAP_STYLE)')
-    expect(source).toContain("console.info('[RouteMap] using map style'")
-    expect(source).toMatch(/falling back to OpenFreeMap/)
-    // Branch order: first error → setStyle + return; transition residual → return; then failLoad
-    expect(source).toMatch(
-      /!styleFallbackTriedRef\.current[\s\S]*setStyle\(FALLBACK_MAP_STYLE\)[\s\S]*return[\s\S]*styleFallbackTransitionRef\.current[\s\S]*return[\s\S]*failLoad\(/
-    )
-    // Strict Mode cleanup resets sticky load error
-    expect(source).toContain('loadErrorOnceRef.current = false')
-    expect(source).toContain('setLoadError(null)')
-    expect(cfg).toMatch(/NEXT_PUBLIC_MAP_STYLE_URL\.trim\(\)/)
-  })
-
-  it('shows Loading map tiles overlay until style load; permanent fail uses Map failed to load', () => {
-    const source = read(mapPath)
-    expect(source).toContain('Loading map tiles…')
+    expect(source).toContain('Loading map…')
+    expect(source).not.toContain('Loading map tiles…')
     expect(source).toContain('route-map-tiles-loading')
     expect(source).toContain('styleLoaded')
     expect(source).toContain('Map failed to load')
     expect(source).toContain('route-map-load-error')
-    // Overlay exclusivity gate
     expect(source).toContain('!loadError && !styleLoaded')
     expect(source).toContain('role="status"')
     expect(source).toContain('aria-live="polite"')
+    // Strict Mode cleanup resets sticky load error
+    expect(source).toContain('loadErrorOnceRef.current = false')
+    expect(source).toContain('setLoadError(null)')
   })
 
-  it('enables cooperativeGestures only for coarse pointer', () => {
+  it('uses whenReady for style-loaded contract (card idle hint)', () => {
     const source = read(mapPath)
-    expect(source).toContain('isCoarsePointer')
-    expect(source).toContain("pointer: coarse")
-    expect(source).toContain('cooperativeGestures: isCoarsePointer()')
+    expect(source).toContain('whenReady')
+    expect(source).toContain('onStyleLoaded')
+    expect(source).toContain('setStyleLoaded(true)')
   })
 
   it('resets empty stops camera and handles near-zero bounds', () => {
@@ -275,12 +255,13 @@ describe('RouteMap MapLibre foundation', () => {
     expect(source).toContain('DEFAULT_CENTER')
     expect(source).toContain('NEAR_ZERO_BOUNDS_DEG')
     expect(source).toContain('stops.length === 0')
+    expect(source).toContain('setView')
   })
 
-  it('converts LatLon to LngLat only at MapLibre boundary', () => {
+  it('keeps LatLon [lat,lon] for Leaflet polyline/markers', () => {
     const source = read(mapPath)
-    expect(source).toContain('latLonToLngLat')
-    expect(source).toContain('line.map(latLonToLngLat)')
+    expect(source).toContain('latLonToLatLng')
+    expect(source).toContain('line.map(latLonToLatLng)')
   })
 
   it('sets min-height map container for mobile/desktop', () => {
@@ -292,6 +273,31 @@ describe('RouteMap MapLibre foundation', () => {
   it('respects prefers-reduced-motion for camera animation', () => {
     const source = read(mapPath)
     expect(source).toContain('prefers-reduced-motion')
+  })
+
+  it('does not ship MapLibre worker helpers or public worker assets', () => {
+    const { existsSync } = require('fs') as typeof import('fs')
+    expect(existsSync(path.join(process.cwd(), 'components', 'route-map', 'configureMaplibreWorker.ts'))).toBe(false)
+    expect(existsSync(path.join(process.cwd(), 'components', 'route-map', 'resolveMaplibreModule.ts'))).toBe(false)
+    expect(existsSync(path.join(process.cwd(), 'public', 'maplibre-gl-worker.mjs'))).toBe(false)
+    expect(existsSync(path.join(process.cwd(), 'public', 'maplibre-gl-shared.mjs'))).toBe(false)
+  })
+
+  it('package.json depends on leaflet and not maplibre-gl', () => {
+    const pkg = JSON.parse(read(path.join(process.cwd(), 'package.json'))) as {
+      dependencies?: Record<string, string>
+      devDependencies?: Record<string, string>
+    }
+    expect(pkg.dependencies?.leaflet).toBeTruthy()
+    expect(pkg.dependencies?.['maplibre-gl']).toBeUndefined()
+    expect(pkg.devDependencies?.['maplibre-gl']).toBeUndefined()
+    expect(pkg.devDependencies?.['@types/leaflet'] || pkg.dependencies?.['@types/leaflet']).toBeTruthy()
+  })
+
+  it('idle empty hint leaves bottom padding for OSM attribution', () => {
+    const card = read(cardPath)
+    expect(card).toContain('pb-10')
+    expect(card).toMatch(/attribution|OSM/i)
   })
 })
 

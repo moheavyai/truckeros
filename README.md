@@ -11,6 +11,7 @@ TruckerOS helps build intelligent multi-state corridors, flag permit and escort 
 | App | Next.js 16 (App Router), React, TypeScript, Tailwind |
 | Auth / DB | Supabase (Auth, Postgres, RLS) |
 | Routing | OSRM (default) + optional GraphHopper truck profile |
+| Map (v1) | Leaflet + OpenStreetMap tiles (markers, polyline); MapLibre optional later for vector styles |
 | Optimization | Python FastAPI + OR-Tools (`or-tools-service/`) |
 | Tests | Vitest (`npm test` / `prebuild`) |
 
@@ -92,7 +93,7 @@ docs/                Plans and product notes
 
 - Stripe payments
 - Commercial map / ProMiles-class routing product
-- Full visual map UI
+- MapLibre / vector styles for richer basemaps (v1 uses Leaflet + OSM)
 
 ## License
 

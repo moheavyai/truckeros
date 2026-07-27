@@ -1,8 +1,8 @@
 'use client'
 
 /**
- * Route card chrome: title, slim progress, chips, empty/error, MapLibre canvas.
- * Map canvas is dynamically imported with ssr:false so WebGL never hits SSR.
+ * Route card chrome: title, slim progress, chips, empty/error, Leaflet canvas.
+ * Map canvas is dynamically imported with ssr:false so Leaflet never hits SSR.
  */
 
 import dynamic from 'next/dynamic'
@@ -68,7 +68,7 @@ function truncateChipLabel(label: string, max = 42): string {
 
 export default function RouteMapCard({ model, actions, className, onMapClick }: RouteMapCardProps) {
   const [mapLoadFailed, setMapLoadFailed] = useState(false)
-  /** Style tiles ready — suppress idle empty hint while map still shows "Loading map tiles…". */
+  /** Map whenReady — suppress idle empty hint while map still shows "Loading map…". */
   const [mapStyleLoaded, setMapStyleLoaded] = useState(false)
   const isCalculating = model.status === 'calculating'
   const isError = model.status === 'error'
@@ -154,10 +154,11 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
           onStyleLoaded={setMapStyleLoaded}
         />
 
-        {/* Hide idle hint while tiles load or when MapLibre canvas itself failed */}
+        {/* Hide idle hint while tiles load or when map canvas itself failed */}
         {isIdleEmpty && !mapLoadFailed && mapStyleLoaded && (
-          <div className="absolute inset-0 flex items-end justify-center pointer-events-none p-4">
-            <p className="text-sm text-gray-600 bg-white/90 border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm">
+          <div className="absolute inset-0 flex items-end justify-center pointer-events-none px-4 pt-4 pb-10">
+            {/* pb-10 leaves room for OSM attribution (bottom-right) on narrow screens */}
+            <p className="text-sm text-gray-600 bg-white/90 border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm mb-1 max-w-[min(100%,28rem)] text-center">
               {model.message || 'Enter origin and destination to preview the route map'}
             </p>
           </div>

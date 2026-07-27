@@ -1,76 +1,69 @@
 'use client'
 
 /**
- * Presentational MapLibre canvas for route stops + line.
+ * Presentational Leaflet canvas for route stops + polyline.
  *
- * Why MapLibre (not Leaflet): vector-ready, active OSS fork of Mapbox GL JS,
- * free styles (OpenFreeMap) with no paid API key, good fitBounds + GeoJSON layers.
- * CSS is imported here once; parent uses dynamic(..., { ssr: false }) so WebGL
- * never runs during Next SSR.
+ * Why Leaflet (v1): no Web Worker / WebGL — reliable under Next.js on Windows.
+ * Vector GL engines can return later for rich styles; v1 only needs markers +
+ * polyline + fitBounds over OSM raster tiles.
  *
- * Runtime: maplibre-gl is loaded via dynamic import() inside useEffect so webpack/Next
- * interop cannot leave the default export undefined (top-level default import → Map crash).
- * Worker: configureMaplibreWorker() sets setWorkerUrl to a real JS asset (bundler ?url or
- * public/maplibre-gl-worker.mjs) BEFORE new Map — avoids MIME text/html worker failures.
- * Style URL: NEXT_PUBLIC_MAP_STYLE_URL (trimmed) or demotiles default (reliable local).
- * If primary style errors before first load, fall back once to OpenFreeMap liberty.
- * Residual primary-style errors during the fallback switch are ignored; permanent fail only if
- * the fallback style also errors after the transition settles.
- * After construct + style load: immediate map.resize() + two rAF follow-up resizes for late layout.
+ * Runtime: leaflet is loaded via dynamic import() inside useEffect (client only).
+ * CSS is imported once here; parent uses dynamic(..., { ssr: false }).
+ * After construct + ready: map.invalidateSize() + two rAF follow-ups + ResizeObserver.
+ * If the first fit ran at 0×0, re-fit once when the container becomes non-zero.
  * onMapClick is optional Map v2 hook (unused in v1 UI). Drag-edit is not wired in v1.
- * LatLon [lat,lon] is converted to GeoJSON [lon,lat] only at this MapLibre boundary.
+ * LatLon is [lat, lon] — Leaflet-native order (no GeoJSON swap at this boundary).
  */
 
 import { useEffect, useRef, useState } from 'react'
 import type {
-  GeoJSONSource,
-  LngLatBounds,
-  Map as MaplibreMap,
-  Marker as MaplibreMarker,
-  NavigationControl,
-  Popup,
-} from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
+  LatLngBoundsExpression,
+  Map as LeafletMap,
+  Marker as LeafletMarker,
+  Polyline as LeafletPolyline,
+} from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import type { LatLon, RouteMapStop, RouteMapViewModel } from './types'
 import {
   ROUTE_MAP_MARKER_GLYPH,
   ROUTE_MAP_ROLE_HEX,
 } from './roleStyles'
-import {
-  configureMaplibreWorker,
-  FALLBACK_MAP_STYLE,
-  resolveMapStyle,
-} from './configureMaplibreWorker'
-import {
-  resolveMaplibreModule,
-  type MaplibreRuntime,
-} from './resolveMaplibreModule'
 
-export { resolveMaplibreModule } from './resolveMaplibreModule'
-export type { MaplibreRuntime } from './resolveMaplibreModule'
-export {
-  configureMaplibreWorker,
-  DEFAULT_MAP_STYLE,
-  FALLBACK_MAP_STYLE,
-  PUBLIC_MAPLIBRE_WORKER_PATH,
-  resolveMapStyle,
-} from './configureMaplibreWorker'
+/** Leaflet runtime namespace after dynamic import interop. */
+type LeafletNS = typeof import('leaflet')
 
-/** CONUS-ish default when no stops. */
-const DEFAULT_CENTER: [number, number] = [-98.5, 39.8]
+function resolveLeaflet(mod: unknown): LeafletNS {
+  if (!mod || typeof mod !== 'object') {
+    throw new Error('leaflet module missing')
+  }
+  const m = mod as { default?: LeafletNS } & LeafletNS
+  // CJS/ESM interop: prefer default when it exposes map/tileLayer
+  if (m.default && typeof m.default.map === 'function') return m.default
+  if (typeof m.map === 'function') return m
+  throw new Error('leaflet constructors missing after import interop')
+}
+
+/** CONUS-ish default when no stops — Leaflet [lat, lon]. */
+const DEFAULT_CENTER: [number, number] = [39.8, -98.5]
 const DEFAULT_ZOOM = 3.2
 /** Bounds span below this (degrees) treated as coincident → single-stop zoom. */
 const NEAR_ZERO_BOUNDS_DEG = 1e-5
+/** Min client size (px) treated as a laid-out map container. */
+const MIN_SIZED_PX = 2
+
+const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+const OSM_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 
 const LOAD_ERROR_MESSAGE = 'Map failed to load'
-const TILES_LOADING_MESSAGE = 'Loading map tiles…'
+/** Clears on whenReady (map init), not full tile paint — keep copy accurate. */
+const MAP_LOADING_MESSAGE = 'Loading map…'
 
-function isCoarsePointer(): boolean {
-  if (typeof window === 'undefined' || !window.matchMedia) return false
-  return window.matchMedia('(pointer: coarse)').matches
-}
+const LINE_COLOR = '#2563eb'
+const LINE_WEIGHT = 4
+const LINE_OPACITY = 0.85
 
-function safeRemoveMap(map: MaplibreMap | null | undefined) {
+function safeRemoveMap(map: LeafletMap | null | undefined) {
   if (!map) return
   try {
     map.remove()
@@ -90,38 +83,58 @@ function cancelRafIds(rafIds: number[]) {
   rafIds.length = 0
 }
 
+function isContainerSized(el: HTMLElement | null | undefined): boolean {
+  if (!el) return false
+  return el.clientWidth >= MIN_SIZED_PX && el.clientHeight >= MIN_SIZED_PX
+}
+
 /**
- * Immediate resize + two requestAnimationFrame follow-ups (three resizes total)
- * so late flex/grid layout does not leave a blank canvas. Optional rafIds tracks
- * rAF handles for cancelAnimationFrame on unmount.
+ * Immediate invalidateSize + two requestAnimationFrame follow-ups (three total)
+ * so late flex/grid layout does not leave a blank/wrong-size canvas.
+ * Optional onAfter runs after the last invalidate (for one-shot re-fit when sized).
  */
-function scheduleMapResize(
-  map: MaplibreMap | null | undefined,
-  rafIds?: number[]
+function scheduleMapInvalidate(
+  map: LeafletMap | null | undefined,
+  rafIds?: number[],
+  onAfter?: () => void
 ) {
   if (!map) return
-  try {
-    map.resize()
-  } catch {
-    // map may already be removed
-  }
-  if (typeof requestAnimationFrame === 'undefined') return
-  const id1 = requestAnimationFrame(() => {
+  const runInvalidate = () => {
     try {
-      map.resize()
+      map.invalidateSize()
     } catch {
-      // ignore
+      // map may already be removed
     }
+  }
+  runInvalidate()
+  if (typeof requestAnimationFrame === 'undefined') {
+    onAfter?.()
+    return
+  }
+  const id1 = requestAnimationFrame(() => {
+    runInvalidate()
     const id2 = requestAnimationFrame(() => {
-      try {
-        map.resize()
-      } catch {
-        // ignore
-      }
+      runInvalidate()
+      onAfter?.()
     })
     rafIds?.push(id2)
   })
   rafIds?.push(id1)
+}
+
+/**
+ * Stable fingerprint so parent-rebuilt stop/line arrays with same coords do not
+ * thrash markers + re-fit during calculating.
+ */
+export function routeMapGeometryFingerprint(
+  stops: RouteMapStop[],
+  linePositions: LatLon[]
+): string {
+  const stopPart = stops
+    .map((s) => `${s.id}\t${s.lat}\t${s.lon}\t${s.role}\t${s.name}`)
+    .join('|')
+  const linePart = linePositions.map((p) => `${p[0]},${p[1]}`).join(';')
+  return `${stopPart}#${linePart}`
 }
 
 export interface RouteMapProps {
@@ -131,7 +144,7 @@ export interface RouteMapProps {
   onMapClick?: (coords: { lat: number; lon: number }) => void
   /** Fires when canvas fails to load (null when cleared on remount success path). */
   onLoadError?: (message: string | null) => void
-  /** True after style `load` (primary or demotiles fallback); false on cleanup / fail. */
+  /** True after map is ready (whenReady); false on cleanup / fail. */
   onStyleLoaded?: (loaded: boolean) => void
 }
 
@@ -159,61 +172,55 @@ function buildMarkerElement(stop: RouteMapStop): HTMLDivElement {
   return el
 }
 
-function removeRouteLine(map: MaplibreMap) {
-  if (map.getLayer('route-line-layer')) {
-    map.removeLayer('route-line-layer')
-  }
-  if (map.getSource('route-line')) {
-    map.removeSource('route-line')
-  }
+/** Text-only popup body — never pass untrusted names as HTML. */
+function buildPopupContent(stop: RouteMapStop): HTMLDivElement {
+  const el = document.createElement('div')
+  el.textContent = `${stop.role}: ${stop.name}`
+  return el
 }
 
-/** LatLon [lat,lon] → MapLibre GeoJSON position [lon,lat]. */
-function latLonToLngLat(pair: LatLon): [number, number] {
-  return [pair[1], pair[0]]
+/** LatLon [lat,lon] → Leaflet LatLngExpression [lat, lng]. */
+function latLonToLatLng(pair: LatLon): [number, number] {
+  return [pair[0], pair[1]]
 }
 
-function fitToStops(map: MaplibreMap, stops: RouteMapStop[], ml: MaplibreRuntime) {
-  const duration = prefersReducedMotion() ? 0 : 400
+function fitToStops(map: LeafletMap, stops: RouteMapStop[], L: LeafletNS) {
+  const animate = !prefersReducedMotion()
 
   if (stops.length === 0) {
-    map.easeTo({
-      center: DEFAULT_CENTER,
-      zoom: DEFAULT_ZOOM,
-      duration: prefersReducedMotion() ? 0 : 300,
-    })
+    map.setView(DEFAULT_CENTER, DEFAULT_ZOOM, { animate, duration: 0.3 })
     return
   }
 
   if (stops.length === 1) {
-    map.easeTo({
-      center: [stops[0].lon, stops[0].lat],
-      zoom: 8,
-      duration,
+    map.setView([stops[0].lat, stops[0].lon], 8, {
+      animate,
+      duration: 0.4,
     })
     return
   }
 
-  const bounds = new ml.LngLatBounds() as LngLatBounds
-  for (const s of stops) bounds.extend([s.lon, s.lat])
+  const bounds = L.latLngBounds(
+    stops.map((s) => [s.lat, s.lon] as [number, number])
+  )
   const ne = bounds.getNorthEast()
   const sw = bounds.getSouthWest()
   const span = Math.max(Math.abs(ne.lat - sw.lat), Math.abs(ne.lng - sw.lng))
 
   // Coincident / near-zero bounds → single-stop zoom path (avoids fitBounds collapse)
   if (span < NEAR_ZERO_BOUNDS_DEG) {
-    map.easeTo({
-      center: [stops[0].lon, stops[0].lat],
-      zoom: 8,
-      duration,
+    map.setView([stops[0].lat, stops[0].lon], 8, {
+      animate,
+      duration: 0.4,
     })
     return
   }
 
-  map.fitBounds(bounds, {
-    padding: { top: 48, bottom: 48, left: 48, right: 48 },
+  map.fitBounds(bounds as LatLngBoundsExpression, {
+    padding: [48, 48],
     maxZoom: 10,
-    duration: prefersReducedMotion() ? 0 : 500,
+    animate,
+    duration: prefersReducedMotion() ? 0 : 0.5,
   })
 }
 
@@ -225,30 +232,34 @@ export default function RouteMap({
   onStyleLoaded,
 }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const mapRef = useRef<MaplibreMap | null>(null)
-  const markersRef = useRef<MaplibreMarker[]>([])
-  const mlRef = useRef<MaplibreRuntime | null>(null)
+  const mapRef = useRef<LeafletMap | null>(null)
+  const leafletRef = useRef<LeafletNS | null>(null)
+  const markersRef = useRef<LeafletMarker[]>([])
+  const polylineRef = useRef<LeafletPolyline | null>(null)
   const onMapClickRef = useRef(onMapClick)
   onMapClickRef.current = onMapClick
   const onLoadErrorRef = useRef(onLoadError)
   onLoadErrorRef.current = onLoadError
   const onStyleLoadedRef = useRef(onStyleLoaded)
   onStyleLoadedRef.current = onStyleLoaded
-  const styleReadyRef = useRef(false)
-  /** One secondary setStyle attempt per map instance (primary style error before load). */
-  const styleFallbackTriedRef = useRef(false)
+  /** Latest stops for one-shot re-fit after container sizes (avoids stale closure). */
+  const stopsRef = useRef(model.stops)
+  stopsRef.current = model.stops
   /**
-   * True while switching secondary style: residual aborted-primary errors must not failLoad/teardown.
-   * Cleared after two rAF frames once setStyle has been issued.
+   * True when the last fitToStops ran while the container was still ~0×0.
+   * Cleared after a successful re-fit once the container is sized.
+   * ResizeObserver must not re-fit on every resize (preserves user pan/zoom).
    */
-  const styleFallbackTransitionRef = useRef(false)
-  /** Prevents duplicate loadError from construct + style error paths. */
+  const fitPendingUntilSizedRef = useRef(false)
+  /** Prevents duplicate loadError from construct paths. */
   const loadErrorOnceRef = useRef(false)
   /** Bumps when map instance is ready so marker/line sync re-runs after async import. */
   const [mapReady, setMapReady] = useState(false)
-  /** True after style `load` (primary or fallback) so tiles overlay can hide. */
+  /** True after map whenReady (style-loaded contract for card idle hint). */
   const [styleLoaded, setStyleLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  const geometryKey = routeMapGeometryFingerprint(model.stops, model.linePositions)
 
   const failLoad = (reason: string, err?: unknown) => {
     if (loadErrorOnceRef.current) return
@@ -264,169 +275,127 @@ export default function RouteMap({
     onStyleLoadedRef.current?.(false)
   }
 
-  // Init map once via dynamic import (webpack default interop safe)
+  /** Fit camera; if container not sized yet, arm one-shot re-fit for ResizeObserver / rAF. */
+  const applyCamera = (map: LeafletMap, L: LeafletNS, stops: RouteMapStop[]) => {
+    fitToStops(map, stops, L)
+    fitPendingUntilSizedRef.current = !isContainerSized(containerRef.current)
+  }
+
+  /** If a zero-size fit is pending and container is now sized, invalidate + re-fit once. */
+  const tryFitPendingIfSized = () => {
+    if (!fitPendingUntilSizedRef.current) return
+    const map = mapRef.current
+    const L = leafletRef.current
+    if (!map || !L || !isContainerSized(containerRef.current)) return
+    try {
+      map.invalidateSize()
+    } catch {
+      // ignore
+    }
+    fitToStops(map, stopsRef.current, L)
+    fitPendingUntilSizedRef.current = false
+  }
+
+  // Init map once via dynamic import (client only; no SSR / worker)
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
 
     let cancelled = false
-    let createdMap: MaplibreMap | null = null
+    let createdMap: LeafletMap | null = null
     const resizeRafIds: number[] = []
-    const fallbackTransitionRafIds: number[] = []
 
     ;(async () => {
       let mod: unknown
       try {
-        mod = await import('maplibre-gl')
+        mod = await import('leaflet')
       } catch (err) {
         if (cancelled) return
-        failLoad('[RouteMap] maplibre-gl import failed', err)
+        failLoad('[RouteMap] leaflet import failed', err)
         return
       }
 
-      if (cancelled) return
-
-      const ml = resolveMaplibreModule(mod)
-      if (!ml) {
-        if (cancelled) return
-        failLoad(
-          '[RouteMap] maplibre-gl constructors missing after import interop resolve'
-        )
-        return
-      }
-
-      if (!containerRef.current || cancelled) return
-
-      // Worker URL must be real JS (not Next HTML) before Map construct
-      try {
-        await configureMaplibreWorker(mod)
-      } catch (workerErr) {
-        console.warn('[RouteMap] configureMaplibreWorker failed; Map may hang on tiles', workerErr)
-      }
       if (cancelled || !containerRef.current) return
 
+      let L: LeafletNS
       try {
-        mlRef.current = ml
-        const primaryStyle = resolveMapStyle()
-        console.info('[RouteMap] using map style', primaryStyle)
-        const map = new ml.Map({
-          container: containerRef.current,
-          style: primaryStyle,
+        L = resolveLeaflet(mod)
+      } catch (err) {
+        if (cancelled) return
+        failLoad('[RouteMap] leaflet constructors missing after import interop', err)
+        return
+      }
+
+      try {
+        leafletRef.current = L
+
+        const map = L.map(containerRef.current, {
           center: DEFAULT_CENTER,
           zoom: DEFAULT_ZOOM,
-          attributionControl: { compact: true },
-          // Prefer page scroll on touch devices only; desktop keeps free wheel zoom
-          cooperativeGestures: isCoarsePointer(),
-        }) as MaplibreMap
+          zoomControl: false,
+          attributionControl: true,
+        })
         createdMap = map
-        map.addControl(
-          new ml.NavigationControl({ showCompass: false }) as NavigationControl,
-          'top-right'
-        )
+
+        L.control.zoom({ position: 'topright' }).addTo(map)
+
+        L.tileLayer(OSM_TILE_URL, {
+          attribution: OSM_ATTRIBUTION,
+          maxZoom: 19,
+        }).addTo(map)
+
+        map.on('click', (e: { latlng: { lat: number; lng: number } }) => {
+          onMapClickRef.current?.({ lat: e.latlng.lat, lon: e.latlng.lng })
+        })
+
         mapRef.current = map
-        styleReadyRef.current = false
-        styleFallbackTriedRef.current = false
-        styleFallbackTransitionRef.current = false
         setStyleLoaded(false)
         onStyleLoadedRef.current?.(false)
 
-        const onLoad = () => {
+        const onReady = () => {
           if (cancelled || mapRef.current !== map) return
-          styleReadyRef.current = true
-          styleFallbackTransitionRef.current = false
           setStyleLoaded(true)
           onStyleLoadedRef.current?.(true)
-          // Style paint often needs an explicit resize after flex layout settles
-          scheduleMapResize(map, resizeRafIds)
+          scheduleMapInvalidate(map, resizeRafIds, () => {
+            if (cancelled || mapRef.current !== map) return
+            tryFitPendingIfSized()
+          })
         }
-        map.on('load', onLoad)
-
-        map.on('click', (e: { lngLat: { lat: number; lng: number } }) => {
-          onMapClickRef.current?.({ lat: e.lngLat.lat, lon: e.lngLat.lng })
-        })
-
-        // Style/init failures: one OpenFreeMap fallback before permanent fail; post-load tile noise only logs.
-        // Residual primary errors during the setStyle transition must not tear down a healthy fallback.
-        map.on('error', (e: { error?: Error; message?: string }) => {
-          console.error('[RouteMap] map error', e?.error || e?.message || e)
-          if (cancelled || loadErrorOnceRef.current) return
-          if (styleReadyRef.current) return
-
-          if (!styleFallbackTriedRef.current) {
-            styleFallbackTriedRef.current = true
-            styleFallbackTransitionRef.current = true
-            console.warn(
-              '[RouteMap] primary style failed; falling back to OpenFreeMap liberty',
-              FALLBACK_MAP_STYLE
-            )
-            console.info('[RouteMap] using map style', FALLBACK_MAP_STYLE)
-            try {
-              map.setStyle(FALLBACK_MAP_STYLE)
-              // Ignore aborted-primary residuals through two frames; then arm permanent-fail path
-              if (typeof requestAnimationFrame !== 'undefined') {
-                const t1 = requestAnimationFrame(() => {
-                  const t2 = requestAnimationFrame(() => {
-                    if (!cancelled) styleFallbackTransitionRef.current = false
-                  })
-                  fallbackTransitionRafIds.push(t2)
-                })
-                fallbackTransitionRafIds.push(t1)
-              } else {
-                styleFallbackTransitionRef.current = false
-              }
-              return
-            } catch (setErr) {
-              console.error('[RouteMap] fallback setStyle failed', setErr)
-              styleFallbackTransitionRef.current = false
-              // fall through to permanent fail (setStyle threw synchronously)
-            }
-          }
-
-          // Still switching styles — residual primary/abort noise only
-          if (styleFallbackTransitionRef.current) {
-            return
-          }
-
-          // Fallback style also failed (pre-load error after transition settled)
-          failLoad('[RouteMap] map style failed to load', e?.error || e)
-          safeRemoveMap(map)
-          if (mapRef.current === map) mapRef.current = null
-          createdMap = null
-          mlRef.current = null
-          setMapReady(false)
-          setStyleLoaded(false)
-          onStyleLoadedRef.current?.(false)
-        })
+        map.whenReady(onReady)
 
         if (cancelled) {
           safeRemoveMap(map)
           createdMap = null
           mapRef.current = null
-          mlRef.current = null
+          leafletRef.current = null
           return
         }
 
         onLoadErrorRef.current?.(null)
         setMapReady(true)
       } catch (err) {
-        // Always tear down partial Map (new Map succeeded, addControl/listener failed)
         safeRemoveMap(createdMap)
         createdMap = null
         mapRef.current = null
-        mlRef.current = null
+        leafletRef.current = null
         if (cancelled) return
-        failLoad('[RouteMap] Map construct / addControl failed', err)
+        failLoad('[RouteMap] Map construct failed', err)
       }
     })()
 
     return () => {
       cancelled = true
       cancelRafIds(resizeRafIds)
-      cancelRafIds(fallbackTransitionRafIds)
       markersRef.current.forEach((m) => m.remove())
       markersRef.current = []
-      styleReadyRef.current = false
-      styleFallbackTriedRef.current = false
-      styleFallbackTransitionRef.current = false
+      if (polylineRef.current) {
+        try {
+          polylineRef.current.remove()
+        } catch {
+          // ignore
+        }
+        polylineRef.current = null
+      }
+      fitPendingUntilSizedRef.current = false
       // Strict Mode: clear sticky load-error so re-init is not stuck on the error overlay
       loadErrorOnceRef.current = false
       setLoadError(null)
@@ -434,7 +403,7 @@ export default function RouteMap({
       const map = createdMap ?? mapRef.current
       safeRemoveMap(map)
       mapRef.current = null
-      mlRef.current = null
+      leafletRef.current = null
       // Strict Mode: setup→cleanup→setup must clear mapReady so second setMapReady(true) retriggers sync
       setMapReady(false)
       setStyleLoaded(false)
@@ -442,17 +411,19 @@ export default function RouteMap({
     }
   }, [])
 
-  // Once after mapReady: immediate + two rAF resizes (container may have been 0×0 at construct)
+  // Once after mapReady: immediate + two rAF invalidates; re-fit if still pending
   useEffect(() => {
     if (!mapReady || loadError) return
     const rafIds: number[] = []
-    scheduleMapResize(mapRef.current, rafIds)
+    scheduleMapInvalidate(mapRef.current, rafIds, () => {
+      tryFitPendingIfSized()
+    })
     return () => {
       cancelRafIds(rafIds)
     }
   }, [mapReady, loadError])
 
-  // ResizeObserver: map.resize only — do not re-fit (preserves user pan/zoom).
+  // ResizeObserver: always invalidateSize; re-fit only when fitPendingUntilSized (0×0 → sized).
   // Skip / disconnect when loadError so we never observe a detached-only error surface.
   useEffect(() => {
     if (loadError) return
@@ -463,7 +434,11 @@ export default function RouteMap({
     const ro = new ResizeObserver(() => {
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
-        mapRef.current?.resize()
+        mapRef.current?.invalidateSize()
+        // One-shot re-fit only — not on every user resize (preserves pan/zoom)
+        if (fitPendingUntilSizedRef.current) {
+          tryFitPendingIfSized()
+        }
       }, 100)
     })
     ro.observe(el)
@@ -473,89 +448,53 @@ export default function RouteMap({
     }
   }, [loadError])
 
-  // Sync markers + line + bounds when model changes (with load listener cleanup).
-  // Also re-runs after fallback style load via map.once('load') / styleReadyRef.
+  // Sync markers + polyline + bounds when geometry fingerprint changes.
   useEffect(() => {
     const map = mapRef.current
-    const ml = mlRef.current
-    if (!map || !ml || !mapReady || loadError) return
+    const L = leafletRef.current
+    if (!map || !L || !mapReady || loadError) return
 
-    let cancelled = false
+    markersRef.current.forEach((m) => m.remove())
+    markersRef.current = []
 
-    const apply = () => {
-      if (cancelled || mapRef.current !== map || mlRef.current !== ml) return
-      try {
-        if (!map.getStyle()) return
-      } catch {
-        return
-      }
-
-      markersRef.current.forEach((m) => m.remove())
-      markersRef.current = []
-
-      for (const stop of model.stops) {
-        const marker = new ml.Marker({ element: buildMarkerElement(stop) }) as MaplibreMarker
-        marker
-          .setLngLat([stop.lon, stop.lat])
-          .setPopup(
-            (new ml.Popup({ offset: 16, closeButton: false }) as Popup).setText(
-              `${stop.role}: ${stop.name}`
-            )
-          )
-          .addTo(map)
-        markersRef.current.push(marker)
-      }
-
-      const line = model.linePositions
-
-      if (line.length < 2) {
-        removeRouteLine(map)
-      } else {
-        const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
-          type: 'Feature',
-          properties: {},
-          geometry: {
-            type: 'LineString',
-            coordinates: line.map(latLonToLngLat),
-          },
-        }
-
-        const existing = map.getSource('route-line') as GeoJSONSource | undefined
-        if (existing) {
-          existing.setData(geojson)
-        } else {
-          map.addSource('route-line', { type: 'geojson', data: geojson })
-          if (!map.getLayer('route-line-layer')) {
-            map.addLayer({
-              id: 'route-line-layer',
-              type: 'line',
-              source: 'route-line',
-              layout: { 'line-join': 'round', 'line-cap': 'round' },
-              paint: {
-                'line-color': '#2563eb',
-                'line-width': 4,
-                'line-opacity': 0.85,
-              },
-            })
-          }
-        }
-      }
-
-      // Re-fit only on model stop/line identity change (not on resize)
-      fitToStops(map, model.stops, ml)
+    for (const stop of model.stops) {
+      const el = buildMarkerElement(stop)
+      const icon = L.divIcon({
+        className: 'route-map-div-icon',
+        html: el.outerHTML,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -14],
+      })
+      const marker = L.marker([stop.lat, stop.lon], { icon })
+        .bindPopup(buildPopupContent(stop), { closeButton: false, offset: [0, -8] })
+        .addTo(map)
+      markersRef.current.push(marker)
     }
 
-    if (map.isStyleLoaded() || styleReadyRef.current) {
-      apply()
-    } else {
-      map.once('load', apply)
+    const line = model.linePositions
+
+    if (polylineRef.current) {
+      polylineRef.current.remove()
+      polylineRef.current = null
     }
 
-    return () => {
-      cancelled = true
-      map.off('load', apply)
+    if (line.length >= 2) {
+      const latlngs = line.map(latLonToLatLng)
+      polylineRef.current = L.polyline(latlngs, {
+        color: LINE_COLOR,
+        weight: LINE_WEIGHT,
+        opacity: LINE_OPACITY,
+        lineJoin: 'round',
+        lineCap: 'round',
+      }).addTo(map)
     }
-  }, [model.stops, model.linePositions, mapReady, loadError])
+
+    // Re-fit on geometry change; arm pending re-fit if container still 0×0
+    applyCamera(map, L, model.stops)
+    // geometryKey is the stable dep; model.stops/line used for latest values at same key
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fingerprint gates identity thrash
+  }, [geometryKey, mapReady, loadError])
 
   const containerClass =
     className ||
@@ -564,7 +503,7 @@ export default function RouteMap({
   // Keep map container mounted (ref stable); show error as overlay so RO can disconnect cleanly
   return (
     <div className={`relative ${containerClass}`}>
-      <div ref={containerRef} className="absolute inset-0" aria-hidden="true" />
+      <div ref={containerRef} className="absolute inset-0 z-0" aria-hidden="true" />
       {!loadError && !styleLoaded && (
         <div
           className="absolute inset-0 z-10 flex items-center justify-center px-4 text-sm text-slate-500 bg-slate-100/80 pointer-events-none"
@@ -572,7 +511,7 @@ export default function RouteMap({
           aria-live="polite"
           data-testid="route-map-tiles-loading"
         >
-          {TILES_LOADING_MESSAGE}
+          {MAP_LOADING_MESSAGE}
         </div>
       )}
       {loadError && (
