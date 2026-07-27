@@ -46,7 +46,8 @@ describe('RouteMapCard structure', () => {
     const source = read(cardPath)
     expect(source).toContain('data-testid="route-map-live"')
     expect(source).toContain('isIdleEmpty')
-    expect(source).toMatch(/\{isCalculating && \([\s\S]*role="progressbar"/)
+    // Progress gated by showCalculating (also suppressed when mapLoadFailed)
+    expect(source).toMatch(/\{showCalculating && \([\s\S]*role="progressbar"/)
   })
 
   it('dynamically imports RouteMap with ssr: false and Loading map text', () => {
@@ -69,7 +70,7 @@ describe('RouteMapCard structure', () => {
     expect(source).toContain('truncateChipLabel')
     expect(source).toContain('legendRoles')
     expect(source).toContain('ROUTE_MAP_ROLE_SWATCH')
-    expect(source).toContain("import type { ReactNode } from 'react'")
+    expect(source).toMatch(/import\s*\{[^}]*\btype\s+ReactNode\b[^}]*\}\s*from\s*['"]react['"]/)
     expect(source).toContain('showLineLegend')
   })
 
@@ -96,6 +97,72 @@ describe('RouteMap MapLibre foundation', () => {
     expect(source).toContain('NEXT_PUBLIC_MAP_STYLE_URL')
     expect(source).toContain('fitBounds')
     expect(source).toMatch(/Why MapLibre|MapLibre \(not Leaflet\)/)
+  })
+
+  it('loads maplibre-gl via dynamic import (no top-level default value import)', () => {
+    // webpack/Next interop leaves default value imports of maplibre-gl undefined at runtime
+    const source = read(mapPath)
+    // Strip line + block comments so assertions do not match documentation only
+    const codeOnly = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
+    // Ban value imports of maplibre-gl under any binding name (default / namespace).
+    // Type-only `import type { Map as MaplibreMap }` must still pass.
+    expect(codeOnly).not.toMatch(/import\s+[A-Za-z_$][\w$]*\s+from\s+['"]maplibre-gl['"]/)
+    expect(codeOnly).not.toMatch(/import\s+\*\s+as\s+[A-Za-z_$][\w$]*\s+from\s+['"]maplibre-gl['"]/)
+    // Named value import (no `type` keyword between import and `{`)
+    expect(codeOnly).not.toMatch(
+      /import\s*\{[^}]*\b(?:Map|Marker|Popup|NavigationControl|LngLatBounds)\b[^}]*\}\s*from\s*['"]maplibre-gl['"]/
+    )
+    expect(codeOnly).toMatch(/import\s+type\s*\{[\s\S]*?\bMap\s+as\s+MaplibreMap/)
+    // Dynamic import must live in the mount-once init useEffect (empty deps).
+    // Anchor on non-comment code only — comments are stripped from codeOnly above.
+    const dynamicImportRe = /import\(['"]maplibre-gl['"]\)/g
+    const dynamicHits = [...codeOnly.matchAll(dynamicImportRe)]
+    expect(dynamicHits).toHaveLength(1)
+    const importIdx = dynamicHits[0].index ?? -1
+    expect(importIdx).toBeGreaterThanOrEqual(0)
+    // Neighborhood of the call: await import + resolve + cancel flag (init path markers)
+    const neighborhood = codeOnly.slice(Math.max(0, importIdx - 600), importIdx + 700)
+    expect(neighborhood).toMatch(/await\s+import\(['"]maplibre-gl['"]\)/)
+    expect(neighborhood).toContain('resolveMaplibreModule')
+    expect(neighborhood).toMatch(/let\s+cancelled\s*=\s*false/)
+    expect(neighborhood).toContain('createdMap')
+    expect(neighborhood).toContain('failLoad')
+    // Enclosing useEffect with empty dependency array (init-once, not ResizeObserver/model sync)
+    const beforeImport = codeOnly.slice(0, importIdx)
+    const effectStart = beforeImport.lastIndexOf('useEffect')
+    expect(effectStart).toBeGreaterThanOrEqual(0)
+    // Take from that useEffect through its empty-deps closer (survive comment-strip)
+    const fromEffect = codeOnly.slice(effectStart)
+    const emptyDepsMatch = fromEffect.match(
+      /^useEffect\s*\(\s*\(\)\s*=>[\s\S]*?\}\s*,\s*\[\s*\]\s*\)/
+    )
+    expect(emptyDepsMatch).not.toBeNull()
+    const initEffect = emptyDepsMatch![0]
+    expect(initEffect).toContain("import('maplibre-gl')")
+    expect(initEffect).toContain('resolveMaplibreModule')
+    expect(initEffect).toContain('safeRemoveMap(createdMap)')
+    expect(initEffect).toContain('setMapReady(true)')
+    expect(initEffect).toContain('setMapReady(false)')
+    // Not the ResizeObserver or model-sync effects
+    expect(initEffect).not.toContain('ResizeObserver')
+    expect(initEffect).not.toContain('model.linePositions')
+    expect(codeOnly).toContain('Map failed to load')
+    expect(codeOnly).toContain('route-map-load-error')
+    // Error is overlay — map container ref stays mounted
+    expect(codeOnly).toContain('ref={containerRef}')
+    expect(codeOnly).toMatch(/loadError[\s\S]*route-map-load-error|route-map-load-error[\s\S]*loadError/)
+  })
+
+  it('hides idle/calculating chrome when map canvas load fails', () => {
+    const card = read(cardPath)
+    expect(card).toContain('mapLoadFailed')
+    expect(card).toContain('onLoadError')
+    expect(card).toContain('isIdleEmpty && !mapLoadFailed')
+    expect(card).toContain('showCalculating')
+    expect(card).toContain('isCalculating && !mapLoadFailed')
+    expect(card).toContain("mapLoadFailed\n    ? 'Map failed to load'")
   })
 
   it('cleans up load listeners and guards short LineString setData', () => {

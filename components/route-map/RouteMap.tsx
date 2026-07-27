@@ -8,19 +8,35 @@
  * CSS is imported here once; parent uses dynamic(..., { ssr: false }) so WebGL
  * never runs during Next SSR.
  *
+ * Runtime: maplibre-gl is loaded via dynamic import() inside useEffect so webpack/Next
+ * interop cannot leave the default export undefined (top-level default import → Map crash).
  * Style URL: NEXT_PUBLIC_MAP_STYLE_URL or OpenFreeMap liberty default.
  * onMapClick is optional Map v2 hook (unused in v1 UI). Drag-edit is not wired in v1.
  * LatLon [lat,lon] is converted to GeoJSON [lon,lat] only at this MapLibre boundary.
  */
 
-import { useEffect, useRef } from 'react'
-import maplibregl from 'maplibre-gl'
+import { useEffect, useRef, useState } from 'react'
+import type {
+  GeoJSONSource,
+  LngLatBounds,
+  Map as MaplibreMap,
+  Marker as MaplibreMarker,
+  NavigationControl,
+  Popup,
+} from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { LatLon, RouteMapStop, RouteMapViewModel } from './types'
 import {
   ROUTE_MAP_MARKER_GLYPH,
   ROUTE_MAP_ROLE_HEX,
 } from './roleStyles'
+import {
+  resolveMaplibreModule,
+  type MaplibreRuntime,
+} from './resolveMaplibreModule'
+
+export { resolveMaplibreModule } from './resolveMaplibreModule'
+export type { MaplibreRuntime } from './resolveMaplibreModule'
 
 const DEFAULT_MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
 /** CONUS-ish default when no stops. */
@@ -28,6 +44,8 @@ const DEFAULT_CENTER: [number, number] = [-98.5, 39.8]
 const DEFAULT_ZOOM = 3.2
 /** Bounds span below this (degrees) treated as coincident → single-stop zoom. */
 const NEAR_ZERO_BOUNDS_DEG = 1e-5
+
+const LOAD_ERROR_MESSAGE = 'Map failed to load'
 
 function resolveMapStyle(): string {
   if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_MAP_STYLE_URL) {
@@ -41,11 +59,22 @@ function isCoarsePointer(): boolean {
   return window.matchMedia('(pointer: coarse)').matches
 }
 
+function safeRemoveMap(map: MaplibreMap | null | undefined) {
+  if (!map) return
+  try {
+    map.remove()
+  } catch {
+    // ignore double-remove / already-destroyed
+  }
+}
+
 export interface RouteMapProps {
   model: RouteMapViewModel
   className?: string
   /** Map v2 reserved: click handler for adding waypoints (not used in v1 UI). */
   onMapClick?: (coords: { lat: number; lon: number }) => void
+  /** Fires when canvas fails to load (null when cleared on remount success path). */
+  onLoadError?: (message: string | null) => void
 }
 
 function buildMarkerElement(stop: RouteMapStop): HTMLDivElement {
@@ -72,7 +101,7 @@ function buildMarkerElement(stop: RouteMapStop): HTMLDivElement {
   return el
 }
 
-function removeRouteLine(map: maplibregl.Map) {
+function removeRouteLine(map: MaplibreMap) {
   if (map.getLayer('route-line-layer')) {
     map.removeLayer('route-line-layer')
   }
@@ -86,7 +115,7 @@ function latLonToLngLat(pair: LatLon): [number, number] {
   return [pair[1], pair[0]]
 }
 
-function fitToStops(map: maplibregl.Map, stops: RouteMapStop[]) {
+function fitToStops(map: MaplibreMap, stops: RouteMapStop[], ml: MaplibreRuntime) {
   const duration = prefersReducedMotion() ? 0 : 400
 
   if (stops.length === 0) {
@@ -107,7 +136,7 @@ function fitToStops(map: maplibregl.Map, stops: RouteMapStop[]) {
     return
   }
 
-  const bounds = new maplibregl.LngLatBounds()
+  const bounds = new ml.LngLatBounds() as LngLatBounds
   for (const s of stops) bounds.extend([s.lon, s.lat])
   const ne = bounds.getNorthEast()
   const sw = bounds.getSouthWest()
@@ -130,52 +159,149 @@ function fitToStops(map: maplibregl.Map, stops: RouteMapStop[]) {
   })
 }
 
-export default function RouteMap({ model, className, onMapClick }: RouteMapProps) {
+export default function RouteMap({
+  model,
+  className,
+  onMapClick,
+  onLoadError,
+}: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const mapRef = useRef<maplibregl.Map | null>(null)
-  const markersRef = useRef<maplibregl.Marker[]>([])
+  const mapRef = useRef<MaplibreMap | null>(null)
+  const markersRef = useRef<MaplibreMarker[]>([])
+  const mlRef = useRef<MaplibreRuntime | null>(null)
   const onMapClickRef = useRef(onMapClick)
   onMapClickRef.current = onMapClick
+  const onLoadErrorRef = useRef(onLoadError)
+  onLoadErrorRef.current = onLoadError
   const styleReadyRef = useRef(false)
+  /** Prevents duplicate loadError from construct + style error paths. */
+  const loadErrorOnceRef = useRef(false)
+  /** Bumps when map instance is ready so marker/line sync re-runs after async import. */
+  const [mapReady, setMapReady] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
-  // Init map once
+  const failLoad = (reason: string, err?: unknown) => {
+    if (loadErrorOnceRef.current) return
+    loadErrorOnceRef.current = true
+    if (err !== undefined) {
+      console.error(reason, err)
+    } else {
+      console.error(reason)
+    }
+    setLoadError(LOAD_ERROR_MESSAGE)
+    onLoadErrorRef.current?.(LOAD_ERROR_MESSAGE)
+  }
+
+  // Init map once via dynamic import (webpack default interop safe)
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
 
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: resolveMapStyle(),
-      center: DEFAULT_CENTER,
-      zoom: DEFAULT_ZOOM,
-      attributionControl: { compact: true },
-      // Prefer page scroll on touch devices only; desktop keeps free wheel zoom
-      cooperativeGestures: isCoarsePointer(),
-    })
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
-    mapRef.current = map
-    styleReadyRef.current = false
+    let cancelled = false
+    let createdMap: MaplibreMap | null = null
 
-    const onLoad = () => {
-      styleReadyRef.current = true
-    }
-    map.on('load', onLoad)
+    ;(async () => {
+      let mod: unknown
+      try {
+        mod = await import('maplibre-gl')
+      } catch (err) {
+        if (cancelled) return
+        failLoad('[RouteMap] maplibre-gl import failed', err)
+        return
+      }
 
-    map.on('click', (e) => {
-      onMapClickRef.current?.({ lat: e.lngLat.lat, lon: e.lngLat.lng })
-    })
+      if (cancelled) return
+
+      const ml = resolveMaplibreModule(mod)
+      if (!ml) {
+        if (cancelled) return
+        failLoad(
+          '[RouteMap] maplibre-gl constructors missing after import interop resolve'
+        )
+        return
+      }
+
+      if (!containerRef.current || cancelled) return
+
+      try {
+        mlRef.current = ml
+        const map = new ml.Map({
+          container: containerRef.current,
+          style: resolveMapStyle(),
+          center: DEFAULT_CENTER,
+          zoom: DEFAULT_ZOOM,
+          attributionControl: { compact: true },
+          // Prefer page scroll on touch devices only; desktop keeps free wheel zoom
+          cooperativeGestures: isCoarsePointer(),
+        }) as MaplibreMap
+        createdMap = map
+        map.addControl(
+          new ml.NavigationControl({ showCompass: false }) as NavigationControl,
+          'top-right'
+        )
+        mapRef.current = map
+        styleReadyRef.current = false
+
+        const onLoad = () => {
+          styleReadyRef.current = true
+        }
+        map.on('load', onLoad)
+
+        map.on('click', (e: { lngLat: { lat: number; lng: number } }) => {
+          onMapClickRef.current?.({ lat: e.lngLat.lat, lon: e.lngLat.lng })
+        })
+
+        // Style/init failures escalate once; post-load tile noise only logs
+        map.on('error', (e: { error?: Error; message?: string }) => {
+          console.error('[RouteMap] map error', e?.error || e?.message || e)
+          if (cancelled || loadErrorOnceRef.current) return
+          if (styleReadyRef.current) return
+          failLoad('[RouteMap] map style failed to load', e?.error || e)
+          safeRemoveMap(map)
+          if (mapRef.current === map) mapRef.current = null
+          createdMap = null
+          mlRef.current = null
+          setMapReady(false)
+        })
+
+        if (cancelled) {
+          safeRemoveMap(map)
+          createdMap = null
+          mapRef.current = null
+          mlRef.current = null
+          return
+        }
+
+        onLoadErrorRef.current?.(null)
+        setMapReady(true)
+      } catch (err) {
+        // Always tear down partial Map (new Map succeeded, addControl/listener failed)
+        safeRemoveMap(createdMap)
+        createdMap = null
+        mapRef.current = null
+        mlRef.current = null
+        if (cancelled) return
+        failLoad('[RouteMap] Map construct / addControl failed', err)
+      }
+    })()
 
     return () => {
-      map.off('load', onLoad)
+      cancelled = true
       markersRef.current.forEach((m) => m.remove())
       markersRef.current = []
       styleReadyRef.current = false
-      map.remove()
+      const map = createdMap ?? mapRef.current
+      safeRemoveMap(map)
       mapRef.current = null
+      mlRef.current = null
+      // Strict Mode: setup→cleanup→setup must clear mapReady so second setMapReady(true) retriggers sync
+      setMapReady(false)
     }
   }, [])
 
-  // ResizeObserver: map.resize only — do not re-fit (preserves user pan/zoom)
+  // ResizeObserver: map.resize only — do not re-fit (preserves user pan/zoom).
+  // Skip / disconnect when loadError so we never observe a detached-only error surface.
   useEffect(() => {
+    if (loadError) return
     const el = containerRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
 
@@ -191,17 +317,18 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
       if (timer) clearTimeout(timer)
       ro.disconnect()
     }
-  }, [])
+  }, [loadError])
 
   // Sync markers + line + bounds when model changes (with load listener cleanup)
   useEffect(() => {
     const map = mapRef.current
-    if (!map) return
+    const ml = mlRef.current
+    if (!map || !ml || !mapReady || loadError) return
 
     let cancelled = false
 
     const apply = () => {
-      if (cancelled || mapRef.current !== map) return
+      if (cancelled || mapRef.current !== map || mlRef.current !== ml) return
       try {
         if (!map.getStyle()) return
       } catch {
@@ -212,10 +339,11 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
       markersRef.current = []
 
       for (const stop of model.stops) {
-        const marker = new maplibregl.Marker({ element: buildMarkerElement(stop) })
+        const marker = new ml.Marker({ element: buildMarkerElement(stop) }) as MaplibreMarker
+        marker
           .setLngLat([stop.lon, stop.lat])
           .setPopup(
-            new maplibregl.Popup({ offset: 16, closeButton: false }).setText(
+            (new ml.Popup({ offset: 16, closeButton: false }) as Popup).setText(
               `${stop.role}: ${stop.name}`
             )
           )
@@ -237,7 +365,7 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
           },
         }
 
-        const existing = map.getSource('route-line') as maplibregl.GeoJSONSource | undefined
+        const existing = map.getSource('route-line') as GeoJSONSource | undefined
         if (existing) {
           existing.setData(geojson)
         } else {
@@ -259,7 +387,7 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
       }
 
       // Re-fit only on model stop/line identity change (not on resize)
-      fitToStops(map, model.stops)
+      fitToStops(map, model.stops, ml)
     }
 
     if (map.isStyleLoaded() || styleReadyRef.current) {
@@ -272,17 +400,26 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
       cancelled = true
       map.off('load', apply)
     }
-  }, [model.stops, model.linePositions])
+  }, [model.stops, model.linePositions, mapReady, loadError])
 
+  const containerClass =
+    className ||
+    'w-full min-h-[280px] md:min-h-[360px] rounded-xl overflow-hidden bg-slate-100'
+
+  // Keep map container mounted (ref stable); show error as overlay so RO can disconnect cleanly
   return (
-    <div
-      ref={containerRef}
-      className={
-        className ||
-        'w-full min-h-[280px] md:min-h-[360px] rounded-xl overflow-hidden bg-slate-100'
-      }
-      aria-hidden="true"
-    />
+    <div className={`relative ${containerClass}`}>
+      <div ref={containerRef} className="absolute inset-0" aria-hidden="true" />
+      {loadError && (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center px-4 text-sm font-medium text-red-800 bg-red-50 border border-red-200"
+          role="alert"
+          data-testid="route-map-load-error"
+        >
+          {loadError}
+        </div>
+      )}
+    </div>
   )
 }
 
