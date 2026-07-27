@@ -67,6 +67,23 @@ export async function POST(request: NextRequest) {
       drops: dropsResult.drops.length > 0 ? dropsResult.drops : undefined,
       // Support the "Change Route" manual override feature
       manualRoute: Array.isArray(body.manualRoute) ? body.manualRoute : undefined,
+      // Forced map/manual vias (stable schema; OR-Tools accepts as vias before drops)
+      manualWaypoints: Array.isArray(body.manualWaypoints)
+        ? body.manualWaypoints
+            .filter(
+              (w: unknown): w is { lat: number; lon: number; name?: string; source?: string } =>
+                !!w &&
+                typeof w === 'object' &&
+                Number.isFinite(Number((w as { lat?: unknown }).lat)) &&
+                Number.isFinite(Number((w as { lon?: unknown }).lon))
+            )
+            .map((w: { lat: number; lon: number; name?: string; source?: string }) => ({
+              lat: Number(w.lat),
+              lon: Number(w.lon),
+              ...(typeof w.name === 'string' ? { name: w.name } : {}),
+              ...(typeof w.source === 'string' ? { source: w.source } : {}),
+            }))
+        : undefined,
       // Thread specialInstructions (primary) or fallback string manualRoute for prefs (array manualRoute is for override only)
       specialInstructions: typeof body.specialInstructions === 'string' ? body.specialInstructions :
         (typeof body.manualRoute === 'string' ? body.manualRoute : undefined),

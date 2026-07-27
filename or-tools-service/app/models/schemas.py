@@ -36,6 +36,35 @@ class DropStop(Address):
     lon: float | None = None
 
 
+class ManualWaypoint(BaseModel):
+    """
+    Stable schema for map/manual forced vias (map UI reserved; accept & pass-through now).
+    List of {lat, lon, name?, source?} on LoadDetails.manualWaypoints.
+    """
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    lat: float
+    lon: float
+    name: str | None = None
+    source: str | None = None
+
+    @field_validator("lat")
+    @classmethod
+    def lat_range(cls, v: float) -> float:
+        fv = float(v)
+        if not math.isfinite(fv) or not (-90.0 <= fv <= 90.0):
+            raise ValueError("lat must be finite and in [-90, 90]")
+        return fv
+
+    @field_validator("lon")
+    @classmethod
+    def lon_range(cls, v: float) -> float:
+        fv = float(v)
+        if not math.isfinite(fv) or not (-180.0 <= fv <= 180.0):
+            raise ValueError("lon must be finite and in [-180, 180]")
+        return fv
+
+
 class TractorProfile(BaseModel):
     """Partial Tractor from types/equipment.ts (for axle_spacings etc)."""
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
@@ -141,6 +170,10 @@ class LoadDetails(BaseModel):
     specialInstructions: str | None = Field(None, alias="specialInstructions")
     special_instructions: str | None = None
 
+    # Optional forced map/manual vias (stable schema; no map UI in this PR — accept & pass through)
+    manualWaypoints: list[ManualWaypoint] | None = Field(None, alias="manualWaypoints")
+    manual_waypoints: list[ManualWaypoint] | None = None
+
     # === Equipment / rig / axle details (types/equipment.ts + formData v2) ===
     axleWeights: list[float] | None = Field(None, alias="axleWeights")
     axle_weights: list[float] | None = None
@@ -226,6 +259,37 @@ class LoadDetails(BaseModel):
 
     def get_manual_route(self) -> list[str] | None:
         return self.manual_route or self.manualRoute
+
+    def get_manual_waypoints(self) -> list[dict[str, Any]]:
+        """Forced vias from map/manual schema: [{lat, lon, name?, source?}]."""
+        raw = self.manual_waypoints or self.manualWaypoints
+        if not raw:
+            return []
+        out: list[dict[str, Any]] = []
+        for w in raw:
+            if hasattr(w, "model_dump"):
+                d = w.model_dump()
+            elif isinstance(w, dict):
+                d = dict(w)
+            else:
+                continue
+            try:
+                lat, lon = float(d["lat"]), float(d["lon"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not (math.isfinite(lat) and math.isfinite(lon)):
+                continue
+            if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+                continue
+            item: dict[str, Any] = {"lat": lat, "lon": lon, "is_via": True}
+            if d.get("name"):
+                item["name"] = str(d["name"])
+            else:
+                item["name"] = "waypoint"
+            if d.get("source"):
+                item["source"] = str(d["source"])
+            out.append(item)
+        return out
 
     def get_origin_coords(self) -> tuple[float, float] | None:
         lat = self.origin_lat or self.originLat

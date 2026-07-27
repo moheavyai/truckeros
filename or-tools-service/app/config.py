@@ -109,6 +109,23 @@ CITY_MAP: Final[dict[str, tuple[float, float, str]]] = {
     # US-136 MO–NE border area (prefer US 136 via seed for OSRM/OR-Tools geometry)
     "rock port": (40.4122, -95.5169, "MO"),
     "rockport": (40.4122, -95.5169, "MO"),
+    # User-named places on US-136 / SE Nebraska (prefer-clause city > default hwy anchor)
+    "auburn": (40.3925, -95.8389, "NE"),
+    "beatrice": (40.2681, -96.7467, "NE"),
+}
+
+# Light county centroids for specialInstructions "X County, ST" (Nominatim-free MVP).
+# Key: "name,st" lowercase; value: (lat, lon, state_code).
+COUNTY_MAP: Final[dict[str, tuple[float, float, str]]] = {
+    "atchison,mo": (40.4300, -95.4300, "MO"),  # Rock Port / US-136 MO side
+    "nemaha,ne": (40.3850, -95.8500, "NE"),  # Auburn NE area
+    "gage,ne": (40.2650, -96.6900, "NE"),  # Beatrice NE
+    "richardson,ne": (40.1250, -95.7200, "NE"),
+    "pawnee,ne": (40.1350, -96.2400, "NE"),
+    "otoe,ne": (40.6500, -96.1400, "NE"),
+    "johnson,ne": (40.3950, -96.2700, "NE"),
+    "nodaway,mo": (40.3600, -94.8800, "MO"),
+    "holt,mo": (40.1000, -95.2200, "MO"),
 }
 
 STATE_ABBR: Final[set[str]] = {

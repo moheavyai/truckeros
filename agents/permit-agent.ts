@@ -80,6 +80,17 @@ export interface LoadDetails {
   // Used for the "Change Route" manual override feature
   manualRoute?: string[]
 
+  /**
+   * Optional forced map/manual vias (stable schema for future map UI).
+   * Accepted & passed through to OR-Tools as vias before drops; no map UI yet.
+   */
+  manualWaypoints?: Array<{
+    lat: number
+    lon: number
+    name?: string
+    source?: string
+  }>
+
   // Routing engine selection (GraphHopper truck profile or OSRM baseline)
   routingEngine?: RoutingEngine
 

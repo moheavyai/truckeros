@@ -52,3 +52,27 @@ def test_load_details_rejects_non_finite_coordinates():
                 drops=[{"query": "Minot", "lat": math.nan, "lon": -101.296, "city": "Minot", "state": "ND"}]
             )
         )
+
+
+def test_load_details_accepts_manual_waypoints():
+    load = LoadDetails(
+        **_base_load(
+            manualWaypoints=[
+                {"lat": 40.5, "lon": -95.7, "name": "Pick A", "source": "map"},
+            ]
+        )
+    )
+    wps = load.get_manual_waypoints()
+    assert len(wps) == 1
+    assert wps[0]["lat"] == pytest.approx(40.5)
+    assert wps[0]["name"] == "Pick A"
+    assert wps[0]["source"] == "map"
+
+
+def test_load_details_rejects_waypoint_out_of_range():
+    with pytest.raises(ValidationError):
+        LoadDetails(
+            **_base_load(
+                manualWaypoints=[{"lat": 999.0, "lon": -95.7, "name": "bad"}]
+            )
+        )

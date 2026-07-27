@@ -188,3 +188,177 @@ class TestAssessPreferenceEnforcement:
         assert "via seeded" in msg
         assert "not realized in geometry" in msg
         assert "not injected" not in msg
+
+    def test_or_group_satisfied_if_any_realized(self):
+        """US136 or I-29: either highway on route satisfies the or-group."""
+        h = assess_preference_enforcement(
+            avoided=["IA"],
+            preferred=["US 136", "I-29"],
+            route_corridor=["MO", "NE"],
+            highways=["I-29", "I-80"],
+            origin_state="MO",
+            dest_state="NE",
+            preferred_or_groups=[["US 136", "I-29"]],
+        )
+        assert h["missing_pref"] == []
+        assert h["enforced"] is True
+
+    def test_or_group_missing_if_none_realized(self):
+        h = assess_preference_enforcement(
+            avoided=[],
+            preferred=["US 136", "I-29"],
+            route_corridor=["MO", "KS", "NE"],
+            highways=["I-80"],
+            origin_state="MO",
+            dest_state="NE",
+            preferred_or_groups=[["US 136", "I-29"]],
+        )
+        assert any("or" in m.lower() for m in h["missing_pref"])
+        assert h["enforced"] is False
+
+    def test_ordered_preferred_both_required(self):
+        """US136 then US75 → both required (not or-group)."""
+        h = assess_preference_enforcement(
+            avoided=[],
+            preferred=["US 136", "US 75"],
+            route_corridor=["MO", "NE"],
+            highways=["US 136", "I-29"],
+            origin_state="MO",
+            dest_state="NE",
+        )
+        assert "US 75" in h["missing_pref"]
+        assert h["enforced"] is False
+
+
+class TestPreferredHighwayLists:
+    def test_then_ordered_preferred(self):
+        parsed = parse_special_instructions("prefer US136 then US75")
+        assert parsed["preferred"] == ["US 136", "US 75"]
+        assert parsed["preferred_or_groups"] == []
+
+    def test_or_group_preferred_alternatives(self):
+        parsed = parse_special_instructions("prefer US136 or I-29")
+        assert "US 136" in parsed["preferred"]
+        assert "I-29" in parsed["preferred"]
+        assert ["US 136", "I-29"] in parsed["preferred_or_groups"]
+
+    def test_through_place_does_not_cut_hwy_list(self):
+        """prefer US136 through Auburn then US75 keeps both highways."""
+        parsed = parse_special_instructions(
+            "prefer US136 through Auburn then US75",
+            origin_state="MO",
+            dest_state="NE",
+        )
+        assert "US 136" in parsed["preferred"]
+        assert "US 75" in parsed["preferred"]
+        assert parsed["preferred"].index("US 136") < parsed["preferred"].index("US 75")
+
+    def test_or_group_missing_honesty_not_injected_when_no_seed(self):
+        msg = format_missing_pref_warning(
+            "US 136 or I-29",
+            avoided=["IA"],
+            special_text="prefer US136 or I-29",
+            origin_state="MO",
+            dest_state="NE",
+            preferred_or_groups=[["US 136", "I-29"]],
+        )
+        assert "not injected" in msg
+        assert "via seeded" not in msg
+
+    def test_or_group_missing_honesty_via_seeded_when_place_named(self):
+        msg = format_missing_pref_warning(
+            "US 136 or I-29",
+            avoided=["IA"],
+            special_text="prefer US136 or I-29 through Auburn, NE",
+            origin_state="MO",
+            dest_state="NE",
+            preferred_or_groups=[["US 136", "I-29"]],
+        )
+        assert "via seeded" in msg
+        assert "not injected" not in msg
+
+    def test_or_then_compound_or_group_then_required(self):
+        """prefer US136 or I-29 then US75 → or-group [US136,I-29], required US75."""
+        parsed = parse_special_instructions("prefer US136 or I-29 then US75")
+        assert "US 136" in parsed["preferred"]
+        assert "I-29" in parsed["preferred"]
+        assert "US 75" in parsed["preferred"]
+        assert ["US 136", "I-29"] in parsed["preferred_or_groups"]
+        # US75 must not be swallowed into the or-group
+        assert not any("US 75" in g for g in parsed["preferred_or_groups"])
+        # Order: or-members before then-required
+        assert parsed["preferred"].index("US 136") < parsed["preferred"].index("US 75")
+        assert parsed["preferred"].index("I-29") < parsed["preferred"].index("US 75")
+
+    def test_then_or_compound_required_then_or_group(self):
+        """prefer US136 then US75 or I-29 → required US136, or-group [US75,I-29]."""
+        parsed = parse_special_instructions("prefer US136 then US75 or I-29")
+        assert "US 136" in parsed["preferred"]
+        assert "US 75" in parsed["preferred"]
+        assert "I-29" in parsed["preferred"]
+        assert ["US 75", "I-29"] in parsed["preferred_or_groups"]
+        assert not any("US 136" in g for g in parsed["preferred_or_groups"])
+        assert parsed["preferred"].index("US 136") < parsed["preferred"].index("US 75")
+
+    def test_or_then_honesty_segments(self):
+        """(A or B) then C: any of A/B + required C."""
+        h = assess_preference_enforcement(
+            avoided=[],
+            preferred=["US 136", "I-29", "US 75"],
+            route_corridor=["MO", "NE"],
+            highways=["I-29", "US 75"],
+            origin_state="MO",
+            dest_state="NE",
+            preferred_or_groups=[["US 136", "I-29"]],
+        )
+        assert h["enforced"] is True
+        assert h["missing_pref"] == []
+
+        h_miss_c = assess_preference_enforcement(
+            avoided=[],
+            preferred=["US 136", "I-29", "US 75"],
+            route_corridor=["MO", "NE"],
+            highways=["I-29"],
+            origin_state="MO",
+            dest_state="NE",
+            preferred_or_groups=[["US 136", "I-29"]],
+        )
+        assert "US 75" in h_miss_c["missing_pref"]
+        assert h_miss_c["enforced"] is False
+
+        h_miss_or = assess_preference_enforcement(
+            avoided=[],
+            preferred=["US 136", "I-29", "US 75"],
+            route_corridor=["MO", "NE"],
+            highways=["US 75"],
+            origin_state="MO",
+            dest_state="NE",
+            preferred_or_groups=[["US 136", "I-29"]],
+        )
+        assert any("or" in m.lower() for m in h_miss_or["missing_pref"])
+        assert h_miss_or["enforced"] is False
+
+    def test_then_or_honesty_segments(self):
+        """A then (B or C): required A + any of B/C."""
+        h = assess_preference_enforcement(
+            avoided=[],
+            preferred=["US 136", "US 75", "I-29"],
+            route_corridor=["MO", "NE"],
+            highways=["US 136", "I-29"],
+            origin_state="MO",
+            dest_state="NE",
+            preferred_or_groups=[["US 75", "I-29"]],
+        )
+        assert h["enforced"] is True
+
+        h_miss_a = assess_preference_enforcement(
+            avoided=[],
+            preferred=["US 136", "US 75", "I-29"],
+            route_corridor=["MO", "NE"],
+            highways=["I-29"],
+            origin_state="MO",
+            dest_state="NE",
+            preferred_or_groups=[["US 75", "I-29"]],
+        )
+        assert "US 136" in h_miss_a["missing_pref"]
+        assert h_miss_a["enforced"] is False
