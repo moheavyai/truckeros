@@ -339,6 +339,7 @@ export function normalizeStateCode(code: string | null | undefined): string {
     .slice(0, 2)
 }
 
+/** Numeric StateAxleRule fields only (excludes string `notes`). */
 const STATE_RULE_NUMERIC_KEYS = [
   'single_cap_lbs',
   'tandem_cap_lbs',
@@ -350,12 +351,19 @@ const STATE_RULE_NUMERIC_KEYS = [
   'tandem_permit_lbs',
   'tridem_permit_lbs',
   'quad_permit_lbs',
-] as const
+] as const satisfies readonly (keyof StateAxleRule)[]
+
+type StateAxleRuleNumericKey = (typeof STATE_RULE_NUMERIC_KEYS)[number]
 
 function positiveNumber(value: unknown, fallback: number, min = 1, max = 500_000): number {
   const n = Number(value)
   if (!Number.isFinite(n) || n < min || n > max) return fallback
   return n
+}
+
+function numericRuleValue(rule: StateAxleRule, key: StateAxleRuleNumericKey): number {
+  const v = rule[key]
+  return typeof v === 'number' && Number.isFinite(v) ? v : 1
 }
 
 /**
@@ -394,15 +402,10 @@ export function sanitizeStateRules(
 
     for (const k of STATE_RULE_NUMERIC_KEYS) {
       if (src[k] === undefined || src[k] === null || src[k] === '') continue
-      const fallback = (base as Record<string, number>)[k] ?? 1
+      const fallback = numericRuleValue(base, k)
       const max = k.endsWith('_span_in') ? 600 : 500_000
       const min = k.endsWith('_span_in') ? 40 : 1
-      ;(cleaned as Record<string, number | undefined>)[k] = positiveNumber(
-        src[k],
-        fallback,
-        min,
-        max
-      )
+      cleaned[k] = positiveNumber(src[k], fallback, min, max)
     }
     if (typeof src.notes === 'string') {
       cleaned.notes = src.notes.trim().slice(0, 500)
