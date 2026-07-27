@@ -24,11 +24,20 @@ import {
   MO_PORTAL_WALKTHROUGH,
   MO_APPLICATION_PREFILL_KEYS,
   MO_TRIP_TAB_PREFILL_KEYS,
+  MO_PAYMENT_PREFILL_KEYS,
+  MO_PAY_LAST_NOTE,
+  MO_FEE_DISPLAY_NOTE,
+  MO_CONVEYANCE_TIP,
+  MO_DESCRIPTION_LIST_TIP,
+  MO_POWER_UNIT_TYPE_TIP,
   buildMoFilingSteps,
   buildMoFilingStepClipboard,
   buildMoVehicleTypeTip,
   buildMoTravelTip,
   buildMoBoosterTip,
+  buildMoConveyanceTip,
+  buildMoDescriptionListTip,
+  buildMoPowerUnitTypeTip,
   mapTrailerTypeToMoLabel,
   pickPrimaryCargoTrailer,
   getMoStepPrefillKeysWithValues,
@@ -1438,7 +1447,7 @@ describe('buildPortalCompletenessChecklist', () => {
   })
 })
 
-describe('Missouri Portal Assist playbook v2', () => {
+describe('Missouri Portal Assist playbook v3', () => {
   const moCorridorRequest = {
     origin_city: 'Tulsa',
     origin_state: 'OK',
@@ -1491,6 +1500,7 @@ describe('Missouri Portal Assist playbook v2', () => {
         companyName: 'Show-Me Haul',
         usdotNumber: '7654321',
         driverFullName: 'Pat Driver',
+        carrierEmail: 'pat@showmehaul.example',
       },
     },
   }
@@ -1503,7 +1513,7 @@ describe('Missouri Portal Assist playbook v2', () => {
     expect(isMissouriPortal(null, STATE_PORTAL_CONFIGS.TX)).toBe(false)
   })
 
-  it('exposes MO v2 field order and MoDOT Single Trip labels', () => {
+  it('exposes MO v3 field order and MoDOT Single Trip labels', () => {
     expect(getMoPortalFieldOrder()).toEqual([...MO_PORTAL_FIELD_ORDER])
     expect(MO_PORTAL_FIELD_ORDER.join(',')).toBe(
       [
@@ -1513,6 +1523,7 @@ describe('Missouri Portal Assist playbook v2', () => {
         'tip_for_hire',
         'tip_travel',
         'tip_vehicle_type',
+        'tip_power_unit_type',
         'tip_booster',
         'load_description',
         'load_pieces',
@@ -1543,6 +1554,8 @@ describe('Missouri Portal Assist playbook v2', () => {
         'carrier_usdot',
         'carrier_company',
         'carrier_mc',
+        'driver_name',
+        'carrier_email',
         'origin',
         'destination',
         'route',
@@ -1585,12 +1598,15 @@ describe('Missouri Portal Assist playbook v2', () => {
     expect(getMoPortalFieldLabel('border_exit')).toBe('MO exit border')
     expect(getMoPortalFieldLabel('tip_conveyance')).toBe('Conveyance')
     expect(getMoPortalFieldLabel('tip_vehicle_type')).toBe('Vehicle Type')
+    expect(getMoPortalFieldLabel('tip_power_unit_type')).toBe('Power Unit Type tip')
     expect(getMoPortalFieldLabel('tip_travel')).toBe('Travel')
     expect(getMoPortalFieldLabel('tip_booster')).toBe('Booster unit')
+    expect(getMoPortalFieldLabel('driver_name')).toBe('Contact name')
+    expect(getMoPortalFieldLabel('carrier_email')).toBe('Contact email')
     expect(MO_PORTAL_FIELD_LABELS.entry_point).toBe('MO entry border')
   })
 
-  it('buildPortalClipboardPacket uses MO v2 order and labels when state is MO', () => {
+  it('buildPortalClipboardPacket uses MO v3 order and labels when state is MO', () => {
     const prefill = generatePortalPrefill(
       {
         ...moCorridorRequest,
@@ -1631,6 +1647,7 @@ describe('Missouri Portal Assist playbook v2', () => {
             usdotNumber: '7654321',
             mcNumber: 'MC-4242',
             driverFullName: 'Pat Driver',
+            carrierEmail: 'pat@showmehaul.example',
           },
         },
       },
@@ -1642,11 +1659,12 @@ describe('Missouri Portal Assist playbook v2', () => {
     const lines = packet.split('\n')
     // Permit type + tips first
     expect(lines[0]).toBe('Permit type: Single trip')
-    expect(packet).toContain('Conveyance: Hauled (typical hauled load)')
-    expect(packet).toContain('Description list: use OTHER — then free-text Load Description')
+    expect(packet).toContain(`Conveyance: ${MO_CONVEYANCE_TIP}`)
+    expect(packet).toContain(`Description list: ${MO_DESCRIPTION_LIST_TIP}`)
     expect(packet).toContain('For Hire: Yes (when for-hire carrier; override if private)')
     expect(packet).toContain('Travel: Interstate commerce crossing state line')
     expect(packet).toContain('Vehicle Type: PowerUnit + 1 Unit')
+    expect(packet).toContain(`Power Unit Type tip: ${MO_POWER_UNIT_TYPE_TIP}`)
     expect(packet).toContain('Booster unit: No')
     expect(packet).toContain('Load Description: Transformer skid')
     expect(packet).toContain('Load Pieces / How Many: 1')
@@ -1675,6 +1693,8 @@ describe('Missouri Portal Assist playbook v2', () => {
     expect(packet).toContain('USDOT: 7654321')
     expect(packet).toContain('Carrier name: Show-Me Haul')
     expect(packet).toContain('MC number: MC-4242')
+    expect(packet).toContain('Contact name: Pat Driver')
+    expect(packet).toContain('Contact email: pat@showmehaul.example')
     expect(packet).toContain('Origin: Tulsa, OK')
     expect(packet).toContain('Destination: Chicago, IL')
     expect(packet).toContain('Route corridor: OK → MO → IL')
@@ -1685,12 +1705,16 @@ describe('Missouri Portal Assist playbook v2', () => {
     const labelSeq = lines.map((l) => l.split(':')[0])
     expect(labelSeq[0]).toBe('Permit type')
     expect(labelSeq.indexOf('Conveyance')).toBeGreaterThan(labelSeq.indexOf('Permit type'))
+    expect(labelSeq.indexOf('Power Unit Type tip')).toBeGreaterThan(
+      labelSeq.indexOf('Vehicle Type')
+    )
     expect(labelSeq.indexOf('Load Description')).toBeGreaterThan(labelSeq.indexOf('Booster unit'))
     expect(labelSeq.indexOf('Power Unit Make')).toBeGreaterThan(labelSeq.indexOf('Load Description'))
     expect(labelSeq.indexOf('Unit Two Make')).toBeGreaterThan(labelSeq.indexOf('Power Unit Make'))
     expect(labelSeq.indexOf('Overall Width')).toBeGreaterThan(labelSeq.indexOf('Unit Two Type'))
     expect(labelSeq.indexOf('USDOT')).toBeGreaterThan(labelSeq.indexOf('Number of Axles'))
-    expect(labelSeq.indexOf('Origin')).toBeGreaterThan(labelSeq.indexOf('USDOT'))
+    expect(labelSeq.indexOf('Contact name')).toBeGreaterThan(labelSeq.indexOf('USDOT'))
+    expect(labelSeq.indexOf('Origin')).toBeGreaterThan(labelSeq.indexOf('Contact email'))
     expect(labelSeq.indexOf('Route corridor')).toBeGreaterThan(labelSeq.indexOf('Origin'))
     expect(labelSeq.indexOf('Highways')).toBeGreaterThan(labelSeq.indexOf('Route corridor'))
   })
@@ -1704,7 +1728,7 @@ describe('Missouri Portal Assist playbook v2', () => {
     expect(packet).not.toContain('Conveyance:')
   })
 
-  it('resolvePortalFieldLabel uses MO v2 labels for MO config', () => {
+  it('resolvePortalFieldLabel uses MO v3 labels for MO config', () => {
     expect(resolvePortalFieldLabel('origin', STATE_PORTAL_CONFIGS.MO)).toBe('Origin')
     expect(resolvePortalFieldLabel('weight', STATE_PORTAL_CONFIGS.MO)).toBe('GVW')
     expect(resolvePortalFieldLabel('axles', STATE_PORTAL_CONFIGS.MO)).toBe(
@@ -1713,13 +1737,16 @@ describe('Missouri Portal Assist playbook v2', () => {
     expect(resolvePortalFieldLabel('tractor_plate', STATE_PORTAL_CONFIGS.MO)).toBe(
       'Power Unit License Number'
     )
+    expect(resolvePortalFieldLabel('driver_name', STATE_PORTAL_CONFIGS.MO)).toBe(
+      'Contact name'
+    )
     // Non-MO still uses fieldMapping / fallbacks
     expect(resolvePortalFieldLabel('origin', STATE_PORTAL_CONFIGS.TX)).toBe(
       'Origin Location'
     )
   })
 
-  it('buildMoFilingSteps follows live Carrier Express Single Trip path', () => {
+  it('buildMoFilingSteps follows live Carrier Express Single Trip path (v3 Trip→Payment)', () => {
     const multi = generatePortalPrefill(moCorridorRequest, 'MO')
     const steps = buildMoFilingSteps(multi)
     expect(steps.map((s) => s.id)).toEqual([
@@ -1729,10 +1756,12 @@ describe('Missouri Portal Assist playbook v2', () => {
       'travel_dates',
       'application',
       'trip_tab',
-      'review_pay',
+      'trip_post_analyze',
+      'review',
+      'payment',
       'paste_permit',
     ])
-    expect(steps.map((s) => s.stepNumber)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+    expect(steps.map((s) => s.stepNumber)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
     expect(steps.find((s) => s.id === 'login')?.title).toContain('Login Carrier Express')
     expect(steps.find((s) => s.id === 'programs')?.title).toContain(
       'Programs → Oversize/Overweight'
@@ -1744,13 +1773,32 @@ describe('Missouri Portal Assist playbook v2', () => {
     expect(steps.find((s) => s.id === 'application')?.prefillKeys).toEqual([
       ...MO_APPLICATION_PREFILL_KEYS,
     ])
-    // Multi-state: trip tab includes border keys
+    expect(steps.find((s) => s.id === 'application')?.guidance?.join(' ')).toMatch(
+      /Conveyance|Hauled|Travel|Vehicle Type|Power Unit Type|Booster|OTHER/
+    )
+    // Multi-state: trip tab includes border keys + Street Address / Analyze guidance
     expect(steps.find((s) => s.id === 'trip_tab')?.prefillKeys).toEqual([
       ...MO_TRIP_TAB_PREFILL_KEYS,
     ])
-    expect(steps.find((s) => s.id === 'review_pay')?.title).toContain('Payment')
+    expect(steps.find((s) => s.id === 'trip_tab')?.title).toMatch(/Street Address/)
+    expect(steps.find((s) => s.id === 'trip_tab')?.title).toMatch(/Analyze/)
+    expect(steps.find((s) => s.id === 'trip_tab')?.guidance?.join(' ')).toMatch(
+      /Street Address|Analyze/
+    )
+    expect(steps.find((s) => s.id === 'trip_post_analyze')?.title).toMatch(/Failures\s*=\s*0/)
+    expect(steps.find((s) => s.id === 'trip_post_analyze')?.title).toMatch(
+      /Trip Description/
+    )
+    expect(steps.find((s) => s.id === 'review')?.title).toMatch(/Review/)
+    expect(steps.find((s) => s.id === 'review')?.title).toMatch(/prefill/i)
+    const payment = steps.find((s) => s.id === 'payment')!
+    expect(payment.title).toMatch(/Payment/)
+    expect(payment.title).toMatch(/pay-last/i)
+    expect(payment.prefillKeys).toEqual([...MO_PAYMENT_PREFILL_KEYS])
+    expect(payment.guidance?.join(' ')).toContain(MO_PAY_LAST_NOTE)
+    expect(payment.guidance?.join(' ')).toContain(MO_FEE_DISPLAY_NOTE)
     expect(steps.find((s) => s.id === 'paste_permit')?.title).toMatch(/permit #/i)
-    // Single-state: trip tab always present but border keys omitted from prefillKeys
+    // Single-state: trip tab always present but border keys omitted; no pay-last note
     const single = generatePortalPrefill(
       {
         origin_city: 'St. Louis',
@@ -1777,10 +1825,14 @@ describe('Missouri Portal Assist playbook v2', () => {
       'highways',
     ])
     expect(singleSteps.find((s) => s.id === 'trip_tab')?.title).not.toMatch(/borders/)
+    const singlePay = singleSteps.find((s) => s.id === 'payment')!
+    expect(singlePay.title).not.toMatch(/pay-last/i)
+    expect(singlePay.guidance?.join(' ') || '').not.toContain(MO_PAY_LAST_NOTE)
+    expect(singlePay.guidance?.join(' ')).toContain(MO_FEE_DISPLAY_NOTE)
     expect(buildMoFilingSteps().map((s) => s.id)).toEqual(steps.map((s) => s.id))
   })
 
-  it('buildMoFilingStepClipboard copies application + trip tab with MO v2 labels', () => {
+  it('buildMoFilingStepClipboard copies application + trip + payment with MO v3 labels', () => {
     const prefill = generatePortalPrefill(
       {
         ...moCorridorRequest,
@@ -1816,11 +1868,13 @@ describe('Missouri Portal Assist playbook v2', () => {
     const app = steps.find((s) => s.id === 'application')!
     const appPacket = buildMoFilingStepClipboard(prefill, app)
     expect(appPacket).toContain('Conveyance: Hauled')
+    expect(appPacket).toContain('Under Own Power')
     expect(appPacket).toContain('Load Description: Transformer skid')
     expect(appPacket).toContain('Power Unit Make: Peterbilt')
     expect(appPacket).toContain('Unit Two Type: SINGLE DROP TRLR')
     expect(appPacket).toContain('Number of Axles: 6')
     expect(appPacket).toContain('GVW:')
+    expect(appPacket).toContain(`Power Unit Type tip: ${MO_POWER_UNIT_TYPE_TIP}`)
     expect(appPacket).not.toContain('Origin:')
 
     const trip = steps.find((s) => s.id === 'trip_tab')!
@@ -1832,6 +1886,13 @@ describe('Missouri Portal Assist playbook v2', () => {
     expect(tripPacket).toMatch(/MO entry border:/)
     expect(tripPacket).toMatch(/MO exit border:/)
     expect(tripPacket).not.toContain('Load Description')
+
+    const payment = steps.find((s) => s.id === 'payment')!
+    const payPacket = buildMoFilingStepClipboard(prefill, payment)
+    expect(payPacket).toContain('Contact name: Pat Driver')
+    expect(payPacket).toContain('Contact email: pat@showmehaul.example')
+    expect(payPacket).toContain('USDOT: 7654321')
+    expect(payPacket).not.toContain('Load Description')
 
     const newApp = steps.find((s) => s.id === 'new_app')!
     expect(buildMoFilingStepClipboard(prefill, newApp, { tripType: 'Round trip' })).toBe(
@@ -1886,7 +1947,7 @@ describe('Missouri Portal Assist playbook v2', () => {
     expect(emptyPacket).not.toContain('Vehicle Type:')
   })
 
-  it('travel tip: multi-state interstate vs single-state; empty corridor uses origin≠dest', () => {
+  it('travel tip: multi-state interstate vs Intrastate travel within MO; empty corridor uses origin≠dest', () => {
     const multi = generatePortalPrefill(moCorridorRequest, 'MO')
     expect(multi.generatedFields.tip_travel).toBe(
       'Interstate commerce crossing state line'
@@ -1909,8 +1970,8 @@ describe('Missouri Portal Assist playbook v2', () => {
       },
       'MO'
     )
-    expect(single.generatedFields.tip_travel).toMatch(/Intrastate option may apply/i)
-    expect(buildMoTravelTip(single)).toMatch(/Intrastate option may apply/i)
+    expect(single.generatedFields.tip_travel).toBe('Intrastate travel within MO')
+    expect(buildMoTravelTip(single)).toBe('Intrastate travel within MO')
 
     // Empty corridor but OK→IL origin/dest must still be multi-state (same as isMoMultiStatePrefill)
     const emptyCorridorMulti = generatePortalPrefill(
@@ -1938,6 +1999,23 @@ describe('Missouri Portal Assist playbook v2', () => {
     )
   })
 
+  it('enum tips: conveyance options + Hauled default; description OTHER; power unit type tip', () => {
+    expect(buildMoConveyanceTip()).toBe(MO_CONVEYANCE_TIP)
+    expect(MO_CONVEYANCE_TIP).toMatch(/Hauled/)
+    expect(MO_CONVEYANCE_TIP).toMatch(/Under Own Power/)
+    expect(MO_CONVEYANCE_TIP).toMatch(/Towed/)
+    expect(MO_CONVEYANCE_TIP).toMatch(/Haul\/Tow/)
+    expect(buildMoDescriptionListTip()).toBe(MO_DESCRIPTION_LIST_TIP)
+    expect(MO_DESCRIPTION_LIST_TIP).toMatch(/^OTHER/)
+    expect(buildMoPowerUnitTypeTip()).toBe(MO_POWER_UNIT_TYPE_TIP)
+    expect(MO_POWER_UNIT_TYPE_TIP).toMatch(/TRUCK-TRACTOR/)
+    expect(MO_POWER_UNIT_TYPE_TIP).toMatch(/AUTOMOBILE/)
+    const prefill = generatePortalPrefill(moCorridorRequest, 'MO')
+    expect(prefill.generatedFields.tip_conveyance).toBe(MO_CONVEYANCE_TIP)
+    expect(prefill.generatedFields.tip_description_list).toBe(MO_DESCRIPTION_LIST_TIP)
+    expect(prefill.generatedFields.tip_power_unit_type).toBe(MO_POWER_UNIT_TYPE_TIP)
+  })
+
   it('booster tip defaults No; Yes when jeep/booster present', () => {
     const noBooster = generatePortalPrefill(moCorridorRequest, 'MO')
     expect(noBooster.generatedFields.tip_booster).toBe('No')
@@ -1963,14 +2041,18 @@ describe('Missouri Portal Assist playbook v2', () => {
     expect(buildMoBoosterTip(withJeep)).toMatch(/^Yes/)
   })
 
-  it('mapTrailerTypeToMoLabel maps common types; deck/lowboy before RGN', () => {
+  it('mapTrailerTypeToMoLabel maps common types; deck/lowboy before RGN; unmapped tip', () => {
     expect(mapTrailerTypeToMoLabel('Double Drop')).toBe('DOUBLE DROP TRLR')
     expect(mapTrailerTypeToMoLabel('single drop')).toBe('SINGLE DROP TRLR')
     expect(mapTrailerTypeToMoLabel('Step Deck')).toBe('STEP DECK TRLR')
-    expect(mapTrailerTypeToMoLabel('Flatbed')).toBe('FLATBED TRLR')
+    expect(mapTrailerTypeToMoLabel('Flatbed')).toBe('FLAT BED TRLR')
+    expect(mapTrailerTypeToMoLabel('flat bed')).toBe('FLAT BED TRLR')
     expect(mapTrailerTypeToMoLabel('RGN')).toBe('RGN')
     expect(mapTrailerTypeToMoLabel('Custom Lowboy Stretch')).toBe('LOWBOY TRLR')
-    expect(mapTrailerTypeToMoLabel('Special Haul Deck')).toBe('SPECIAL HAUL DECK')
+    // Unmapped: raw + select closest tip
+    expect(mapTrailerTypeToMoLabel('Special Haul Deck')).toBe(
+      'SPECIAL HAUL DECK — select closest on MoDOT list'
+    )
     // Specific before generic RGN (e.g. "RGN double drop" → double drop, not bare RGN)
     expect(mapTrailerTypeToMoLabel('RGN Double Drop')).toBe('DOUBLE DROP TRLR')
     expect(mapTrailerTypeToMoLabel('lowboy RGN')).toBe('LOWBOY TRLR')
@@ -2043,7 +2125,7 @@ describe('Missouri Portal Assist playbook v2', () => {
     )
     expect(trailerOnly.generatedFields.vehicle_id).toBe('TRAILERONLY')
     expect(trailerOnly.generatedFields.power_unit_type).toBeUndefined()
-    expect(trailerOnly.generatedFields.unit_two_type).toBe('FLATBED TRLR')
+    expect(trailerOnly.generatedFields.unit_two_type).toBe('FLAT BED TRLR')
   })
 
   it('non-MO states do not emit tip_* keys', () => {
@@ -2054,6 +2136,7 @@ describe('Missouri Portal Assist playbook v2', () => {
     expect(ok.generatedFields.tip_booster).toBeUndefined()
     expect(ok.generatedFields.tip_for_hire).toBeUndefined()
     expect(ok.generatedFields.tip_description_list).toBeUndefined()
+    expect(ok.generatedFields.tip_power_unit_type).toBeUndefined()
     const packet = buildPortalClipboardPacket(ok, STATE_PORTAL_CONFIGS.OK)
     expect(packet).not.toContain('Conveyance:')
     expect(packet).not.toContain('Vehicle Type:')
@@ -2118,14 +2201,18 @@ describe('Missouri Portal Assist playbook v2', () => {
     expect(f.unit_two_type).toBe('STEP DECK TRLR')
     expect(f.power_unit_type).toBe('TRUCK-TRACTOR')
     expect(f.tip_conveyance).toMatch(/Hauled/)
+    expect(f.tip_conveyance).toMatch(/Under Own Power/)
     expect(f.tip_travel).toMatch(/Interstate/)
     expect(f.tip_vehicle_type).toBe('PowerUnit + 1 Unit')
+    expect(f.tip_power_unit_type).toMatch(/TRUCK-TRACTOR/)
     expect(f.tip_booster).toBe('No')
     expect(f.carrier_usdot).toBe('7654321')
+    expect(f.driver_name).toBe('Pat Driver')
+    expect(f.carrier_email).toBe('pat@showmehaul.example')
   })
 
-  it('MO walkthrough is live Single Trip path from Carrier Express screens', () => {
-    expect(MO_PORTAL_WALKTHROUGH).toHaveLength(8)
+  it('MO walkthrough is live Single Trip path v3 (Trip Analyze → Review → Payment pay-last)', () => {
+    expect(MO_PORTAL_WALKTHROUGH).toHaveLength(10)
     expect(MO_PORTAL_WALKTHROUGH[0]).toContain('Login Carrier Express')
     expect(MO_PORTAL_WALKTHROUGH[0]).toContain('mcs.modot.mo.gov')
     expect(MO_PORTAL_WALKTHROUGH[1]).toBe('Programs → Oversize/Overweight')
@@ -2133,15 +2220,24 @@ describe('Missouri Portal Assist playbook v2', () => {
     expect(MO_PORTAL_WALKTHROUGH[3]).toMatch(/Travel Dates/)
     expect(MO_PORTAL_WALKTHROUGH[3]).toMatch(/7 moving days/)
     expect(MO_PORTAL_WALKTHROUGH[4]).toMatch(/Application fields/)
-    expect(MO_PORTAL_WALKTHROUGH[5]).toMatch(/Trip tab/)
-    expect(MO_PORTAL_WALKTHROUGH[5]).toMatch(/highways|borders|corridor/i)
-    expect(MO_PORTAL_WALKTHROUGH[6]).toMatch(/Review → Payment/)
-    expect(MO_PORTAL_WALKTHROUGH[7]).toMatch(/permit #/)
+    expect(MO_PORTAL_WALKTHROUGH[4]).toMatch(/enum tips|Conveyance/i)
+    expect(MO_PORTAL_WALKTHROUGH[5]).toMatch(/Trip/)
+    expect(MO_PORTAL_WALKTHROUGH[5]).toMatch(/Street Address/)
+    expect(MO_PORTAL_WALKTHROUGH[5]).toMatch(/Analyze/)
+    expect(MO_PORTAL_WALKTHROUGH[6]).toMatch(/Failures\s*=\s*0/)
+    expect(MO_PORTAL_WALKTHROUGH[6]).toMatch(/Trip Description/)
+    expect(MO_PORTAL_WALKTHROUGH[7]).toMatch(/Review/)
+    expect(MO_PORTAL_WALKTHROUGH[8]).toMatch(/Payment/)
+    expect(MO_PORTAL_WALKTHROUGH[8]).toMatch(/MoDOT-displayed|fee is MoDOT/i)
+    expect(MO_PORTAL_WALKTHROUGH[8]).toMatch(/validate other corridor states/i)
+    expect(MO_PORTAL_WALKTHROUGH[9]).toMatch(/permit #/)
     const joined = MO_PORTAL_WALKTHROUGH.join(' ')
     expect(joined).not.toMatch(/click File > Applications > New/i)
+    expect(MO_PAY_LAST_NOTE).toMatch(/Validate other corridor states/)
+    expect(MO_FEE_DISPLAY_NOTE).toMatch(/MoDOT-displayed/)
   })
 
-  it('MO config points at Carrier Express login with v2 field labels', () => {
+  it('MO config points at Carrier Express login with v3 field labels', () => {
     const mo = STATE_PORTAL_CONFIGS.MO
     expect(mo.portalUrl).toMatch(/modot\.mo\.gov/i)
     expect(mo.portalSystemName).toMatch(/Carrier Express/i)

@@ -1032,6 +1032,7 @@ export const PREFILL_FIELD_LABELS: Record<string, string> = {
   tip_for_hire: 'For Hire',
   tip_travel: 'Travel',
   tip_vehicle_type: 'Vehicle Type',
+  tip_power_unit_type: 'Power Unit Type tip',
   tip_booster: 'Booster unit',
   special_notes: 'Special Notes',
 }
@@ -1165,20 +1166,22 @@ export interface CompletenessChecklistContext {
 }
 
 // ---------------------------------------------------------------------------
-// Missouri (MoDOT Carrier Express) Portal Assist playbook v2 — pure helpers
+// Missouri (MoDOT Carrier Express) Portal Assist playbook v3 — pure helpers
+// Application enums + Trip → Review → Payment + multi-state pay-last.
 // Field order/labels locked from live Carrier Express Single Trip screens.
 // NOT browser RPA / auto-click into MoDOT.
 // ---------------------------------------------------------------------------
 
 /** Application-tip + copyable-value keys in MoDOT Single Trip packet order. */
 export const MO_PORTAL_FIELD_ORDER: readonly string[] = [
-  // Permit type + application tips
+  // Permit type + application tips (live enum defaults)
   'trip_type',
   'tip_conveyance',
   'tip_description_list',
   'tip_for_hire',
   'tip_travel',
   'tip_vehicle_type',
+  'tip_power_unit_type',
   'tip_booster',
   // Load
   'load_description',
@@ -1210,10 +1213,12 @@ export const MO_PORTAL_FIELD_ORDER: readonly string[] = [
   'front_overhang',
   'rear_overhang',
   'axles',
-  // Carrier (checklist requires USDOT)
+  // Carrier / profile contact (Payment uses name + email)
   'carrier_usdot',
   'carrier_company',
   'carrier_mc',
+  'driver_name',
+  'carrier_email',
   // Trip tab guidance
   'origin',
   'destination',
@@ -1231,6 +1236,7 @@ export const MO_APPLICATION_PREFILL_KEYS: readonly string[] = [
   'tip_for_hire',
   'tip_travel',
   'tip_vehicle_type',
+  'tip_power_unit_type',
   'tip_booster',
   'load_description',
   'load_pieces',
@@ -1273,11 +1279,43 @@ export const MO_TRIP_TAB_PREFILL_KEYS: readonly string[] = [
   'border_exit',
 ] as const
 
+/** Prefill keys for Payment step (profile contact + carrier identity). */
+export const MO_PAYMENT_PREFILL_KEYS: readonly string[] = [
+  'driver_name',
+  'carrier_email',
+  'carrier_usdot',
+  'carrier_company',
+] as const
+
 /** Border keys omitted from trip-tab prefill when single-state. */
 export const MO_BORDER_PREFILL_KEYS: readonly string[] = [
   'border_entry',
   'border_exit',
 ] as const
+
+/**
+ * Multi-state pay-last banner: validate other corridor states before MoDOT Submit/pay.
+ */
+export const MO_PAY_LAST_NOTE =
+  'Validate other corridor states before Submit/pay when multi-state' as const
+
+/**
+ * Fee honesty: amounts shown in UI (e.g. ~$15 single trip) are MoDOT-displayed — not TruckerOS truth.
+ */
+export const MO_FEE_DISPLAY_NOTE =
+  'Fee is MoDOT-displayed on Payment (single trip may show ~$15 — confirm in MoDOT; TruckerOS is not sole fee truth)' as const
+
+/** Conveyance enum tip (live Single Trip options + default). */
+export const MO_CONVEYANCE_TIP =
+  'Hauled (default for typical trailer load) — options: Under Own Power | Towed | Hauled | Haul/Tow' as const
+
+/** Description list tip: OTHER then free-text Load Description. */
+export const MO_DESCRIPTION_LIST_TIP =
+  'OTHER — then free-text Load Description' as const
+
+/** Power Unit Type enum tip (default TRUCK-TRACTOR for tractor). */
+export const MO_POWER_UNIT_TYPE_TIP =
+  'TRUCK-TRACTOR (default for tractor) — options: TRUCK-TRACTOR | TRUCK | AUTOMOBILE' as const
 
 /** MoDOT-oriented portal labels for MO packet / resolvePortalFieldLabel. */
 export const MO_PORTAL_FIELD_LABELS: Record<string, string> = {
@@ -1286,6 +1324,7 @@ export const MO_PORTAL_FIELD_LABELS: Record<string, string> = {
   tip_for_hire: 'For Hire',
   tip_travel: 'Travel',
   tip_vehicle_type: 'Vehicle Type',
+  tip_power_unit_type: 'Power Unit Type tip',
   tip_booster: 'Booster unit',
   load_description: 'Load Description',
   load_pieces: 'Load Pieces / How Many',
@@ -1337,11 +1376,13 @@ export const MO_PORTAL_FIELD_LABELS: Record<string, string> = {
   carrier_usdot: 'USDOT',
   carrier_mc: 'MC number',
   carrier_company: 'Carrier name',
-  driver_name: 'Driver name',
+  carrier_email: 'Contact email',
+  driver_name: 'Contact name',
 }
 
 /**
- * Live-mapped Carrier Express Single Trip walkthrough (from screenshots).
+ * Live-mapped Carrier Express Single Trip walkthrough v3 (from screenshots).
+ * Application enums → Trip Analyze → Review → Payment (pay-last multi-state).
  * Copy-assist only — no RPA / auto-click.
  */
 export const MO_PORTAL_WALKTHROUGH: readonly string[] = [
@@ -1349,9 +1390,11 @@ export const MO_PORTAL_WALKTHROUGH: readonly string[] = [
   'Programs → Oversize/Overweight',
   'New Application → Single Trip Permits → Single Trip',
   'Step 1 Travel Dates (operator picks From/To; 7 moving days typical — no auto dates unless already set)',
-  'Step 2 Application fields (use packet below)',
-  'Trip tab — use TruckerOS origin/dest/corridor/highways/borders as guidance while building keypoints in MoDOT map',
-  'Review → Payment on MoDOT',
+  'Step 2 Application fields (packet + enum tips: Conveyance, Travel, Vehicle Type, Power Unit Type, Unit Two, Booster, Description list)',
+  'Trip — Street Address origin/dest → Add; optional Keypoint/map for borders; Analyze',
+  'After Analyze — Failures = 0; open Restrictions; save Trip Description / Trip From / Trip To',
+  'Review — verify MoDOT fields vs TruckerOS prefill',
+  'Payment — contact/email from profile; fee is MoDOT-displayed; Save if other states unvalidated; multi-state: validate other corridor states before Submit/pay',
   'Paste permit # back into Portal Assist when issued',
 ] as const
 
@@ -1385,6 +1428,8 @@ export interface MoFilingStep {
   prefillKeys: string[]
   /** True when this step applies for multi-state / border roles. */
   multiStateOnly?: boolean
+  /** Operator guidance under the step (enum options, Analyze checklist, pay-last). */
+  guidance?: string[]
 }
 
 /**
@@ -1447,7 +1492,7 @@ export function buildMoVehicleTypeTip(prefill?: PrefillPackage | null): string {
 }
 
 /**
- * Travel tip: multi-state → interstate commerce; else single-state MO intrastate note.
+ * Travel tip: multi-state corridor → Interstate commerce; only MO → Intrastate travel within MO.
  * Multi-state signal matches isMoMultiStatePrefill (corridor > 1 OR origin≠dest).
  */
 export function buildMoTravelTip(
@@ -1469,7 +1514,22 @@ export function buildMoTravelTip(
   if (isMoMultiStatePrefill(shell)) {
     return 'Interstate commerce crossing state line'
   }
-  return 'Intrastate option may apply (single-state MO)'
+  return 'Intrastate travel within MO'
+}
+
+/** Conveyance enum tip with live options + Hauled default. */
+export function buildMoConveyanceTip(): string {
+  return MO_CONVEYANCE_TIP
+}
+
+/** Description list tip: OTHER then free-text Load Description. */
+export function buildMoDescriptionListTip(): string {
+  return MO_DESCRIPTION_LIST_TIP
+}
+
+/** Power Unit Type enum tip (default TRUCK-TRACTOR for tractor). */
+export function buildMoPowerUnitTypeTip(): string {
+  return MO_POWER_UNIT_TYPE_TIP
 }
 
 /** True when trailer_type is jeep/booster/dolly (not primary cargo deck). */
@@ -1509,6 +1569,8 @@ export function buildMoBoosterTip(prefill?: PrefillPackage | null, request?: any
 /**
  * Map equipment trailer_type to a MoDOT-style Unit Two Type label.
  * Specific deck types before generic RGN (e.g. "double drop" / lowboy before RGN).
+ * Known maps: DOUBLE DROP / SINGLE DROP / FLAT BED / STEP DECK TRLR, etc.
+ * Unmapped: raw trailer_type uppercased + "select closest on MoDOT list".
  */
 export function mapTrailerTypeToMoLabel(trailerType: unknown): string | null {
   const raw = normalizeTrailerTypeLabel(trailerType)
@@ -1519,15 +1581,16 @@ export function mapTrailerTypeToMoLabel(trailerType: unknown): string | null {
   if (n.includes('single drop')) return 'SINGLE DROP TRLR'
   if (n.includes('lowboy') || n.includes('low boy')) return 'LOWBOY TRLR'
   if (n.includes('step deck') || n.includes('stepdeck')) return 'STEP DECK TRLR'
-  if (n.includes('flatbed') || n.includes('flat bed')) return 'FLATBED TRLR'
+  // Live MoDOT list uses spaced "FLAT BED TRLR"
+  if (n.includes('flatbed') || n.includes('flat bed')) return 'FLAT BED TRLR'
   if (n === 'rgn' || n.includes('removable gooseneck') || /\brgn\b/.test(n)) {
     return 'RGN'
   }
   if (/\bjeep\b/.test(n)) return 'JEEP'
   if (/\bflip\b/.test(n)) return 'FLIP AXLE'
   if (/\bstinger\b/.test(n)) return 'STINGER'
-  // Plain uppercase tip from raw trailer_type
-  return raw.toUpperCase()
+  // Unmapped: emit raw + tip to pick closest MoDOT list item
+  return `${raw.toUpperCase()} — select closest on MoDOT list`
 }
 
 /**
@@ -1569,10 +1632,13 @@ export function getMoStepPrefillKeysWithValues(
       return buildMoBoosterTip(prefill)
     }
     if (key === 'tip_conveyance' && !hasPrefillValue(fields.tip_conveyance)) {
-      return 'Hauled (typical hauled load)'
+      return buildMoConveyanceTip()
     }
     if (key === 'tip_description_list' && !hasPrefillValue(fields.tip_description_list)) {
-      return 'use OTHER — then free-text Load Description'
+      return buildMoDescriptionListTip()
+    }
+    if (key === 'tip_power_unit_type' && !hasPrefillValue(fields.tip_power_unit_type)) {
+      return buildMoPowerUnitTypeTip()
     }
     if (key === 'tip_for_hire' && !hasPrefillValue(fields.tip_for_hire)) {
       return 'Yes (when for-hire carrier; override if private)'
@@ -1584,8 +1650,9 @@ export function getMoStepPrefillKeysWithValues(
 }
 
 /**
- * Numbered MoDOT Carrier Express filing steps (v2 live path).
- * Trip tab always shown for OD/corridor guidance; border keys only when multi-state.
+ * Numbered MoDOT Carrier Express filing steps (v3 live path).
+ * Application enums → Trip (Street Address / Analyze) → Review → Payment (pay-last).
+ * Trip guidance always shown; border keys only when multi-state.
  */
 export function buildMoFilingSteps(prefill?: PrefillPackage | null): MoFilingStep[] {
   const multiState = isMoMultiStatePrefill(prefill)
@@ -1594,6 +1661,36 @@ export function buildMoFilingSteps(prefill?: PrefillPackage | null): MoFilingSte
     : MO_TRIP_TAB_PREFILL_KEYS.filter(
         (k) => !(MO_BORDER_PREFILL_KEYS as readonly string[]).includes(k)
       )
+
+  const applicationGuidance = [
+    'Conveyance options: Under Own Power | Towed | Hauled | Haul/Tow — default Hauled for typical trailer load',
+    'Travel: Interstate commerce crossing state line | Intrastate travel within MO — multi-state corridor → Interstate; only MO → Intrastate',
+    'Vehicle Type: PowerUnit + 1 Unit | + 2 Units | + 3 Units — 1 trailer → + 1 Unit; 2 trailers → + 2 Units',
+    'Power Unit Type: TRUCK-TRACTOR | TRUCK | AUTOMOBILE — default TRUCK-TRACTOR for tractor',
+    'Unit Two Type: map trailer type when obvious (e.g. single drop → SINGLE DROP TRLR); else select closest on MoDOT list',
+    'Booster: No unless equipment indicates booster',
+    'Description list: OTHER — then Load Description free text',
+  ]
+
+  const tripGuidance = [
+    'Street Address origin/dest → Add',
+    multiState
+      ? 'Optional Keypoint/map for MO borders'
+      : 'Optional Keypoint/map if needed',
+    'Analyze route',
+  ]
+
+  const paymentGuidance = [
+    'Use profile contact name / email when present',
+    MO_FEE_DISPLAY_NOTE,
+    ...(multiState
+      ? [
+          'Save (do not Submit/pay yet) if other corridor states are still unvalidated',
+          MO_PAY_LAST_NOTE,
+        ]
+      : []),
+  ]
+
   const all: MoFilingStep[] = [
     {
       id: 'login',
@@ -1622,27 +1719,53 @@ export function buildMoFilingSteps(prefill?: PrefillPackage | null): MoFilingSte
     {
       id: 'application',
       stepNumber: 5,
-      title: 'Step 2 Application fields (use packet)',
+      title: 'Step 2 Application fields (packet + enum tips)',
       prefillKeys: [...MO_APPLICATION_PREFILL_KEYS],
+      guidance: applicationGuidance,
     },
     {
       id: 'trip_tab',
       stepNumber: 6,
       title: multiState
-        ? 'Trip tab — origin/dest/corridor/highways/borders for MoDOT map keypoints'
-        : 'Trip tab — origin/dest/corridor/highways for MoDOT map keypoints',
+        ? 'Trip — Street Address origin/dest → Add; Keypoint/map for borders; Analyze'
+        : 'Trip — Street Address origin/dest → Add; Analyze',
       prefillKeys: tripKeys,
       multiStateOnly: false, // trip guidance always shown; borders gated via prefillKeys
+      guidance: tripGuidance,
     },
     {
-      id: 'review_pay',
+      id: 'trip_post_analyze',
       stepNumber: 7,
-      title: 'Review → Payment on MoDOT',
+      title:
+        'After Analyze — Failures = 0; Restrictions; save Trip Description / From / To',
       prefillKeys: [],
+      guidance: [
+        'Confirm Failures = 0 before continuing',
+        'Open Restrictions and review',
+        'Save Trip Description, Trip From, and Trip To from TruckerOS origin/dest guidance',
+      ],
+    },
+    {
+      id: 'review',
+      stepNumber: 8,
+      title: 'Review — verify vs TruckerOS prefill',
+      prefillKeys: [],
+      guidance: [
+        'Compare MoDOT Review screen to Copy all / Application packet before Payment',
+      ],
+    },
+    {
+      id: 'payment',
+      stepNumber: 9,
+      title: multiState
+        ? 'Payment — contact/email; MoDOT fee; pay-last when multi-state'
+        : 'Payment — contact/email; MoDOT-displayed fee',
+      prefillKeys: [...MO_PAYMENT_PREFILL_KEYS],
+      guidance: paymentGuidance,
     },
     {
       id: 'paste_permit',
-      stepNumber: 8,
+      stepNumber: 10,
       title: 'Paste permit # back into Portal Assist when issued',
       prefillKeys: [],
     },
@@ -1690,10 +1813,13 @@ export function buildMoFilingStepClipboard(
       return buildMoBoosterTip(prefill)
     }
     if (key === 'tip_conveyance' && !hasPrefillValue(fields.tip_conveyance)) {
-      return 'Hauled (typical hauled load)'
+      return buildMoConveyanceTip()
     }
     if (key === 'tip_description_list' && !hasPrefillValue(fields.tip_description_list)) {
-      return 'use OTHER — then free-text Load Description'
+      return buildMoDescriptionListTip()
+    }
+    if (key === 'tip_power_unit_type' && !hasPrefillValue(fields.tip_power_unit_type)) {
+      return buildMoPowerUnitTypeTip()
     }
     if (key === 'tip_for_hire' && !hasPrefillValue(fields.tip_for_hire)) {
       return 'Yes (when for-hire carrier; override if private)'
@@ -2267,10 +2393,11 @@ export function generatePortalPrefill(
   }
   if (stateCode === 'MO') {
     generated.special_notes = 'Missouri River bridge analysis recommended'
-    // Application tips for MoDOT Step 2 (always present for MO packet)
-    generated.tip_conveyance = 'Hauled (typical hauled load)'
-    generated.tip_description_list = 'use OTHER — then free-text Load Description'
+    // Application tips for MoDOT Step 2 (always present for MO packet) — v3 live enums
+    generated.tip_conveyance = buildMoConveyanceTip()
+    generated.tip_description_list = buildMoDescriptionListTip()
     generated.tip_for_hire = 'Yes (when for-hire carrier; override if private)'
+    generated.tip_power_unit_type = buildMoPowerUnitTypeTip()
     // Temporary prefill shell for tip helpers (full package assembled below)
     const tipShell: PrefillPackage = {
       state: stateCode,

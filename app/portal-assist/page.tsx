@@ -25,6 +25,9 @@ import {
   buildMoFilingStepClipboard,
   getMoPortalFieldLabel,
   getMoStepPrefillKeysWithValues,
+  isMoMultiStatePrefill,
+  MO_PAY_LAST_NOTE,
+  MO_FEE_DISPLAY_NOTE,
   type RouteComparison,
   type PortalSubmissionRecord,
   type PrefillPackage,
@@ -1152,7 +1155,7 @@ export default function PortalAssistPage() {
                   )}
                 </div>
 
-                {/* MO-only: MoDOT Carrier Express playbook v2 — live Single Trip path (not RPA) */}
+                {/* MO-only: MoDOT Carrier Express playbook v3 — enums, Trip→Payment, pay-last (not RPA) */}
                 {selectedState === 'MO' && (
                   <div className="mb-4 space-y-4" data-testid="mo-playbook">
                     <div data-testid="mo-filing-steps">
@@ -1186,9 +1189,9 @@ export default function PortalAssistPage() {
                         </div>
                       </div>
                       <p className={`${fieldHintTinyClass} mb-2`}>
-                        Path mapped from live Carrier Express Single Trip screens. Copy per
-                        step or use Copy all, then paste into MoDOT — copy-assist only (no
-                        RPA). Guides on{' '}
+                        Path mapped from live Carrier Express Single Trip screens (v3 enums +
+                        Trip through Payment). Copy per step or use Copy all, then paste into
+                        MoDOT — copy-assist only (no RPA). Guides on{' '}
                         {config.infoUrl ? (
                           <a
                             href={config.infoUrl}
@@ -1203,6 +1206,18 @@ export default function PortalAssistPage() {
                         )}
                         .
                       </p>
+                      {isMoMultiStatePrefill(prefill) && (
+                        <div
+                          role="status"
+                          data-testid="mo-pay-last-banner"
+                          className="mb-2 rounded-lg border border-amber-600 sm:border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+                        >
+                          <div className="font-medium">{MO_PAY_LAST_NOTE}</div>
+                          <div className={`${fieldHintTinyClass} mt-0.5 text-amber-900`}>
+                            {MO_FEE_DISPLAY_NOTE}
+                          </div>
+                        </div>
+                      )}
                       <div
                         role="status"
                         aria-live="polite"
@@ -1251,6 +1266,16 @@ export default function PortalAssistPage() {
                                       Prefill: {keysHint}
                                     </div>
                                   )}
+                                  {step.guidance && step.guidance.length > 0 && (
+                                    <ul
+                                      className={`${fieldHintTinyClass} mt-1 list-disc pl-4 space-y-0.5`}
+                                      data-testid={`mo-step-guidance-${step.id}`}
+                                    >
+                                      {step.guidance.map((line) => (
+                                        <li key={line}>{line}</li>
+                                      ))}
+                                    </ul>
+                                  )}
                                 </div>
                                 {stepPacket ? (
                                   <button
@@ -1277,6 +1302,8 @@ export default function PortalAssistPage() {
                       </span>
                       <p className={`${fieldHintTinyClass} ${bodyTextClass}`}>
                         Same path as numbered steps above (mapped from live Single Trip screens).
+                        Application enums → Trip Analyze → Review → Payment
+                        {isMoMultiStatePrefill(prefill) ? ' (pay-last multi-state)' : ''}.
                         {tripType !== 'Single trip' ? (
                           <>
                             {' '}
