@@ -34,6 +34,7 @@ import {
   type PortalTripType,
   type MoFilingStep,
 } from '@/lib/portal-assistant'
+import { getPlaybook } from '@/lib/portal-playbooks'
 import { formatLoadDisplay } from '@/lib/parse-dimension'
 import { formatPortalEquipmentSnapshot } from '@/lib/portal-equipment-display'
 import {
@@ -797,6 +798,10 @@ export default function PortalAssistPage() {
   }
 
   const config = STATE_PORTAL_CONFIGS[selectedState] || null
+  /** PortalPlaybook when registered for selected state (MO today; NE/KS later). */
+  const playbook = getPlaybook(selectedState)
+  const payLastNote = playbook?.notes?.payLast || MO_PAY_LAST_NOTE
+  const feeDisplayNote = playbook?.notes?.feeDisplay || MO_FEE_DISPLAY_NOTE
   const isRealRequest = !!request && !request.id.startsWith('demo-')
   const loadDisplay = request
     ? formatLoadDisplay({
@@ -1155,8 +1160,9 @@ export default function PortalAssistPage() {
                   )}
                 </div>
 
-                {/* MO-only: MoDOT Carrier Express playbook v3 — enums, Trip→Payment, pay-last (not RPA) */}
-                {selectedState === 'MO' && (
+                {/* MO-only: MoDOT Carrier Express playbook v3 — enums, Trip→Payment, pay-last (not RPA).
+                    Steps/labels driven by PortalPlaybook data when getPlaybook(selectedState) is present. */}
+                {selectedState === 'MO' && playbook && (
                   <div className="mb-4 space-y-4" data-testid="mo-playbook">
                     <div data-testid="mo-filing-steps">
                       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
@@ -1164,9 +1170,9 @@ export default function PortalAssistPage() {
                           MODOT CARRIER EXPRESS STEPS
                         </span>
                         <div className="flex flex-wrap items-center gap-2">
-                          {config.portalUrl && (
+                          {(playbook.portalUrl || config.portalUrl) && (
                             <a
-                              href={config.portalUrl}
+                              href={playbook.portalUrl || config.portalUrl}
                               target="_blank"
                               rel="noopener noreferrer"
                               className={`${fieldHintTinyClass} underline hover:text-gray-700`}
@@ -1175,9 +1181,9 @@ export default function PortalAssistPage() {
                               Open Carrier Express
                             </a>
                           )}
-                          {config.infoUrl && (
+                          {(playbook.infoUrl || config.infoUrl) && (
                             <a
-                              href={config.infoUrl}
+                              href={playbook.infoUrl || config.infoUrl}
                               target="_blank"
                               rel="noopener noreferrer"
                               className={`${fieldHintTinyClass} underline hover:text-gray-700`}
@@ -1190,11 +1196,11 @@ export default function PortalAssistPage() {
                       </div>
                       <p className={`${fieldHintTinyClass} mb-2`}>
                         Path mapped from live Carrier Express Single Trip screens (v3 enums +
-                        Trip through Payment). Copy per step or use Copy all, then paste into
-                        MoDOT — copy-assist only (no RPA). Guides on{' '}
-                        {config.infoUrl ? (
+                        Trip through Payment; PortalPlaybook schema). Copy per step or use Copy
+                        all, then paste into MoDOT — copy-assist only (no RPA). Guides on{' '}
+                        {(playbook.infoUrl || config.infoUrl) ? (
                           <a
-                            href={config.infoUrl}
+                            href={playbook.infoUrl || config.infoUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="underline hover:text-gray-700"
@@ -1206,15 +1212,16 @@ export default function PortalAssistPage() {
                         )}
                         .
                       </p>
-                      {isMoMultiStatePrefill(prefill) && (
+                      {isMoMultiStatePrefill(prefill) &&
+                        playbook.flags?.payLastIfMultiState !== false && (
                         <div
                           role="status"
                           data-testid="mo-pay-last-banner"
                           className="mb-2 rounded-lg border border-amber-600 sm:border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950"
                         >
-                          <div className="font-medium">{MO_PAY_LAST_NOTE}</div>
+                          <div className="font-medium">{payLastNote}</div>
                           <div className={`${fieldHintTinyClass} mt-0.5 text-amber-900`}>
-                            {MO_FEE_DISPLAY_NOTE}
+                            {feeDisplayNote}
                           </div>
                         </div>
                       )}
@@ -1315,6 +1322,34 @@ export default function PortalAssistPage() {
                         ) : null}
                       </p>
                     </div>
+
+                    {/* Assisted field export — user-driven only; docs in CAPTURE.md */}
+                    <details
+                      className="rounded-xl border border-gray-400 sm:border-gray-300 bg-white p-3"
+                      data-testid="export-fields-help"
+                    >
+                      <summary
+                        className={`${fieldLabelClass} cursor-pointer select-none`}
+                      >
+                        Export fields (assisted capture)
+                      </summary>
+                      <div className={`${fieldHintTinyClass} mt-2 space-y-1.5 ${bodyTextClass}`}>
+                        <p>
+                          Inventory visible labels on a portal page <strong>you</strong> already
+                          opened — no auto-fill, no credentials, no crawl. Full bookmarklet and
+                          console snippet:{' '}
+                          <code className="text-[10px]">lib/portal-playbooks/CAPTURE.md</code>
+                        </p>
+                        <ol className="list-decimal pl-4 space-y-0.5">
+                          <li>Log into {playbook.portalName} yourself and open the form page.</li>
+                          <li>Run the CAPTURE.md bookmarklet or console snippet (user click only).</li>
+                          <li>
+                            Paste the JSON draft into a playbook file and set{' '}
+                            <code className="text-[10px]">mapsFrom</code> to TruckerOS prefill keys.
+                          </li>
+                        </ol>
+                      </div>
+                    </details>
                   </div>
                 )}
 

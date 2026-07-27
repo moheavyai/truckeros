@@ -30,6 +30,15 @@
 
 import { formatDimensionDisplay } from '@/lib/parse-dimension'
 import { classifyTrailerRole, normalizeTrailerTypeLabel } from '@/lib/trailer-types'
+import {
+  getPlaybook,
+  MO_PLAYBOOK,
+  MO_PLAYBOOK_FIELD_LABELS,
+  MO_PLAYBOOK_FIELD_ORDER,
+  resolveStepCopyKeys,
+  resolveStepTips,
+  resolveStepTitle,
+} from '@/lib/portal-playbooks'
 
 export type PortalType = 'online' | 'gotpermits' | 'phone' | 'efee'
 
@@ -1170,232 +1179,59 @@ export interface CompletenessChecklistContext {
 // ---------------------------------------------------------------------------
 // Missouri (MoDOT Carrier Express) Portal Assist playbook v3 — pure helpers
 // Application enums + Trip → Review → Payment + multi-state pay-last.
+// Static inventory lives in lib/portal-playbooks/mo.ts (PortalPlaybook schema).
 // Field order/labels locked from live Carrier Express Single Trip screens.
 // NOT browser RPA / auto-click into MoDOT.
 // ---------------------------------------------------------------------------
 
 /** Application-tip + copyable-value keys in MoDOT Single Trip packet order. */
-export const MO_PORTAL_FIELD_ORDER: readonly string[] = [
-  // Permit type + application tips (live enum defaults)
-  'trip_type',
-  'tip_conveyance',
-  'tip_description_list',
-  'tip_for_hire',
-  'tip_travel',
-  'tip_vehicle_type',
-  'tip_power_unit_type',
-  'tip_booster',
-  'tip_piece_dims',
-  // Load
-  'load_description',
-  'load_pieces',
-  'serial_number',
-  'piece_width',
-  'piece_length',
-  'piece_height',
-  // Power unit
-  'tractor_make',
-  'tractor_plate',
-  'tractor_plate_state',
-  'tractor_vin',
-  'tractor_year',
-  'power_unit_type',
-  // Unit two (primary cargo trailer)
-  'trailer_make',
-  'trailer_plate',
-  'trailer_plate_state',
-  'trailer_vin',
-  'trailer_year',
-  'unit_two_type',
-  // Unit three (second identity when present — often jeep/booster)
-  'trailer_2_make',
-  'trailer_2_plate',
-  'trailer_2_plate_state',
-  'trailer_2_vin',
-  'trailer_2_year',
-  // Overall dims / weight / overhang / axles
-  'width',
-  'length',
-  'height',
-  'trailer_length',
-  'weight',
-  'front_overhang',
-  'rear_overhang',
-  'axles',
-  // Carrier / profile contact (Payment prefers carrier contact, not driver)
-  'carrier_usdot',
-  'carrier_company',
-  'carrier_mc',
-  'contact_name',
-  'carrier_email',
-  'driver_name',
-  // Trip tab guidance
-  'origin',
-  'destination',
-  'route',
-  'highways',
-  'border_entry',
-  'border_exit',
-] as const
+export const MO_PORTAL_FIELD_ORDER: readonly string[] = MO_PLAYBOOK_FIELD_ORDER
 
 /** Prefill keys copied for MO Step 2 Application fields. */
-export const MO_APPLICATION_PREFILL_KEYS: readonly string[] = [
-  'trip_type',
-  'tip_conveyance',
-  'tip_description_list',
-  'tip_for_hire',
-  'tip_travel',
-  'tip_vehicle_type',
-  'tip_power_unit_type',
-  'tip_booster',
-  'tip_piece_dims',
-  'load_description',
-  'load_pieces',
-  'serial_number',
-  'piece_width',
-  'piece_length',
-  'piece_height',
-  'tractor_make',
-  'tractor_plate',
-  'tractor_plate_state',
-  'tractor_vin',
-  'tractor_year',
-  'power_unit_type',
-  'trailer_make',
-  'trailer_plate',
-  'trailer_plate_state',
-  'trailer_vin',
-  'trailer_year',
-  'unit_two_type',
-  'trailer_2_make',
-  'trailer_2_plate',
-  'trailer_2_plate_state',
-  'trailer_2_vin',
-  'trailer_2_year',
-  'width',
-  'length',
-  'height',
-  'trailer_length',
-  'weight',
-  'front_overhang',
-  'rear_overhang',
-  'axles',
-  'carrier_usdot',
-  'carrier_company',
-  'carrier_mc',
-] as const
+export const MO_APPLICATION_PREFILL_KEYS: readonly string[] =
+  MO_PLAYBOOK.applicationKeys ?? []
 
 /** Prefill keys copied for MO Trip tab guidance (borders multi-state only). */
-export const MO_TRIP_TAB_PREFILL_KEYS: readonly string[] = [
-  'origin',
-  'destination',
-  'route',
-  'highways',
-  'border_entry',
-  'border_exit',
-] as const
+export const MO_TRIP_TAB_PREFILL_KEYS: readonly string[] = MO_PLAYBOOK.tripKeys ?? []
 
 /** Prefill keys for Payment step (carrier contact first; driver only if no carrier contact). */
-export const MO_PAYMENT_PREFILL_KEYS: readonly string[] = [
-  'contact_name',
-  'carrier_email',
-  'carrier_usdot',
-  'carrier_company',
-] as const
+export const MO_PAYMENT_PREFILL_KEYS: readonly string[] = MO_PLAYBOOK.paymentKeys ?? []
 
 /** Border keys omitted from trip-tab prefill when single-state. */
-export const MO_BORDER_PREFILL_KEYS: readonly string[] = [
-  'border_entry',
-  'border_exit',
-] as const
+export const MO_BORDER_PREFILL_KEYS: readonly string[] = MO_PLAYBOOK.borderKeys ?? []
 
 /**
  * Multi-state pay-last banner: validate other corridor states before MoDOT Submit/pay.
  */
 export const MO_PAY_LAST_NOTE =
-  'Validate other corridor states before Submit/pay when multi-state' as const
+  (MO_PLAYBOOK.notes?.payLast as string) ||
+  'Validate other corridor states before Submit/pay when multi-state'
 
 /**
  * Fee honesty: amounts shown in UI (e.g. ~$15 single trip) are MoDOT-displayed — not TruckerOS truth.
  */
 export const MO_FEE_DISPLAY_NOTE =
-  'Fee is MoDOT-displayed on Payment (single trip may show ~$15 — confirm in MoDOT; TruckerOS is not sole fee truth)' as const
+  (MO_PLAYBOOK.notes?.feeDisplay as string) ||
+  'Fee is MoDOT-displayed on Payment (single trip may show ~$15 — confirm in MoDOT; TruckerOS is not sole fee truth)'
 
 /** Conveyance enum tip (live Single Trip options + default). */
 export const MO_CONVEYANCE_TIP =
-  'Hauled (default for typical trailer load) — options: Under Own Power | Towed | Hauled | Haul/Tow' as const
+  (MO_PLAYBOOK.notes?.conveyance as string) ||
+  'Hauled (default for typical trailer load) — options: Under Own Power | Towed | Hauled | Haul/Tow'
 
 /** Description list tip: OTHER then free-text Load Description. */
 export const MO_DESCRIPTION_LIST_TIP =
-  'OTHER — then free-text Load Description' as const
+  (MO_PLAYBOOK.notes?.descriptionList as string) ||
+  'OTHER — then free-text Load Description'
 
 /** Power Unit Type enum tip (default TRUCK-TRACTOR for tractor). */
 export const MO_POWER_UNIT_TYPE_TIP =
-  'TRUCK-TRACTOR (default for tractor) — options: TRUCK-TRACTOR | TRUCK | AUTOMOBILE' as const
+  (MO_PLAYBOOK.notes?.powerUnitType as string) ||
+  'TRUCK-TRACTOR (default for tractor) — options: TRUCK-TRACTOR | TRUCK | AUTOMOBILE'
 
 /** MoDOT-oriented portal labels for MO packet / resolvePortalFieldLabel. */
 export const MO_PORTAL_FIELD_LABELS: Record<string, string> = {
-  tip_conveyance: 'Conveyance',
-  tip_description_list: 'Description list',
-  tip_for_hire: 'For Hire',
-  tip_travel: 'Travel',
-  tip_vehicle_type: 'Vehicle Type',
-  tip_power_unit_type: 'Power Unit Type tip',
-  tip_booster: 'Booster unit',
-  tip_piece_dims: 'Piece dims note',
-  load_description: 'Load Description',
-  load_pieces: 'Load Pieces / How Many',
-  serial_number: 'Serial Number',
-  piece_width: 'Piece Width',
-  piece_length: 'Piece Length',
-  piece_height: 'Piece Height',
-  tractor_make: 'Power Unit Make',
-  tractor_plate: 'Power Unit License Number',
-  tractor_plate_state: 'Power Unit License State',
-  tractor_vin: 'Power Unit VIN',
-  tractor_year: 'Power Unit Model Year',
-  tractor_model: 'Power Unit Model',
-  tractor_ymm: 'Power Unit year/make/model',
-  power_unit_type: 'Power Unit Type',
-  trailer_make: 'Unit Two Make',
-  trailer_plate: 'Unit Two License Number',
-  trailer_plate_state: 'Unit Two License State',
-  trailer_vin: 'Unit Two VIN',
-  trailer_year: 'Unit Two Model Year',
-  trailer_model: 'Unit Two Model',
-  trailer_ymm: 'Unit Two year/make/model',
-  unit_two_type: 'Unit Two Type',
-  trailer_2_year: 'Unit Three Model Year',
-  trailer_2_make: 'Unit Three Make',
-  trailer_2_model: 'Unit Three Model',
-  trailer_2_ymm: 'Unit Three year/make/model',
-  trailer_2_vin: 'Unit Three VIN',
-  trailer_2_plate: 'Unit Three License Number',
-  trailer_2_plate_state: 'Unit Three License State',
-  width: 'Overall Width',
-  length: 'Overall Length',
-  height: 'Overall Height',
-  trailer_length: 'Trailer/Load Length',
-  weight: 'GVW',
-  front_overhang: 'Front Overhang',
-  rear_overhang: 'Rear Overhang',
-  axles: 'Number of Axles',
-  origin: 'Origin',
-  destination: 'Destination',
-  route: 'Route corridor',
-  highways: 'Highways',
-  border_entry: 'MO entry border',
-  border_exit: 'MO exit border',
-  entry_point: 'MO entry border',
-  exit_point: 'MO exit border',
-  vehicle_id: 'Power unit ID / VIN',
-  trip_type: 'Permit type',
-  carrier_usdot: 'USDOT',
-  carrier_mc: 'MC number',
-  carrier_company: 'Carrier name',
-  contact_name: 'Carrier contact name',
-  carrier_email: 'Carrier email',
-  driver_name: 'Driver name',
+  ...MO_PLAYBOOK_FIELD_LABELS,
 }
 
 /**
@@ -1403,18 +1239,7 @@ export const MO_PORTAL_FIELD_LABELS: Record<string, string> = {
  * Prefill often has city/state only; MoDOT Trip map may still require Street Address entry.
  * Copy-assist only — no RPA / auto-click.
  */
-export const MO_PORTAL_WALKTHROUGH: readonly string[] = [
-  'Login Carrier Express (mcs.modot.mo.gov)',
-  'Programs → Oversize/Overweight',
-  'New Application → Single Trip Permits → Single Trip',
-  'Step 1 Travel Dates (From/To; 7 moving days typical)',
-  'Step 2 Application fields (packet + enum tips)',
-  'Trip — Street Address origin/dest → Add (TruckerOS may only have city/state; enter full street on MoDOT if required); optional Keypoint/map for borders; Analyze',
-  'After Analyze — Failures = 0; Restrictions; save Trip Description / From / To',
-  'Review — verify vs TruckerOS prefill',
-  'Payment — carrier contact/email; fee is MoDOT-displayed; Save if other states unvalidated; multi-state: validate other corridor states before Submit/pay',
-  'Paste permit # back into Portal Assist when issued',
-] as const
+export const MO_PORTAL_WALKTHROUGH: readonly string[] = MO_PLAYBOOK.walkthrough ?? []
 
 export function isMissouriPortal(
   stateCode?: string | null,
@@ -1737,125 +1562,25 @@ export function getMoStepPrefillKeysWithValues(
 
 /**
  * Numbered MoDOT Carrier Express filing steps (v3 live path).
+ * Driven by PortalPlaybook (lib/portal-playbooks/mo.ts) when present.
  * Application enums → Trip (Street Address / Analyze) → Review → Payment (pay-last).
  * Trip guidance always shown; border keys only when multi-state.
  */
 export function buildMoFilingSteps(prefill?: PrefillPackage | null): MoFilingStep[] {
   const multiState = isMoMultiStatePrefill(prefill)
-  const tripKeys = multiState
-    ? [...MO_TRIP_TAB_PREFILL_KEYS]
-    : MO_TRIP_TAB_PREFILL_KEYS.filter(
-        (k) => !(MO_BORDER_PREFILL_KEYS as readonly string[]).includes(k)
-      )
+  const playbook = getPlaybook('MO') || MO_PLAYBOOK
 
-  const applicationGuidance = [
-    'Conveyance options: Under Own Power | Towed | Hauled | Haul/Tow — default Hauled for typical trailer load',
-    'Travel: Interstate commerce crossing state line | Intrastate travel within MO — multi-state corridor → Interstate; only MO → Intrastate',
-    'Vehicle Type: PowerUnit + 1 Unit | + 2 Units | + 3 Units — 1 trailer → + 1 Unit; 2 trailers → + 2 Units',
-    'Power Unit Type: TRUCK-TRACTOR | TRUCK | AUTOMOBILE — default TRUCK-TRACTOR for tractor',
-    'Unit Two Type: map trailer type when obvious (e.g. single drop → SINGLE DROP TRLR); else select closest on MoDOT list',
-    'Booster: No unless equipment indicates booster',
-    'Description list: OTHER — then Load Description free text',
-  ]
-
-  const tripGuidance = [
-    'MoDOT Trip map: Street Address origin/dest → Add (TruckerOS prefill is often city/state only — enter full street on MoDOT if required)',
-    multiState
-      ? 'Optional Keypoint/map for MO borders'
-      : 'Optional Keypoint/map if needed',
-    'Analyze route',
-  ]
-
-  const paymentGuidance = [
-    'Use carrier contact name / company and carrier email when present (not driver as primary)',
-    MO_FEE_DISPLAY_NOTE,
-    ...(multiState
-      ? [
-          'Save (do not Submit/pay yet) if other corridor states are still unvalidated',
-          MO_PAY_LAST_NOTE,
-        ]
-      : []),
-  ]
-
-  const all: MoFilingStep[] = [
-    {
-      id: 'login',
-      stepNumber: 1,
-      title: 'Login Carrier Express (mcs.modot.mo.gov)',
-      prefillKeys: [],
-    },
-    {
-      id: 'programs',
-      stepNumber: 2,
-      title: 'Programs → Oversize/Overweight',
-      prefillKeys: [],
-    },
-    {
-      id: 'new_app',
-      stepNumber: 3,
-      title: 'New Application → Single Trip Permits → Single Trip',
-      prefillKeys: ['trip_type'],
-    },
-    {
-      id: 'travel_dates',
-      stepNumber: 4,
-      title: 'Step 1 Travel Dates (From/To; 7 moving days typical)',
-      prefillKeys: [],
-    },
-    {
-      id: 'application',
-      stepNumber: 5,
-      title: 'Step 2 Application fields (packet + enum tips)',
-      prefillKeys: [...MO_APPLICATION_PREFILL_KEYS],
-      guidance: applicationGuidance,
-    },
-    {
-      id: 'trip_tab',
-      stepNumber: 6,
-      title: multiState
-        ? 'Trip — Street Address origin/dest → Add; Keypoint/map for borders; Analyze'
-        : 'Trip — Street Address origin/dest → Add; Analyze',
-      prefillKeys: tripKeys,
-      guidance: tripGuidance,
-    },
-    {
-      id: 'trip_post_analyze',
-      stepNumber: 7,
-      title:
-        'After Analyze — Failures = 0; Restrictions; save Trip Description / From / To',
-      prefillKeys: [],
-      guidance: [
-        'Confirm Failures = 0 before continuing',
-        'Open Restrictions and review',
-        'Save Trip Description, Trip From, and Trip To from TruckerOS origin/dest guidance',
-      ],
-    },
-    {
-      id: 'review',
-      stepNumber: 8,
-      title: 'Review — verify vs TruckerOS prefill',
-      prefillKeys: [],
-      guidance: [
-        'Compare MoDOT Review screen to Copy all / Application packet before Payment',
-      ],
-    },
-    {
-      id: 'payment',
-      stepNumber: 9,
-      title: multiState
-        ? 'Payment — carrier contact/email; MoDOT fee; pay-last when multi-state'
-        : 'Payment — carrier contact/email; MoDOT-displayed fee',
-      prefillKeys: [...MO_PAYMENT_PREFILL_KEYS],
-      guidance: paymentGuidance,
-    },
-    {
-      id: 'paste_permit',
-      stepNumber: 10,
-      title: 'Paste permit # back into Portal Assist when issued',
-      prefillKeys: [],
-    },
-  ]
-  return all.map((s, i) => ({ ...s, stepNumber: i + 1 }))
+  return playbook.steps.map((step, i) => {
+    const prefillKeys = resolveStepCopyKeys(step, multiState)
+    const guidance = resolveStepTips(step, multiState)
+    return {
+      id: step.id,
+      stepNumber: i + 1,
+      title: resolveStepTitle(step, multiState),
+      prefillKeys,
+      ...(guidance.length > 0 ? { guidance } : {}),
+    }
+  })
 }
 
 /**
