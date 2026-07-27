@@ -1147,12 +1147,12 @@ export default function PortalAssistPage() {
                   )}
                   {selectedState === 'MO' && (
                     <p className={`${fieldHintTinyClass} mt-1`}>
-                      Used as Permit type for MoDOT step 2 and Copy all.
+                      Guidance for Single Trip selection and application tips in Copy all.
                     </p>
                   )}
                 </div>
 
-                {/* MO-only: MoDOT Carrier Express playbook — numbered steps + walkthrough (not RPA) */}
+                {/* MO-only: MoDOT Carrier Express playbook v2 — live Single Trip path (not RPA) */}
                 {selectedState === 'MO' && (
                   <div className="mb-4 space-y-4" data-testid="mo-playbook">
                     <div data-testid="mo-filing-steps">
@@ -1186,8 +1186,9 @@ export default function PortalAssistPage() {
                         </div>
                       </div>
                       <p className={`${fieldHintTinyClass} mb-2`}>
-                        Copy per step, then paste into MoDOT. Official Using MCE / OSOW guides
-                        live on{' '}
+                        Path mapped from live Carrier Express Single Trip screens. Copy per
+                        step or use Copy all, then paste into MoDOT — copy-assist only (no
+                        RPA). Guides on{' '}
                         {config.infoUrl ? (
                           <a
                             href={config.infoUrl}
@@ -1199,8 +1200,8 @@ export default function PortalAssistPage() {
                           </a>
                         ) : (
                           'modot.org'
-                        )}{' '}
-                        — we do not invent click paths.
+                        )}
+                        .
                       </p>
                       <div
                         role="status"

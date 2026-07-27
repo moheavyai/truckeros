@@ -557,13 +557,13 @@ describe('Portal Assist — Missouri Carrier Express playbook', () => {
     expect(source).toContain('resolvePortalFieldLabel(idKey, config, selectedState)')
   })
 
-  it('places trip type control before MO playbook and references permit type', () => {
+  it('places trip type control before MO playbook and references Single Trip / Copy all', () => {
     const source = readSource(pagePath)
     const tripIdx = source.indexOf('data-testid="trip-type-control"')
     const moIdx = source.indexOf('data-testid="mo-playbook"')
     expect(tripIdx).toBeGreaterThan(-1)
     expect(moIdx).toBeGreaterThan(tripIdx)
-    expect(source).toContain('Used as Permit type for MoDOT step 2 and Copy all')
+    expect(source).toContain('Guidance for Single Trip selection and application tips in Copy all')
   })
 
   it('renders static MO walkthrough copy', () => {
@@ -577,6 +577,7 @@ describe('Portal Assist — Missouri Carrier Express playbook', () => {
     const source = readSource(pagePath)
     expect(source.toLowerCase()).not.toContain('auto-click')
     expect(source).not.toMatch(/automate[sd]?\s+(filing|submission|modot)/i)
+    expect(source).toMatch(/copy-assist only \(no\s*\n?\s*RPA\)|copy-assist only \(no RPA\)/i)
     // Playbook block must not auto-open portal on render
     const playbookStart = source.indexOf('data-testid="mo-playbook"')
     expect(playbookStart).toBeGreaterThan(-1)
