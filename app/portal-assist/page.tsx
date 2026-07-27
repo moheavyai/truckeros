@@ -23,8 +23,8 @@ import {
   PORTAL_TRIP_TYPES,
   buildMoFilingSteps,
   buildMoFilingStepClipboard,
-  MO_PORTAL_WALKTHROUGH,
   getMoPortalFieldLabel,
+  getMoStepPrefillKeysWithValues,
   type RouteComparison,
   type PortalSubmissionRecord,
   type PrefillPackage,
@@ -1219,9 +1219,15 @@ export default function PortalAssistPage() {
                       </div>
                       <ol className="space-y-2 text-sm list-none pl-0">
                         {buildMoFilingSteps(prefill).map((step) => {
+                          // Only list prefill keys that currently have values (no empty border noise)
+                          const keysWithValues = getMoStepPrefillKeysWithValues(
+                            prefill,
+                            step,
+                            { tripType }
+                          )
                           const keysHint =
-                            step.prefillKeys.length > 0
-                              ? step.prefillKeys
+                            keysWithValues.length > 0
+                              ? keysWithValues
                                   .map((k) => getMoPortalFieldLabel(k))
                                   .join(', ')
                               : null
@@ -1264,15 +1270,21 @@ export default function PortalAssistPage() {
                       </ol>
                     </div>
 
+                    {/* Path overview = same as numbered steps (no duplicate full list) */}
                     <div data-testid="mo-walkthrough">
                       <span className={`${fieldLabelClass} block mb-2`}>
-                        POST-LOGIN WALKTHROUGH
+                        CARRIER EXPRESS SINGLE TRIP PATH
                       </span>
-                      <ol className={`list-decimal pl-5 space-y-1 text-sm ${bodyTextClass}`}>
-                        {MO_PORTAL_WALKTHROUGH.map((line, i) => (
-                          <li key={i}>{line}</li>
-                        ))}
-                      </ol>
+                      <p className={`${fieldHintTinyClass} ${bodyTextClass}`}>
+                        Same path as numbered steps above (mapped from live Single Trip screens).
+                        {tripType !== 'Single trip' ? (
+                          <>
+                            {' '}
+                            Playbook is Single Trip–focused; selected trip type is{' '}
+                            <strong>{tripType}</strong> — adjust MoDOT menus if needed.
+                          </>
+                        ) : null}
+                      </p>
                     </div>
                   </div>
                 )}
