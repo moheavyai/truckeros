@@ -16,6 +16,9 @@ export type RouteMapStatus = 'idle' | 'calculating' | 'ready' | 'error'
 
 export type RouteMapChipTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
 
+/** Named [lat, lon] tuple — convert to GeoJSON [lon, lat] only at MapLibre boundary. */
+export type LatLon = [lat: number, lon: number]
+
 export interface RouteMapStop {
   id: string
   name: string
@@ -29,8 +32,8 @@ export interface RouteMapStop {
 export interface RouteMapLeg {
   fromId?: string
   toId?: string
-  /** Full geometry as [lat, lon][] when available from engine legs later. */
-  shape?: [number, number][]
+  /** Full geometry as LatLon[] when available from engine legs later. */
+  shape?: LatLon[]
 }
 
 export interface RouteMapChip {
@@ -40,6 +43,8 @@ export interface RouteMapChip {
 
 /** Map v2 hook: click/drag waypoints not yet rendered in v1. */
 export interface PendingWaypoint {
+  /** Stable id for future drag-edit (Map v2). */
+  id?: string
   lat: number
   lon: number
   name?: string
@@ -47,8 +52,8 @@ export interface PendingWaypoint {
 
 export interface RouteMapViewModel {
   stops: RouteMapStop[]
-  /** Sequential [lat, lon] for a simple route line (stop order in v1). */
-  linePositions: [number, number][]
+  /** Sequential LatLon for a simple route line (stop order in v1). */
+  linePositions: LatLon[]
   chips: RouteMapChip[]
   status: RouteMapStatus
   message?: string

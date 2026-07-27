@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRouteMapModel, buildLinePositions } from './buildRouteMapModel'
+import { buildRouteMapModel, buildLinePositions, roleForOriginalIndex } from './buildRouteMapModel'
 import type { RouteMapStop } from './types'
 
 describe('buildRouteMapModel', () => {
@@ -234,6 +234,128 @@ describe('buildRouteMapModel', () => {
     expect(model.status).toBe('error')
     expect(model.message).toMatch(/failed/i)
     expect(model.chips).toEqual([])
+  })
+
+  it('single-element optimize list prefers destination role', () => {
+    expect(roleForOriginalIndex({}, 0, 1)).toBe('destination')
+    const model = buildRouteMapModel({
+      status: 'ready',
+      option: { stops: [{ name: 'Solo', lat: 40, lon: -98 }] },
+    })
+    expect(model.stops).toHaveLength(1)
+    expect(model.stops[0].role).toBe('destination')
+  })
+
+  it('honors is_via_stop flag as via', () => {
+    const model = buildRouteMapModel({
+      status: 'ready',
+      option: {
+        stops: [
+          { name: 'O', lat: 40, lon: -98 },
+          { name: 'V', lat: 39, lon: -95, is_via_stop: true },
+          { name: 'D', lat: 30, lon: -88 },
+        ],
+      },
+    })
+    expect(model.stops[1].role).toBe('via')
+  })
+
+  it('parses string lat/lon from optimize stops', () => {
+    const model = buildRouteMapModel({
+      status: 'ready',
+      option: {
+        stops: [
+          { name: 'O', lat: '40.9', lon: '-98.3' },
+          { name: 'D', lat: '30.7', lon: '-88.0' },
+        ],
+      },
+    })
+    expect(model.stops).toHaveLength(2)
+    expect(model.stops[0].lat).toBeCloseTo(40.9)
+    expect(model.stops[1].lon).toBeCloseTo(-88.0)
+  })
+
+  it('form: destination distinct from last drop adds separate dest marker', () => {
+    const model = buildRouteMapModel({
+      status: 'idle',
+      formStops: {
+        origin: { name: 'O', lat: 40, lon: -98 },
+        drops: [{ name: 'Mid', lat: 35, lon: -90 }],
+        destination: { name: 'End', lat: 30, lon: -88 },
+      },
+    })
+    expect(model.stops).toHaveLength(3)
+    expect(model.stops[1].role).toBe('drop')
+    expect(model.stops[2].role).toBe('destination')
+    expect(model.stops[2].name).toContain('End')
+  })
+
+  it('form: multi-drop without dest lat promotes last drop to destination', () => {
+    const model = buildRouteMapModel({
+      status: 'idle',
+      formStops: {
+        origin: { name: 'O', lat: 40, lon: -98 },
+        drops: [
+          { name: 'A', lat: 36, lon: -94 },
+          { name: 'B', lat: 32, lon: -90 },
+        ],
+      },
+    })
+    expect(model.stops).toHaveLength(3)
+    expect(model.stops[2].role).toBe('destination')
+  })
+
+  it('calculating prefers formStops over option stops when both present', () => {
+    const model = buildRouteMapModel({
+      status: 'calculating',
+      message: 'Calculating…',
+      option: {
+        stops: sampleStops,
+        distanceMiles: 999,
+      },
+      formStops: {
+        origin: { name: 'FormOrigin', lat: 41, lon: -96 },
+        destination: { name: 'FormDest', lat: 48, lon: -101 },
+      },
+    })
+    expect(model.stops[0].name).toBe('FormOrigin')
+    expect(model.stops).toHaveLength(2)
+    expect(model.chips).toEqual([])
+  })
+
+  it('omits chips for non-positive distance/duration and sets tones', () => {
+    const model = buildRouteMapModel({
+      status: 'ready',
+      option: {
+        stops: sampleStops,
+        routeCorridor: ['NE', 'AL'],
+        distanceMiles: 0,
+        durationHours: -1,
+        avoidedStates: ['IL'],
+        specialInstructionsEnforced: true,
+      },
+    })
+    const labels = model.chips.map((c) => c.label)
+    expect(labels.every((l) => !l.includes(' mi'))).toBe(true)
+    expect(labels.every((l) => !l.includes('hrs'))).toBe(true)
+    const corridor = model.chips.find((c) => c.label.includes('NE'))
+    expect(corridor?.tone).toBe('info')
+    const prefs = model.chips.find((c) => c.label === 'Prefs enforced')
+    expect(prefs?.tone).toBe('success')
+    const avoids = model.chips.find((c) => c.label.includes('Avoids'))
+    expect(avoids?.tone).toBe('success')
+  })
+
+  it('passes pendingWaypoints with optional id', () => {
+    const model = buildRouteMapModel({
+      status: 'idle',
+      pendingWaypoints: [{ id: 'wp-1', lat: 39, lon: -94, name: 'KC' }],
+      formStops: {
+        origin: { lat: 40, lon: -98, name: 'O' },
+        destination: { lat: 30, lon: -88, name: 'D' },
+      },
+    })
+    expect(model.pendingWaypoints?.[0].id).toBe('wp-1')
   })
 })
 

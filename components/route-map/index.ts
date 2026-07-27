@@ -2,8 +2,9 @@
  * Public exports for Route Map v1 foundation.
  */
 
-export { default as RouteMapCard } from './RouteMapCard'
-export { buildRouteMapModel, buildLinePositions } from './buildRouteMapModel'
+export { default as RouteMapCard, ROUTE_MAP_CARD_EMBED_CLASS, ROUTE_MAP_CARD_DEFAULT_CLASS } from './RouteMapCard'
+export { buildRouteMapModel, buildLinePositions, roleForOriginalIndex } from './buildRouteMapModel'
+export { toRouteMapBuildInput } from './toRouteMapBuildInput'
 export {
   ROUTE_MAP_ROLE_HEX,
   ROUTE_MAP_ROLE_SWATCH,
@@ -23,4 +24,10 @@ export type {
   OptimizeRouteOptionLike,
   FormRouteStopsLike,
   BuildRouteMapModelInput,
+  LatLon,
 } from './types'
+export type {
+  ToRouteMapBuildInputArgs,
+  PermitRouteProgress,
+  PermitFormSyncedLike,
+} from './toRouteMapBuildInput'

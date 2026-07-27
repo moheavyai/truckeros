@@ -2,12 +2,13 @@
  * Pure mapper: OR-Tools / agent option (+ optional form coords) → RouteMapViewModel.
  * No DOM / MapLibre dependency — unit-test friendly.
  *
- * Line geometry (v1): sequential stop coordinates.
+ * Line geometry (v1): sequential stop coordinates as LatLon [lat, lon].
  * Extension: if legs later expose shape/geometry polylines, prefer those here.
  */
 
 import type {
   BuildRouteMapModelInput,
+  LatLon,
   OptimizeRouteOptionLike,
   OptimizeRouteStopLike,
   RouteMapChip,
@@ -30,12 +31,14 @@ function stopName(raw: OptimizeRouteStopLike | { name?: string | null }, fallbac
 /**
  * Role from original list index/flags (before coord filter).
  * Prevents mislabeling origin/dest when an intermediate stop lacks coords.
+ * Single-element list → destination (last-index semantics).
  */
-function roleForOriginalIndex(
+export function roleForOriginalIndex(
   stop: OptimizeRouteStopLike,
   index: number,
   originalTotal: number
 ): RouteMapStopRole {
+  if (originalTotal === 1) return 'destination'
   if (index === 0) return 'origin'
   if (originalTotal > 0 && index === originalTotal - 1) return 'destination'
   if (stop.is_via || stop.is_via_stop) return 'via'
@@ -143,8 +146,8 @@ function mapFormStops(form: NonNullable<BuildRouteMapModelInput['formStops']>): 
 export function buildLinePositions(
   stops: RouteMapStop[],
   option?: OptimizeRouteOptionLike | null
-): [number, number][] {
-  const fromLegs: [number, number][] = []
+): LatLon[] {
+  const fromLegs: LatLon[] = []
   const legs = option?.legs
   if (Array.isArray(legs) && legs.length > 0) {
     for (const leg of legs) {
@@ -165,11 +168,11 @@ export function buildLinePositions(
     }
   }
   if (fromLegs.length >= 2) return fromLegs
-  return stops.map((s) => [s.lat, s.lon] as [number, number])
+  return stops.map((s) => [s.lat, s.lon] as LatLon)
 }
 
-/** Best-effort parse of GeoJSON LineString / coordinate arrays → [lat, lon][]. */
-function extractLatLonPairs(raw: unknown): [number, number][] {
+/** Best-effort parse of GeoJSON LineString / coordinate arrays → LatLon[]. */
+function extractLatLonPairs(raw: unknown): LatLon[] {
   if (!raw) return []
   // GeoJSON geometry object: always [lon, lat] per RFC 7946
   if (typeof raw === 'object' && raw !== null && 'coordinates' in (raw as object)) {
@@ -183,18 +186,17 @@ function extractLatLonPairs(raw: unknown): [number, number][] {
   return []
 }
 
-/** Explicit GeoJSON order [lon, lat] → [lat, lon]. */
-function coordsAsGeoJsonLonLat(coords: unknown): [number, number][] {
+/** Explicit GeoJSON order [lon, lat] → LatLon [lat, lon]. */
+function coordsAsGeoJsonLonLat(coords: unknown): LatLon[] {
   if (!Array.isArray(coords) || coords.length === 0) return []
-  // Nested MultiLineString / multi-ring
   if (Array.isArray(coords[0]) && Array.isArray((coords[0] as unknown[])[0])) {
-    const out: [number, number][] = []
+    const out: LatLon[] = []
     for (const part of coords as unknown[]) {
       out.push(...coordsAsGeoJsonLonLat(part))
     }
     return out
   }
-  const out: [number, number][] = []
+  const out: LatLon[] = []
   for (const pair of coords as unknown[]) {
     if (!Array.isArray(pair) || pair.length < 2) continue
     const lon = toFiniteNumber(pair[0])
@@ -209,16 +211,16 @@ function coordsAsGeoJsonLonLat(coords: unknown): [number, number][] {
  * Heuristic for bare coordinate arrays only (not GeoJSON objects).
  * Prefer [lon, lat] when first component looks like longitude.
  */
-function coordsToLatLonHeuristic(coords: unknown): [number, number][] {
+function coordsToLatLonHeuristic(coords: unknown): LatLon[] {
   if (!Array.isArray(coords) || coords.length === 0) return []
   if (Array.isArray(coords[0]) && Array.isArray((coords[0] as unknown[])[0])) {
-    const out: [number, number][] = []
+    const out: LatLon[] = []
     for (const part of coords as unknown[]) {
       out.push(...coordsToLatLonHeuristic(part))
     }
     return out
   }
-  const out: [number, number][] = []
+  const out: LatLon[] = []
   for (const pair of coords as unknown[]) {
     if (!Array.isArray(pair) || pair.length < 2) continue
     const a = toFiniteNumber(pair[0])
@@ -322,10 +324,10 @@ export function buildRouteMapModel(input: BuildRouteMapModelInput): RouteMapView
     stops = optionStops
   }
 
-  const linePositions =
+  const linePositions: LatLon[] =
     status === 'ready' || stops.length >= 2
       ? buildLinePositions(stops, status === 'ready' ? option : null)
-      : stops.map((s) => [s.lat, s.lon] as [number, number])
+      : stops.map((s) => [s.lat, s.lon] as LatLon)
 
   const resolvedChips = resolveChips(status, option)
 
@@ -333,9 +335,6 @@ export function buildRouteMapModel(input: BuildRouteMapModelInput): RouteMapView
   if (!resolvedMessage) {
     if (status === 'idle' && stops.length === 0) {
       resolvedMessage = 'Enter origin and destination to preview the route map'
-    } else if (status === 'idle' && stops.length > 0) {
-      // Footer suppressed in card when stops present; keep brief for SR if needed
-      resolvedMessage = undefined
     } else if (status === 'calculating') {
       resolvedMessage = 'Calculating best route…'
     } else if (status === 'error') {
@@ -352,7 +351,7 @@ export function buildRouteMapModel(input: BuildRouteMapModelInput): RouteMapView
     stops,
     linePositions:
       status === 'error' && optionStops.length === 0
-        ? stops.map((s) => [s.lat, s.lon] as [number, number])
+        ? stops.map((s) => [s.lat, s.lon] as LatLon)
         : linePositions,
     chips: resolvedChips,
     status,

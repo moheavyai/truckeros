@@ -10,24 +10,35 @@
  *
  * Style URL: NEXT_PUBLIC_MAP_STYLE_URL or OpenFreeMap liberty default.
  * onMapClick is optional Map v2 hook (unused in v1 UI). Drag-edit is not wired in v1.
+ * LatLon [lat,lon] is converted to GeoJSON [lon,lat] only at this MapLibre boundary.
  */
 
 import { useEffect, useRef } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type { RouteMapStop, RouteMapViewModel } from './types'
+import type { LatLon, RouteMapStop, RouteMapViewModel } from './types'
 import {
   ROUTE_MAP_MARKER_GLYPH,
   ROUTE_MAP_ROLE_HEX,
 } from './roleStyles'
 
 const DEFAULT_MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
+/** CONUS-ish default when no stops. */
+const DEFAULT_CENTER: [number, number] = [-98.5, 39.8]
+const DEFAULT_ZOOM = 3.2
+/** Bounds span below this (degrees) treated as coincident → single-stop zoom. */
+const NEAR_ZERO_BOUNDS_DEG = 1e-5
 
 function resolveMapStyle(): string {
   if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_MAP_STYLE_URL) {
     return process.env.NEXT_PUBLIC_MAP_STYLE_URL
   }
   return DEFAULT_MAP_STYLE
+}
+
+function isCoarsePointer(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return false
+  return window.matchMedia('(pointer: coarse)').matches
 }
 
 export interface RouteMapProps {
@@ -70,30 +81,59 @@ function removeRouteLine(map: maplibregl.Map) {
   }
 }
 
+/** LatLon [lat,lon] → MapLibre GeoJSON position [lon,lat]. */
+function latLonToLngLat(pair: LatLon): [number, number] {
+  return [pair[1], pair[0]]
+}
+
 function fitToStops(map: maplibregl.Map, stops: RouteMapStop[]) {
+  const duration = prefersReducedMotion() ? 0 : 400
+
+  if (stops.length === 0) {
+    map.easeTo({
+      center: DEFAULT_CENTER,
+      zoom: DEFAULT_ZOOM,
+      duration: prefersReducedMotion() ? 0 : 300,
+    })
+    return
+  }
+
   if (stops.length === 1) {
     map.easeTo({
       center: [stops[0].lon, stops[0].lat],
       zoom: 8,
-      duration: prefersReducedMotion() ? 0 : 400,
+      duration,
     })
-  } else if (stops.length >= 2) {
-    const bounds = new maplibregl.LngLatBounds()
-    for (const s of stops) bounds.extend([s.lon, s.lat])
-    map.fitBounds(bounds, {
-      padding: { top: 48, bottom: 48, left: 48, right: 48 },
-      maxZoom: 10,
-      duration: prefersReducedMotion() ? 0 : 500,
-    })
+    return
   }
+
+  const bounds = new maplibregl.LngLatBounds()
+  for (const s of stops) bounds.extend([s.lon, s.lat])
+  const ne = bounds.getNorthEast()
+  const sw = bounds.getSouthWest()
+  const span = Math.max(Math.abs(ne.lat - sw.lat), Math.abs(ne.lng - sw.lng))
+
+  // Coincident / near-zero bounds → single-stop zoom path (avoids fitBounds collapse)
+  if (span < NEAR_ZERO_BOUNDS_DEG) {
+    map.easeTo({
+      center: [stops[0].lon, stops[0].lat],
+      zoom: 8,
+      duration,
+    })
+    return
+  }
+
+  map.fitBounds(bounds, {
+    padding: { top: 48, bottom: 48, left: 48, right: 48 },
+    maxZoom: 10,
+    duration: prefersReducedMotion() ? 0 : 500,
+  })
 }
 
 export default function RouteMap({ model, className, onMapClick }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
-  const modelRef = useRef(model)
-  modelRef.current = model
   const onMapClickRef = useRef(onMapClick)
   onMapClickRef.current = onMapClick
   const styleReadyRef = useRef(false)
@@ -105,11 +145,11 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: resolveMapStyle(),
-      center: [-98.5, 39.8],
-      zoom: 3.2,
+      center: DEFAULT_CENTER,
+      zoom: DEFAULT_ZOOM,
       attributionControl: { compact: true },
-      // Prefer page scroll on mobile; hold Ctrl/⌘ to zoom with wheel
-      cooperativeGestures: true,
+      // Prefer page scroll on touch devices only; desktop keeps free wheel zoom
+      cooperativeGestures: isCoarsePointer(),
     })
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
     mapRef.current = map
@@ -134,7 +174,7 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
     }
   }, [])
 
-  // ResizeObserver: keep canvas sized when card layout changes
+  // ResizeObserver: map.resize only — do not re-fit (preserves user pan/zoom)
   useEffect(() => {
     const el = containerRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
@@ -143,12 +183,7 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
     const ro = new ResizeObserver(() => {
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
-        const map = mapRef.current
-        if (!map) return
-        map.resize()
-        if (styleReadyRef.current && modelRef.current.stops.length > 0) {
-          fitToStops(map, modelRef.current.stops)
-        }
+        mapRef.current?.resize()
       }, 100)
     })
     ro.observe(el)
@@ -167,7 +202,6 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
 
     const apply = () => {
       if (cancelled || mapRef.current !== map) return
-      // Guard against apply after style/map teardown
       try {
         if (!map.getStyle()) return
       } catch {
@@ -191,7 +225,6 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
 
       const line = model.linePositions
 
-      // Always remove short/invalid lines before setData (0–1 points are not valid LineStrings)
       if (line.length < 2) {
         removeRouteLine(map)
       } else {
@@ -200,7 +233,7 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
           properties: {},
           geometry: {
             type: 'LineString',
-            coordinates: line.map(([lat, lon]) => [lon, lat]),
+            coordinates: line.map(latLonToLngLat),
           },
         }
 
@@ -225,6 +258,7 @@ export default function RouteMap({ model, className, onMapClick }: RouteMapProps
         }
       }
 
+      // Re-fit only on model stop/line identity change (not on resize)
       fitToStops(map, model.stops)
     }
 

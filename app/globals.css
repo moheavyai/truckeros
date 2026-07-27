@@ -30,3 +30,24 @@ body {
   /* Clip stray horizontal overflow; avoid 100vw max-width (scrollbar footgun) */
   overflow-x: clip;
 }
+
+/* RouteMapCard indeterminate progress — motion-safe translating bar */
+@keyframes route-map-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+.route-map-indeterminate-bar {
+  /* Static fallback when reduced motion (or no animation support) */
+  left: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .route-map-indeterminate-bar {
+    animation: route-map-indeterminate 1.2s ease-in-out infinite;
+  }
+}

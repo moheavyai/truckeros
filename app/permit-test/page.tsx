@@ -37,8 +37,12 @@ import OverhangFeetInput from '@/components/OverhangFeetInput'
 import LocationStopInput from '@/components/LocationStopInput'
 import ActiveCarrierBanner from '@/components/ActiveCarrierBanner'
 import CarrierContextBar from '@/components/CarrierContextBar'
-import { RouteMapCard, buildRouteMapModel } from '@/components/route-map'
-import type { RouteMapStatus } from '@/components/route-map'
+import {
+  RouteMapCard,
+  ROUTE_MAP_CARD_EMBED_CLASS,
+  buildRouteMapModel,
+  toRouteMapBuildInput,
+} from '@/components/route-map'
 import {
   buildOrganizationTeamMemberList,
   buildTeamMemberList,
@@ -1805,68 +1809,42 @@ export default function PermitTestPage() {
     formData.drops,
   ])
 
-  /** Map v1 view model: form geocodes (idle) + OR-Tools option (ready) + routeProgress status. */
+  /** Map v1 view model: thin page adapter → pure toRouteMapBuildInput → buildRouteMapModel. */
   const routeMapModel = useMemo(() => {
     const primary = getPrimary(agentResult, result)
-    // Ready only when analysis completed — never sticky-ready from leftover option while idle.
-    const mapStatus: RouteMapStatus =
-      routeProgress === 'error'
-        ? 'error'
-        : routeProgress === 'calculating' || routeProgress === 'geocoding'
-          ? 'calculating'
-          : routeProgress === 'ready'
-            ? 'ready'
-            : 'idle'
-
     const formSynced = syncDestinationFromDrops(formData)
-    const originLabel =
-      [formSynced.origin.city, formSynced.origin.state].filter(Boolean).join(', ') ||
-      formSynced.origin.query ||
-      'Origin'
-    const destLabel =
-      [formSynced.destination.city, formSynced.destination.state].filter(Boolean).join(', ') ||
-      formSynced.destination.query ||
-      'Destination'
+    const coordsReady =
+      hasValidCoords(formSynced.originLat, formSynced.originLon) &&
+      (formSynced.drops || []).every((drop) => hasValidCoords(drop.lat, drop.lon))
+    const dimsReady =
+      Number(formSynced.weight) > 0 &&
+      Number(formSynced.length) > 0 &&
+      Number(formSynced.width) > 0 &&
+      Number(formSynced.height) > 0
 
-    // Only pass option for ready/calculating (chips only when ready; calculating may use formStops first).
-    const optionForMap =
-      mapStatus === 'ready' || mapStatus === 'calculating' ? primary || null : null
-
-    return buildRouteMapModel({
-      status: mapStatus,
-      message:
-        routeProgress === 'error'
-          ? routeProgressDetail || 'Route calculation failed'
-          : routeProgress === 'geocoding'
-            ? routeProgressDetail || 'Resolving addresses…'
-            : routeProgress === 'calculating'
-              ? routeProgressDetail || 'Calculating best route…'
-              : undefined,
-      option: optionForMap,
-      formStops: {
-        origin: {
-          name: originLabel,
-          lat: formSynced.originLat ?? null,
-          lon: formSynced.originLon ?? null,
-        },
-        drops: (formSynced.drops || []).map((d, i) => ({
-          name:
-            [d.city, d.state].filter(Boolean).join(', ') ||
-            d.query ||
-            `Drop ${i + 1}`,
-          lat: d.lat ?? null,
-          lon: d.lon ?? null,
-        })),
-        destination: {
-          name: destLabel,
-          lat: formSynced.destinationLat ?? null,
-          lon: formSynced.destinationLon ?? null,
-        },
-      },
-    })
-    // routeMapFormKey captures geocode-relevant form fields (not every keystroke field).
+    return buildRouteMapModel(
+      toRouteMapBuildInput({
+        routeProgress,
+        routeProgressDetail,
+        primary: primary || null,
+        formSynced,
+        coordsReady,
+        dimsReady,
+      })
+    )
+    // routeMapFormKey + dims fields capture map-relevant form state (not every keystroke).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional fingerprint deps
-  }, [agentResult, result, routeProgress, routeProgressDetail, routeMapFormKey])
+  }, [
+    agentResult,
+    result,
+    routeProgress,
+    routeProgressDetail,
+    routeMapFormKey,
+    formData.weight,
+    formData.length,
+    formData.width,
+    formData.height,
+  ])
 
   /** Map /api/optimize-route JSON to the agentResult shape (including OSRM fallback). */
   function normalizeOrToolsToAgentData(optData: any) {
@@ -3923,7 +3901,7 @@ export default function PermitTestPage() {
         )}
 
         {/* Map v1: single Route card (replaces tall progress hero + long corridor preview chrome). */}
-        <RouteMapCard model={routeMapModel} />
+        <RouteMapCard model={routeMapModel} className={ROUTE_MAP_CARD_EMBED_CLASS} />
         </div> {/* End form card */}
       </form>
 
@@ -3952,12 +3930,15 @@ export default function PermitTestPage() {
           <div className="flex justify-end">
             <button
               onClick={() => {
-                window.scrollTo({ top: 0, behavior: 'smooth' })
+                const reduceMotion =
+                  typeof window !== 'undefined' &&
+                  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+                window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })
                 // Optional: focus first input after scroll
                 setTimeout(() => {
                   const firstInput = document.querySelector('input[placeholder="City"]') as HTMLInputElement
                   firstInput?.focus()
-                }, 600)
+                }, reduceMotion ? 0 : 600)
               }}
               className="text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-colors flex items-center gap-1.5"
             >

@@ -35,6 +35,14 @@ const CHIP_TONE_CLASS: Record<NonNullable<RouteMapChip['tone']>, string> = {
 
 const ROLE_ORDER: RouteMapStopRole[] = ['origin', 'via', 'drop', 'destination']
 
+/** Default standalone card chrome. Embed flatter via className from parent. */
+export const ROUTE_MAP_CARD_DEFAULT_CLASS =
+  'rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden'
+
+/** Flatter chrome when nested inside another card (e.g. permit form). */
+export const ROUTE_MAP_CARD_EMBED_CLASS =
+  'rounded-xl border-0 border-t border-gray-100 shadow-none bg-transparent overflow-hidden'
+
 export interface RouteMapCardProps {
   model: RouteMapViewModel
   /** Optional extra actions (e.g. Map v2 edit mode toggle). */
@@ -67,7 +75,6 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
   const rolesPresent = new Set(model.stops.map((s) => s.role))
   const legendRoles = ROLE_ORDER.filter((r) => rolesPresent.has(r))
 
-  // Single polite live region for status (badge + footer share this text for SR)
   const liveStatus =
     isError
       ? model.message || 'Route calculation failed'
@@ -81,10 +88,7 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
 
   return (
     <section
-      className={
-        className ||
-        'rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden'
-      }
+      className={className || ROUTE_MAP_CARD_DEFAULT_CLASS}
       aria-labelledby="route-map-card-title"
       aria-busy={isCalculating || undefined}
       data-testid="route-map-card"
@@ -115,28 +119,29 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
         {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
       </div>
 
-      {/* Single polite live region for status changes */}
       <div className="sr-only" aria-live="polite" aria-atomic="true" data-testid="route-map-live">
         {liveStatus}
       </div>
 
-      {/* Slim decorative progress (not a second live region) */}
+      {/* Slim indeterminate progress (motion-safe translating bar) */}
       {isCalculating && (
         <div
-          className="h-1 w-full bg-blue-100 overflow-hidden"
+          className="h-1 w-full bg-blue-100 overflow-hidden relative"
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
           aria-label={model.message || 'Calculating route'}
         >
-          <div className="h-full w-1/3 bg-blue-500 motion-safe:animate-pulse" aria-hidden />
+          <div
+            className="absolute inset-y-0 w-1/3 bg-blue-500 route-map-indeterminate-bar"
+            aria-hidden
+          />
         </div>
       )}
 
       <div className="relative">
         <RouteMap model={model} onMapClick={onMapClick} />
 
-        {/* Empty idle: single overlay channel (no footer duplicate) */}
         {isIdleEmpty && (
           <div className="absolute inset-0 flex items-end justify-center pointer-events-none p-4">
             <p className="text-sm text-gray-600 bg-white/90 border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm">
@@ -146,7 +151,6 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
         )}
       </div>
 
-      {/* SR stop list (map canvas is aria-hidden decorative) */}
       {model.stops.length > 0 && (
         <ul className="sr-only" data-testid="route-map-stop-list">
           {model.stops.map((s) => (
@@ -157,7 +161,6 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
         </ul>
       )}
 
-      {/* Chips + legend + non-idle messages */}
       {(model.chips.length > 0 ||
         (model.message && !isIdleEmpty && model.status !== 'ready') ||
         legendRoles.length > 0) && (
