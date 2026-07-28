@@ -469,7 +469,7 @@ describe('parseRoutePreferenceInput (Submit New Route smart input)', () => {
     expect(formatRoutePreferenceAsSpecialInstructions(steer)).toBe('avoid AR')
   })
 
-  it('space-separated state lists keep stopword codes (WA OR, AL MS TN)', () => {
+  it('space-separated uppercase state lists keep stopword codes (WA OR, AL MS TN)', () => {
     const waOr = parseRoutePreferenceInput('WA OR')
     expect(waOr.states).toEqual(['WA', 'OR'])
     expect(isStatesOnlyRoutePreference(waOr)).toBe(true)
@@ -477,6 +477,16 @@ describe('parseRoutePreferenceInput (Submit New Route smart input)', () => {
     const alMsTn = parseRoutePreferenceInput('AL MS TN')
     expect(alMsTn.states).toEqual(['AL', 'MS', 'TN'])
     expect(isStatesOnlyRoutePreference(alMsTn)).toBe(true)
+  })
+
+  it('space-separated English or/in do not invent OR/IN as states', () => {
+    const caOrTx = parseRoutePreferenceInput('CA or TX')
+    expect(caOrTx.states).toEqual(['CA', 'TX'])
+    expect(caOrTx.states).not.toContain('OR')
+
+    const inMo = parseRoutePreferenceInput('in MO')
+    expect(inMo.states).toEqual(['MO'])
+    expect(inMo.states).not.toContain('IN')
   })
 
   it('avoid I-49 alone is parseable as avoid-highway-only (UI rejects)', () => {

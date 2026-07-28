@@ -1661,20 +1661,17 @@ export function parseRoutePreferenceInput(input?: string): ParsedRoutePreference
 
   if (!hasDirectives) {
     // Bare list mode only: "MO, NE, IA" / "MO-123, US160w" / "MO, US-160"
-    // Pure space-separated 2-letter state lists ("AL MS TN", "WA OR") — all tokens are
-    // allowlisted state codes, so do not apply English stopword filtering (OR stays Oregon).
+    // Pure space-separated state lists require *uppercase* 2-letter codes ("AL MS TN", "WA OR")
+    // so English conjunctions ("CA or TX", "in MO") never invent OR/IN as states.
     const spaceTokens = raw.split(/\s+/).map(t => t.trim()).filter(Boolean)
     const pureSpaceStateList =
       spaceTokens.length >= 2 &&
       !/[,;]/.test(raw) &&
-      spaceTokens.every(
-        t => /^[A-Za-z]{2}$/.test(t) && US_STATE_CODES.has(t.toUpperCase()),
-      )
+      spaceTokens.every(t => /^[A-Z]{2}$/.test(t) && US_STATE_CODES.has(t))
 
     if (pureSpaceStateList) {
       for (const t of spaceTokens) {
-        const code = t.toUpperCase()
-        if (!states.includes(code)) states.push(code)
+        if (!states.includes(t)) states.push(t)
       }
     } else {
       // Comma/semicolon segments (and mixed bare highways)
