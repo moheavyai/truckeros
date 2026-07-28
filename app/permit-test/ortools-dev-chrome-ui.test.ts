@@ -251,4 +251,26 @@ describe('Permit test page — OR-Tools dev chrome production gate', () => {
     // Cancel clears error
     expect(source).toContain('setChangeRouteError(null)')
   })
+
+  it('locks avoid-highway-only reject, busy labels, and Approve not Saving on change-route', () => {
+    const source = readPermitPageSource()
+    const changeRoute = handleChangeRouteSlice(source)
+
+    // Avoid-highway-only → setChangeRouteError with honest message (no re-route)
+    expect(changeRoute).toContain('isAvoidHighwayOnlyPreference(parsed)')
+    expect(changeRoute).toContain('Highway avoid is not enforced yet')
+    expect(changeRoute).toContain('setChangeRouteError(')
+    expect(changeRoute).toContain('Could not parse route preferences')
+
+    // Busy: changeRouteBusy drives Updating route; panel kept open while busy
+    expect(changeRoute).toContain('setChangeRouteBusy(true)')
+    expect(changeRoute).toContain('Keep Change Route panel open')
+    expect(source).toContain("changeRouteBusy ? 'Updating route…' : 'Submit New Route'")
+    expect(source).toContain('role="status"')
+    expect(source).toMatch(/Updating route…/)
+
+    // Approve label gated: Saving only when loading && !changeRouteBusy
+    expect(source).toContain("loading && !changeRouteBusy ? 'Saving…'")
+    expect(source).toContain('Approve & Continue to Portal Assist')
+  })
 })

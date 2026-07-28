@@ -1356,12 +1356,39 @@ const ENGLISH_STATE_STOPWORDS = new Set([
   'or', 'in', 'me', 'hi', 'ok', 'la', 'de', 'oh', 'pa', 'al', 'as', 'at', 'by', 'if', 'is', 'it', 'no', 'on', 'so', 'to', 'up', 'us',
 ])
 
-/** Directive verbs that force specialInstructions path (never hard manualRoute override). */
+/**
+ * Directive verbs that force specialInstructions path (never hard manualRoute override).
+ * Must stay aligned with avoid/prefer/include verb lists in parseSpecialInstructions +
+ * parseRoutePreferenceInput (incl. "no", "steer clear of").
+ */
 const ROUTE_PREF_DIRECTIVE_RE =
-  /\b(avoid|avoiding|prefer|use|take|via|include|including|through|thru|bypass|skip|shun|near|go\s+by|pass\s+by)\b/i
+  /\b(avoid|avoiding|prefer|use|take|via|include|including|through|thru|bypass|skip|shun|near|no|steer\s+clear\s+of|go\s+by|pass\s+by|pass\s+near|pass\s+through|go\s+via|go\s+through|go\s+near)\b/i
+
+/** Marker embedded by formatRoutePreferenceAsSpecialInstructions for unenforced highway avoid. */
+export const HIGHWAY_AVOID_NOT_ENFORCED_MARKER_RE =
+  /highway\s+avoid\s+not\s+enforced\s*:\s*([^.]+?)(?=\s*\.|$)/gi
 
 export function hasRoutePreferenceDirectives(raw: string): boolean {
   return ROUTE_PREF_DIRECTIVE_RE.test(raw || '')
+}
+
+/** Extract highways from `highway avoid not enforced: I-49, MO 123` marker (round-trip honesty). */
+export function extractAvoidHighwaysFromNotEnforcedMarker(text: string): string[] {
+  if (!text) return []
+  const out: string[] = []
+  const re = new RegExp(HIGHWAY_AVOID_NOT_ENFORCED_MARKER_RE.source, 'gi')
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    const phrase = m[1] || ''
+    const localHwy = new RegExp(ROUTE_HWY_TOKEN_RE.source, 'gi')
+    let hm: RegExpExecArray | null
+    while ((hm = localHwy.exec(phrase)) !== null) {
+      if (!looksLikeHighwayToken(hm[1])) continue
+      const h = normalizeHwyToken(hm[1])
+      if (h && !out.includes(h)) out.push(h)
+    }
+  }
+  return out
 }
 
 /** Strip recognized highway tokens from a phrase before state-code extraction. */
@@ -1614,6 +1641,8 @@ export function parseRoutePreferenceInput(input?: string): ParsedRoutePreference
   let m: RegExpExecArray | null
   while ((m = avoidVerbRe.exec(lower)) !== null) {
     const phrase = m[2] || ''
+    // Skip the honesty marker body (handled below) so "not enforced" is not a phrase target
+    if (/^not\s+enforced\b/i.test(phrase.trim())) continue
     const localHwy = new RegExp(ROUTE_HWY_TOKEN_RE.source, 'gi')
     let hm: RegExpExecArray | null
     while ((hm = localHwy.exec(phrase)) !== null) {
@@ -1623,39 +1652,61 @@ export function parseRoutePreferenceInput(input?: string): ParsedRoutePreference
     }
   }
 
+  // Round-trip: recover avoidHighways from format marker so applyUserPreferences honesty fires
+  for (const h of extractAvoidHighwaysFromNotEnforcedMarker(raw)) {
+    if (!avoidHighways.includes(h)) avoidHighways.push(h)
+  }
+
   // Prefer-clause highways beyond special.preferred (already filled); multi-verb same line is clause-scoped above.
 
   if (!hasDirectives) {
     // Bare list mode only: "MO, NE, IA" / "MO-123, US160w" / "MO, US-160"
-    // Do not use segment-level avoid tainting — no avoid verbs present.
-    const segments = raw.split(/[,;]+/).map(s => s.trim()).filter(Boolean)
-    for (const seg of segments) {
-      const localHwy = new RegExp(ROUTE_HWY_TOKEN_RE.source, 'gi')
-      let hm: RegExpExecArray | null
-      const hwySpans: Array<{ start: number; end: number }> = []
-      while ((hm = localHwy.exec(seg)) !== null) {
-        if (!looksLikeHighwayToken(hm[1])) continue
-        hwySpans.push({ start: hm.index, end: hm.index + hm[1].length })
-        const h = normalizeHwyToken(hm[1])
-        if (h && !preferHighways.includes(h) && !avoidHighways.includes(h)) {
-          preferHighways.push(h)
-        }
-      }
+    // Pure space-separated 2-letter state lists ("AL MS TN", "WA OR") — all tokens are
+    // allowlisted state codes, so do not apply English stopword filtering (OR stays Oregon).
+    const spaceTokens = raw.split(/\s+/).map(t => t.trim()).filter(Boolean)
+    const pureSpaceStateList =
+      spaceTokens.length >= 2 &&
+      !/[,;]/.test(raw) &&
+      spaceTokens.every(
+        t => /^[A-Za-z]{2}$/.test(t) && US_STATE_CODES.has(t.toUpperCase()),
+      )
 
-      const stateTokRe = /\b([A-Za-z]{2})\b/g
-      let sm: RegExpExecArray | null
-      while ((sm = stateTokRe.exec(seg)) !== null) {
-        const code = sm[1].toUpperCase()
-        if (!US_STATE_CODES.has(code)) continue
-        // Skip English function words (or→OR) unless the whole segment is exactly that code
-        // (comma list "WA, OR" keeps Oregon; "US-160 or I-49" does not invent OR).
-        const tokLower = sm[1].toLowerCase()
-        if (ENGLISH_STATE_STOPWORDS.has(tokLower) && seg.trim().toUpperCase() !== code) {
-          continue
-        }
-        const at = sm.index
-        if (hwySpans.some(sp => at >= sp.start && at < sp.end)) continue
+    if (pureSpaceStateList) {
+      for (const t of spaceTokens) {
+        const code = t.toUpperCase()
         if (!states.includes(code)) states.push(code)
+      }
+    } else {
+      // Comma/semicolon segments (and mixed bare highways)
+      const segments = raw.split(/[,;]+/).map(s => s.trim()).filter(Boolean)
+      for (const seg of segments) {
+        const localHwy = new RegExp(ROUTE_HWY_TOKEN_RE.source, 'gi')
+        let hm: RegExpExecArray | null
+        const hwySpans: Array<{ start: number; end: number }> = []
+        while ((hm = localHwy.exec(seg)) !== null) {
+          if (!looksLikeHighwayToken(hm[1])) continue
+          hwySpans.push({ start: hm.index, end: hm.index + hm[1].length })
+          const h = normalizeHwyToken(hm[1])
+          if (h && !preferHighways.includes(h) && !avoidHighways.includes(h)) {
+            preferHighways.push(h)
+          }
+        }
+
+        const stateTokRe = /\b([A-Za-z]{2})\b/g
+        let sm: RegExpExecArray | null
+        while ((sm = stateTokRe.exec(seg)) !== null) {
+          const code = sm[1].toUpperCase()
+          if (!US_STATE_CODES.has(code)) continue
+          // Skip English function words (or→OR) unless the whole segment is exactly that code
+          // (comma list "WA, OR" keeps Oregon; "US-160 or I-49" does not invent OR).
+          const tokLower = sm[1].toLowerCase()
+          if (ENGLISH_STATE_STOPWORDS.has(tokLower) && seg.trim().toUpperCase() !== code) {
+            continue
+          }
+          const at = sm.index
+          if (hwySpans.some(sp => at >= sp.start && at < sp.end)) continue
+          if (!states.includes(code)) states.push(code)
+        }
       }
     }
   } else {
@@ -1755,7 +1806,8 @@ export function formatRoutePreferenceAsSpecialInstructions(
   return parts.join('. ') || parsed.raw
 }
 
-function applyUserPreferences(
+/** Exported for honesty round-trip tests (format → re-parse → apply). */
+export function applyUserPreferences(
   corridors: CorridorResult[],
   instructions?: string,
   originState?: string,
