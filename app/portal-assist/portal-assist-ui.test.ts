@@ -36,6 +36,28 @@ describe('Portal Assist page UX', () => {
     expect(source).not.toMatch(/request\.length\}'\s*×\s*\{request\.width\}'/)
   })
 
+  it('formats ROUTE with full portal addresses (not city/state only)', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain("from '@/lib/format-address'")
+    expect(source).toContain('formatPortalAddress')
+    expect(source).toContain('resolvePortalAddressParts')
+    expect(source).toContain("resolvePortalAddressParts(request, 'origin')")
+    expect(source).toContain("resolvePortalAddressParts(request, 'destination')")
+    // Avoid hard-coded city/state-only ROUTE line and city-only fallbacks
+    expect(source).not.toMatch(
+      /\{request\.origin_city\}, \{request\.origin_state\} → \{request\.destination_city\}, \{request\.destination_state\}/
+    )
+    expect(source).not.toMatch(
+      /\[request\.origin_city,\s*request\.origin_state\]\.filter/
+    )
+    // Empty formatter → em dash, not city-only / state-only
+    expect(source).toMatch(
+      /formatPortalAddress\(resolvePortalAddressParts\(request, 'origin'\)\)\s*\|\|\s*'—'/
+    )
+    // Full addresses may wrap on mobile tiles
+    expect(source).toContain('break-words')
+  })
+
   it('uses two-box layout: compact Request Summary and Final Review with equipment in review box', () => {
     const source = readSource(pagePath)
     expect(source).toContain('1. Request Summary')
