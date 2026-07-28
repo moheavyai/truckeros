@@ -1,13 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyUserPreferences,
   assessPreferenceEnforcement,
   buildCorridorFromSteps,
   completeCorridorWithHighways,
+  extractAvoidHighwaysFromNotEnforcedMarker,
   extractBorderCrossingsFromSteps,
+  formatRoutePreferenceAsSpecialInstructions,
+  hasParseableRoutePreference,
   hasPlausibleTransitions,
+  hasRoutePreferenceDirectives,
   highwayTokenPresent,
+  isAvoidHighwayOnlyPreference,
+  isStatesOnlyRoutePreference,
+  normalizeHwyToken,
+  parseRoutePreferenceInput,
   parseSpecialInstructions,
 } from './build-corridor'
+import type { CorridorResult } from './build-corridor'
 
 const okMtSparseSteps = [
   {
@@ -308,8 +318,24 @@ describe('parseSpecialInstructions OD guard + avoid clause bound', () => {
     expect(parseSpecialInstructions('via I-29').preferred).toEqual(['I-29'])
   })
 
+  it('prefer clause accepts state routes and US direction suffix', () => {
+    expect(parseSpecialInstructions('prefer MO-123').preferred).toEqual(['MO 123'])
+    expect(parseSpecialInstructions('prefer US160w').preferred).toEqual(['US 160'])
+    expect(parseSpecialInstructions('prefer MO 123, US-160').preferred).toEqual(['MO 123', 'US 160'])
+  })
+
   it('avoid I-40 does not prefer I-40', () => {
     expect(parseSpecialInstructions('avoid I-40').preferred).toEqual([])
+  })
+
+  it('avoid MO-123 does not hard-avoid state MO', () => {
+    const parsed = parseSpecialInstructions('avoid MO-123')
+    expect(parsed.avoided).toEqual([])
+    expect(parsed.preferred).toEqual([])
+  })
+
+  it('avoid I-49 does not avoid any state', () => {
+    expect(parseSpecialInstructions('avoid I-49').avoided).toEqual([])
   })
 
   it('avoid AR, avoid IL, include Corinth, MS still separates directives', () => {
@@ -352,6 +378,211 @@ describe('highwayTokenPresent equality', () => {
     expect(highwayTokenPresent('I-2', ['I-29'])).toBe(false)
     expect(highwayTokenPresent('US 136', ['US 13'])).toBe(false)
     expect(highwayTokenPresent('US 136', ['US 136 (entry 40.0,-95.5)'])).toBe(true)
+  })
+
+  it('matches state routes and strips US direction suffix', () => {
+    expect(highwayTokenPresent('MO-123', ['MO 123', 'I-49'])).toBe(true)
+    expect(highwayTokenPresent('MO 123', ['MO-123'])).toBe(true)
+    expect(highwayTokenPresent('US160w', ['US 160'])).toBe(true)
+    expect(highwayTokenPresent('US 160', ['US160W'])).toBe(true)
+  })
+
+  it('I-35E is not I-35W (route identity preserved)', () => {
+    expect(highwayTokenPresent('I-35E', ['I-35W'])).toBe(false)
+    expect(highwayTokenPresent('I-35E', ['I-35E', 'I-35W'])).toBe(true)
+    expect(highwayTokenPresent('I-35W', ['I-35W'])).toBe(true)
+    expect(normalizeHwyToken('I-35E')).toBe('I-35E')
+    expect(normalizeHwyToken('I-35W')).toBe('I-35W')
+  })
+})
+
+describe('parseRoutePreferenceInput (Submit New Route smart input)', () => {
+  it('MO-123, US160w → preferHighways only (no false need-states)', () => {
+    const parsed = parseRoutePreferenceInput('MO-123, US160w')
+    expect(parsed.preferHighways).toEqual(['MO 123', 'US 160'])
+    expect(parsed.states).toBeUndefined()
+    expect(parsed.avoidHighways).toBeUndefined()
+    expect(hasParseableRoutePreference(parsed)).toBe(true)
+    expect(isStatesOnlyRoutePreference(parsed)).toBe(false)
+    expect(formatRoutePreferenceAsSpecialInstructions(parsed)).toBe('prefer MO 123, US 160')
+  })
+
+  it('MO, NE, IA → states corridor override still works', () => {
+    const parsed = parseRoutePreferenceInput('MO, NE, IA')
+    expect(parsed.states).toEqual(['MO', 'NE', 'IA'])
+    expect(parsed.preferHighways).toBeUndefined()
+    expect(isStatesOnlyRoutePreference(parsed)).toBe(true)
+    expect(hasParseableRoutePreference(parsed)).toBe(true)
+  })
+
+  it('avoid I-49, prefer US-160 extracts avoid + prefer highways', () => {
+    const parsed = parseRoutePreferenceInput('avoid I-49, prefer US-160')
+    expect(parsed.preferHighways).toEqual(['US 160'])
+    expect(parsed.avoidHighways).toEqual(['I-49'])
+    expect(isStatesOnlyRoutePreference(parsed)).toBe(false)
+    expect(isAvoidHighwayOnlyPreference(parsed)).toBe(false)
+    const text = formatRoutePreferenceAsSpecialInstructions(parsed)
+    expect(text).toBe('prefer US 160. highway avoid not enforced: I-49')
+    // Must not emit bare avoid I-49 into state-avoid pipeline
+    expect(parseSpecialInstructions(text).avoided).toEqual([])
+  })
+
+  it('format → re-parse recovers avoidHighways (honesty round-trip)', () => {
+    const original = parseRoutePreferenceInput('avoid I-49, prefer US-160')
+    const formatted = formatRoutePreferenceAsSpecialInstructions(original)
+    expect(formatted).toBe('prefer US 160. highway avoid not enforced: I-49')
+    expect(extractAvoidHighwaysFromNotEnforcedMarker(formatted)).toEqual(['I-49'])
+
+    const reparsed = parseRoutePreferenceInput(formatted)
+    expect(reparsed.preferHighways).toEqual(['US 160'])
+    expect(reparsed.avoidHighways).toEqual(['I-49'])
+    expect(isAvoidHighwayOnlyPreference(reparsed)).toBe(false)
+
+    // applyUserPreferences must mark partial (not full "User preference applied")
+    const corridors: CorridorResult[] = [
+      {
+        routeCorridor: ['MO'],
+        highways: ['US 160', 'I-49'],
+        highwaysAll: ['US 160', 'I-49'],
+        distanceMeters: 100_000,
+      },
+    ]
+    const out = applyUserPreferences(corridors, formatted, 'MO', 'MO')
+    const note = out[0]?.userPreferenceNote || ''
+    expect(note).toMatch(/partial/i)
+    expect(note).toMatch(/Highway avoid I-49 not enforced/i)
+    expect(note).not.toMatch(/^User preference applied:/)
+  })
+
+  it('no AR / steer clear of AR are directives (not include AR)', () => {
+    expect(hasRoutePreferenceDirectives('no AR')).toBe(true)
+    expect(hasRoutePreferenceDirectives('steer clear of AR')).toBe(true)
+    const noAr = parseRoutePreferenceInput('no AR')
+    expect(noAr.avoidedStates).toEqual(['AR'])
+    expect(noAr.states).toBeUndefined()
+    expect(isStatesOnlyRoutePreference(noAr)).toBe(false)
+    expect(formatRoutePreferenceAsSpecialInstructions(noAr)).toBe('avoid AR')
+    expect(formatRoutePreferenceAsSpecialInstructions(noAr)).not.toContain('include')
+
+    const steer = parseRoutePreferenceInput('steer clear of AR')
+    expect(steer.avoidedStates).toEqual(['AR'])
+    expect(formatRoutePreferenceAsSpecialInstructions(steer)).toBe('avoid AR')
+  })
+
+  it('space-separated uppercase state lists keep stopword codes (WA OR, AL MS TN)', () => {
+    const waOr = parseRoutePreferenceInput('WA OR')
+    expect(waOr.states).toEqual(['WA', 'OR'])
+    expect(isStatesOnlyRoutePreference(waOr)).toBe(true)
+
+    const alMsTn = parseRoutePreferenceInput('AL MS TN')
+    expect(alMsTn.states).toEqual(['AL', 'MS', 'TN'])
+    expect(isStatesOnlyRoutePreference(alMsTn)).toBe(true)
+  })
+
+  it('space-separated English or/in do not invent OR/IN as states', () => {
+    const caOrTx = parseRoutePreferenceInput('CA or TX')
+    expect(caOrTx.states).toEqual(['CA', 'TX'])
+    expect(caOrTx.states).not.toContain('OR')
+
+    const inMo = parseRoutePreferenceInput('in MO')
+    expect(inMo.states).toEqual(['MO'])
+    expect(inMo.states).not.toContain('IN')
+  })
+
+  it('avoid I-49 alone is parseable as avoid-highway-only (UI rejects)', () => {
+    const parsed = parseRoutePreferenceInput('avoid I-49')
+    expect(parsed.avoidHighways).toEqual(['I-49'])
+    expect(parsed.avoidedStates).toBeUndefined()
+    expect(isAvoidHighwayOnlyPreference(parsed)).toBe(true)
+    expect(hasParseableRoutePreference(parsed)).toBe(true)
+  })
+
+  it('avoid MO-123 is highway avoid, not state MO', () => {
+    const parsed = parseRoutePreferenceInput('avoid MO-123')
+    expect(parsed.avoidHighways).toEqual(['MO 123'])
+    expect(parsed.avoidedStates).toBeUndefined()
+    expect(parsed.states).toBeUndefined()
+    expect(isAvoidHighwayOnlyPreference(parsed)).toBe(true)
+    const text = formatRoutePreferenceAsSpecialInstructions(parsed)
+    expect(text).toContain('highway avoid not enforced')
+    expect(parseSpecialInstructions(text).avoided).not.toContain('MO')
+  })
+
+  it('prefer US-160 avoid I-49 multi-verb same line scopes correctly', () => {
+    const parsed = parseRoutePreferenceInput('prefer US-160 avoid I-49')
+    expect(parsed.preferHighways).toEqual(['US 160'])
+    expect(parsed.avoidHighways).toEqual(['I-49'])
+    // US-160 must not be tainted as avoid
+    expect(parsed.avoidHighways).not.toContain('US 160')
+  })
+
+  it('prefer US-160 or I-49 does not invent state OR', () => {
+    const parsed = parseRoutePreferenceInput('prefer US-160 or I-49')
+    expect(parsed.preferHighways).toEqual(expect.arrayContaining(['US 160', 'I-49']))
+    expect(parsed.states || []).not.toContain('OR')
+    expect(parsed.avoidedStates || []).not.toContain('OR')
+  })
+
+  it('include MS, AL is soft prefs path (not hard manualRoute)', () => {
+    const parsed = parseRoutePreferenceInput('include MS, AL')
+    expect(parsed.states).toEqual(['MS', 'AL'])
+    expect(isStatesOnlyRoutePreference(parsed)).toBe(false)
+    expect(formatRoutePreferenceAsSpecialInstructions(parsed)).toBe('include MS, AL')
+  })
+
+  it('via MO is soft prefs path (not hard manualRoute)', () => {
+    const parsed = parseRoutePreferenceInput('via MO')
+    expect(isStatesOnlyRoutePreference(parsed)).toBe(false)
+    expect(hasParseableRoutePreference(parsed)).toBe(true)
+  })
+
+  it('avoid AR, IL keeps both avoided states (not states-only IL)', () => {
+    const parsed = parseRoutePreferenceInput('avoid AR, IL')
+    expect(parsed.avoidedStates).toEqual(['AR', 'IL'])
+    expect(parsed.states).toBeUndefined()
+    expect(isStatesOnlyRoutePreference(parsed)).toBe(false)
+    expect(hasParseableRoutePreference(parsed)).toBe(true)
+    expect(formatRoutePreferenceAsSpecialInstructions(parsed)).toBe('avoid AR, IL')
+  })
+
+  it('avoid AR alone is parseable (not states-only)', () => {
+    const parsed = parseRoutePreferenceInput('avoid AR')
+    expect(parsed.avoidedStates).toEqual(['AR'])
+    expect(isStatesOnlyRoutePreference(parsed)).toBe(false)
+    expect(hasParseableRoutePreference(parsed)).toBe(true)
+    expect(formatRoutePreferenceAsSpecialInstructions(parsed)).toBe('avoid AR')
+  })
+
+  it('mixed bare MO, US-160 uses include+prefer bias (not states-only)', () => {
+    const parsed = parseRoutePreferenceInput('MO, US-160')
+    expect(parsed.states).toEqual(['MO'])
+    expect(parsed.preferHighways).toEqual(['US 160'])
+    expect(isStatesOnlyRoutePreference(parsed)).toBe(false)
+    expect(formatRoutePreferenceAsSpecialInstructions(parsed)).toBe(
+      'prefer US 160. include MO',
+    )
+  })
+
+  it('empty and garbage are not parseable', () => {
+    expect(hasParseableRoutePreference(parseRoutePreferenceInput(''))).toBe(false)
+    expect(hasParseableRoutePreference(parseRoutePreferenceInput('asdf qwerty'))).toBe(false)
+    expect(isStatesOnlyRoutePreference(parseRoutePreferenceInput('asdf'))).toBe(false)
+  })
+
+  it('normalizeHwyToken covers dry-run tokens and I 49 space form', () => {
+    expect(normalizeHwyToken('US160w')).toBe('US 160')
+    expect(normalizeHwyToken('MO-123')).toBe('MO 123')
+    expect(normalizeHwyToken('MO 123')).toBe('MO 123')
+    expect(normalizeHwyToken('I-49')).toBe('I-49')
+    expect(normalizeHwyToken('I 49')).toBe('I-49')
+    expect(normalizeHwyToken('US-160')).toBe('US 160')
+    expect(normalizeHwyToken('CA-1A')).toBe('CA 1A')
+  })
+
+  it('comma list still keeps OR as Oregon when bare segment', () => {
+    const parsed = parseRoutePreferenceInput('WA, OR')
+    expect(parsed.states).toEqual(['WA', 'OR'])
+    expect(isStatesOnlyRoutePreference(parsed)).toBe(true)
   })
 })
 

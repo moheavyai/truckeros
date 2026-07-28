@@ -224,4 +224,53 @@ describe('Permit test page — OR-Tools dev chrome production gate', () => {
     // analyze-permit remains available on the non-ortools change-route branch (product path intact)
     expect(changeRoute).toContain("fetch('/api/analyze-permit'")
   })
+
+  it('Submit New Route accepts highway prefs (not state-codes-only alert)', () => {
+    const source = readPermitPageSource()
+    const changeRoute = handleChangeRouteSlice(source)
+
+    expect(source).toContain('parseRoutePreferenceInput')
+    expect(source).toContain('formatRoutePreferenceAsSpecialInstructions')
+    expect(source).toContain('isStatesOnlyRoutePreference')
+    expect(source).toContain('isAvoidHighwayOnlyPreference')
+    expect(changeRoute).toContain('specialInstructions')
+    expect(changeRoute).toContain('setChangeRouteBusy')
+    // Dual-path: states-only → manualRoute; highways/verbs → specialInstructions
+    expect(changeRoute).toContain('manualRoute = states')
+    expect(changeRoute).toContain('changePayload.specialInstructions')
+    expect(changeRoute).toContain('analyzeBody.specialInstructions')
+    // change-route must not set loading (Approve would show Saving…)
+    expect(changeRoute).not.toContain('setLoading(true)')
+    expect(changeRoute).not.toContain('setLoading(false)')
+    expect(source).toContain('Updating route')
+    // Dead-end state-code-only validation must not remain
+    expect(source).not.toContain('Please enter a valid list of state codes')
+    expect(source).toContain('hard corridor')
+    expect(source).toContain('prefer/include bias')
+    expect(source).toContain('MO-123, US160w')
+    // Cancel clears error
+    expect(source).toContain('setChangeRouteError(null)')
+  })
+
+  it('locks avoid-highway-only reject, busy labels, and Approve not Saving on change-route', () => {
+    const source = readPermitPageSource()
+    const changeRoute = handleChangeRouteSlice(source)
+
+    // Avoid-highway-only → setChangeRouteError with honest message (no re-route)
+    expect(changeRoute).toContain('isAvoidHighwayOnlyPreference(parsed)')
+    expect(changeRoute).toContain('Highway avoid is not enforced yet')
+    expect(changeRoute).toContain('setChangeRouteError(')
+    expect(changeRoute).toContain('Could not parse route preferences')
+
+    // Busy: changeRouteBusy drives Updating route; panel kept open while busy
+    expect(changeRoute).toContain('setChangeRouteBusy(true)')
+    expect(changeRoute).toContain('Keep Change Route panel open')
+    expect(source).toContain("changeRouteBusy ? 'Updating route…' : 'Submit New Route'")
+    expect(source).toContain('role="status"')
+    expect(source).toMatch(/Updating route…/)
+
+    // Approve label gated: Saving only when loading && !changeRouteBusy
+    expect(source).toContain("loading && !changeRouteBusy ? 'Saving…'")
+    expect(source).toContain('Approve & Continue to Portal Assist')
+  })
 })
