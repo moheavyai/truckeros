@@ -1294,6 +1294,8 @@ export interface ParsedSpecialInstructions {
  */
 export interface ParsedRoutePreferenceInput {
   states?: string[]
+  /** States from avoid-clauses (soft prefs path — never hard manualRoute alone). */
+  avoidedStates?: string[]
   preferHighways?: string[]
   avoidHighways?: string[]
   raw: string
@@ -1307,25 +1309,33 @@ export interface PreferenceEnforcement {
 }
 
 /**
- * Highway token: I-49, US-160, US160w, MO-123, MO 123.
- * Optional trailing NSEW on I/US forms (direction suffix, not a separate route).
+ * Highway token: I-49, I 49, US-160, US160w, MO-123, MO 123, CA-1A.
  * Case-insensitive; state-route form requires a digit so bare "MO" is not a highway.
  */
 export const ROUTE_HWY_TOKEN_RE =
-  /\b(I-?\d+[A-Za-z]?|US[-\s]?\d+[A-Za-z]?|[A-Za-z]{2}[-\s]?\d+)\b/gi
+  /\b(I[-\s]?\d+[A-Za-z]?|US[-\s]?\d+[A-Za-z]?|[A-Za-z]{2}[-\s]?\d+[A-Za-z]?)\b/gi
 
 /**
  * Normalize highway tokens for prefer matching / honesty checks.
- * US160w → US 160; I-49S → I-49; MO-123 / MO 123 → MO 123.
+ *
+ * Direction rule (product):
+ * - Interstate letter suffixes are route identity: I-35E ≠ I-35W (preserved).
+ * - US letter suffixes are treated as direction-of-travel noise: US160w → US 160.
+ * - State routes keep optional letter: CA-1A → CA 1A.
  */
 export function normalizeHwyToken(raw: string): string {
   const compact = (raw || '').toUpperCase().replace(/[\s.\-]+/g, '')
-  let m = compact.match(/^US(\d+)[NSEW]?$/)
+  // US: strip trailing single NSEW (direction-of-travel), not a distinct route id
+  let m = compact.match(/^US(\d+)([NSEW])?$/)
   if (m) return `US ${m[1]}`
-  m = compact.match(/^I(\d+)[NSEW]?$/)
-  if (m) return `I-${m[1]}`
-  m = compact.match(/^([A-Z]{2})(\d+)$/)
-  if (m && US_STATE_CODES.has(m[1])) return `${m[1]} ${m[2]}`
+  // Interstate: preserve trailing letter (I-35E / I-35W are distinct)
+  m = compact.match(/^I(\d+)([A-Z])?$/)
+  if (m) return m[2] ? `I-${m[1]}${m[2]}` : `I-${m[1]}`
+  // State route: MO123 / CA1A
+  m = compact.match(/^([A-Z]{2})(\d+)([A-Z])?$/)
+  if (m && US_STATE_CODES.has(m[1])) {
+    return m[3] ? `${m[1]} ${m[2]}${m[3]}` : `${m[1]} ${m[2]}`
+  }
   return (raw || '').toUpperCase().trim()
 }
 
@@ -1335,11 +1345,30 @@ export function looksLikeHighwayToken(raw: string): boolean {
   const re = new RegExp(`^${ROUTE_HWY_TOKEN_RE.source}$`, 'i')
   if (!re.test(raw.trim())) return false
   const norm = normalizeHwyToken(raw)
-  // Reject bogus two-letter+digits that are not US/I/state codes
   const compact = norm.replace(/[\s.\-]+/g, '')
-  if (/^US\d+$/.test(compact) || /^I\d+$/.test(compact)) return true
-  const sm = compact.match(/^([A-Z]{2})\d+$/)
+  if (/^US\d+$/.test(compact) || /^I\d+[A-Z]?$/.test(compact)) return true
+  const sm = compact.match(/^([A-Z]{2})\d+[A-Z]?$/)
   return !!(sm && US_STATE_CODES.has(sm[1]))
+}
+
+/** English tokens that collide with state codes when harvesting bare 2-letter words. */
+const ENGLISH_STATE_STOPWORDS = new Set([
+  'or', 'in', 'me', 'hi', 'ok', 'la', 'de', 'oh', 'pa', 'al', 'as', 'at', 'by', 'if', 'is', 'it', 'no', 'on', 'so', 'to', 'up', 'us',
+])
+
+/** Directive verbs that force specialInstructions path (never hard manualRoute override). */
+const ROUTE_PREF_DIRECTIVE_RE =
+  /\b(avoid|avoiding|prefer|use|take|via|include|including|through|thru|bypass|skip|shun|near|go\s+by|pass\s+by)\b/i
+
+export function hasRoutePreferenceDirectives(raw: string): boolean {
+  return ROUTE_PREF_DIRECTIVE_RE.test(raw || '')
+}
+
+/** Strip recognized highway tokens from a phrase before state-code extraction. */
+function stripHighwayTokensFromPhrase(phrase: string): string {
+  if (!phrase) return ''
+  const re = new RegExp(ROUTE_HWY_TOKEN_RE.source, 'gi')
+  return phrase.replace(re, (match) => (looksLikeHighwayToken(match) ? ' ' : match))
 }
 
 /** Coerce full name or 2-letter to US state code (parity with Python _coerce_state_code). */
@@ -1365,14 +1394,14 @@ function looksLikeStateToken(tok: string): boolean {
 /**
  * Preferred hwy presence: normalized plain-token *equality* (I-2 ≠ I-29), strip enrichment.
  * Match against the full highways list (highwaysAll / pre-curate), not a curated top-N subset.
- * Direction suffixes (US160W) and separator variants (MO-123 / MO 123) normalize equal.
+ * I-35E ≠ I-35W (route identity). US160w ≈ US 160 (travel-direction suffix stripped in normalize).
  */
 export function highwayTokenPresent(pref: string, hwys?: string[]): boolean {
-  const normP = normalizeHwyToken(pref).replace(/[-.\s]/g, '').toUpperCase().replace(/[NSEW]$/, '')
+  const normP = normalizeHwyToken(pref).replace(/[-.\s]/g, '').toUpperCase()
   if (!normP) return false
   return (hwys || []).some(h => {
     const plain = String(h).split(' (')[0]
-    const normH = normalizeHwyToken(plain).replace(/[-.\s]/g, '').toUpperCase().replace(/[NSEW]$/, '')
+    const normH = normalizeHwyToken(plain).replace(/[-.\s]/g, '').toUpperCase()
     return normH === normP
   })
 }
@@ -1478,21 +1507,24 @@ export function parseSpecialInstructions(
 
   // Avoid: stop at period OR next directive verb so "avoid IA. use US136 from Rock Port, MO to enter NE"
   // does not slurp MO/NE into avoidedStates. `to` tradeoff: "avoid CA to AZ" → only CA (use "avoid CA, AZ").
+  // Hyphen included so "avoid MO-123" is one highway token (not state MO + junk).
   const avoidVerbRe =
-    /(?:^|[\s,.(]|\b)(avoid|avoiding|no|skip|steer clear of|shun|bypass)\s+([a-z0-9,\s&\/]+?)(?=\s*(?:use|take|prefer|via|include|including|through|from|enter|to|avoid|avoiding|no|skip|steer clear of|shun|bypass|near|southern|northern|interstate|stay on|avoid major)\b|\s*\.|$)/gi
+    /(?:^|[\s,.(]|\b)(avoid|avoiding|no|skip|steer clear of|shun|bypass)\s+([a-z0-9,\s&\-\/]+?)(?=\s*(?:use|take|prefer|via|include|including|through|from|enter|to|avoid|avoiding|no|skip|steer clear of|shun|bypass|near|southern|northern|interstate|stay on|avoid major)\b|\s*\.|$)/gi
   const avoidPhrases: string[] = []
   while ((m = avoidVerbRe.exec(text)) !== null) {
     if (m[2]) avoidPhrases.push(m[2].split('.')[0])
   }
   for (const phrase of avoidPhrases) {
-    const rawTokens = phrase.split(/[,&\s\/]+/).map(s => s.trim()).filter(Boolean)
+    // Strip highways first — never hard-avoid a whole state for "avoid MO-123" / "avoid I-49"
+    const residual = stripHighwayTokensFromPhrase(phrase)
+    const rawTokens = residual.split(/[,&\s\/]+/).map(s => s.trim()).filter(Boolean)
     for (const code of stateCodesFromTokens(rawTokens)) {
       if (!avoided.includes(code)) avoided.push(code)
     }
   }
 
   const includeVerbRe =
-    /(?:^|[\s,.(]|\b)(include|including|via|through|near|go (?:by|via|through|near)|pass (?:by|near|through))\s+([a-z0-9,\s&\/]+?)(?=\s*(?:avoid|avoiding|no|skip|include|prefer|use|take|via|through|near|from|enter|to|southern|northern|interstate|stay on)\b|\s*\.|$)/gi
+    /(?:^|[\s,.(]|\b)(include|including|via|through|near|go (?:by|via|through|near)|pass (?:by|near|through))\s+([a-z0-9,\s&\-\/]+?)(?=\s*(?:avoid|avoiding|no|skip|include|prefer|use|take|via|through|near|from|enter|to|southern|northern|interstate|stay on)\b|\s*\.|$)/gi
   const includePhrases: string[] = []
   while ((m = includeVerbRe.exec(text)) !== null) {
     if (m[2]) includePhrases.push(m[2].split('.')[0])
@@ -1558,10 +1590,11 @@ export function parseSpecialInstructions(
  * Parse "Submit New Route" / preference free-text that may mix:
  * - State codes: MO, NE, IA
  * - Highways: MO-123, MO 123, US-160, US160, US160w, I-49
- * - Verb phrases: "avoid I-49, prefer US-160"
+ * - Verb phrases: "avoid I-49, prefer US-160" / "avoid AR, IL"
  * - Comma-separated bare lists (highways default to prefer)
  *
- * Reuses parseSpecialInstructions for verb clauses; bare highway lists become prefer.
+ * Verb clauses use parseSpecialInstructions; bare lists only when no directives.
+ * Never hard-avoid a state from a state-route highway token (avoid MO-123 ≠ avoid MO).
  */
 export function parseRoutePreferenceInput(input?: string): ParsedRoutePreferenceInput {
   const raw = (input || '').trim()
@@ -1570,9 +1603,11 @@ export function parseRoutePreferenceInput(input?: string): ParsedRoutePreference
   const special = parseSpecialInstructions(raw)
   const preferHighways: string[] = [...special.preferred]
   const avoidHighways: string[] = []
+  const avoidedStates: string[] = [...special.avoided]
   const states: string[] = []
+  const hasDirectives = hasRoutePreferenceDirectives(raw)
 
-  // Avoid-clause highways (parser only extracts avoid *states*; capture hwys separately)
+  // Avoid-clause highways (state-avoid parser already strips these from avoided states)
   const lower = raw.toLowerCase()
   const avoidVerbRe =
     /(?:^|[\s,.(]|\b)(avoid|avoiding|no|skip|steer clear of|shun|bypass)\s+([a-z0-9,\s&\-\/]+?)(?=\s*(?:use|take|prefer|via|include|including|through|from|enter|to|avoid|avoiding|no|skip|steer clear of|shun|bypass|near|southern|northern|interstate|stay on|avoid major)\b|\s*\.|$)/gi
@@ -1588,98 +1623,134 @@ export function parseRoutePreferenceInput(input?: string): ParsedRoutePreference
     }
   }
 
-  // Segment scan: comma/semicolon lists + residual whitespace tokens
-  const segments = raw.split(/[,;]+/).map(s => s.trim()).filter(Boolean)
-  for (const seg of segments) {
-    const segHasAvoid = /\b(avoid|avoiding|no|skip|bypass|shun)\b/i.test(seg)
-    const cleaned = seg
-      .replace(/\b(avoid|avoiding|prefer|use|take|via|include|including|bypass|skip|no|steer clear of|shun)\b/gi, ' ')
-      .trim()
+  // Prefer-clause highways beyond special.preferred (already filled); multi-verb same line is clause-scoped above.
 
-    const localHwy = new RegExp(ROUTE_HWY_TOKEN_RE.source, 'gi')
-    let hm: RegExpExecArray | null
-    const hwySpans: Array<{ start: number; end: number; token: string }> = []
-    while ((hm = localHwy.exec(cleaned)) !== null) {
-      if (!looksLikeHighwayToken(hm[1])) continue
-      hwySpans.push({ start: hm.index, end: hm.index + hm[1].length, token: hm[1] })
-      const h = normalizeHwyToken(hm[1])
-      if (!h) continue
-      if (segHasAvoid) {
-        if (!avoidHighways.includes(h)) avoidHighways.push(h)
-      } else if (!preferHighways.includes(h) && !avoidHighways.includes(h)) {
-        preferHighways.push(h)
+  if (!hasDirectives) {
+    // Bare list mode only: "MO, NE, IA" / "MO-123, US160w" / "MO, US-160"
+    // Do not use segment-level avoid tainting — no avoid verbs present.
+    const segments = raw.split(/[,;]+/).map(s => s.trim()).filter(Boolean)
+    for (const seg of segments) {
+      const localHwy = new RegExp(ROUTE_HWY_TOKEN_RE.source, 'gi')
+      let hm: RegExpExecArray | null
+      const hwySpans: Array<{ start: number; end: number }> = []
+      while ((hm = localHwy.exec(seg)) !== null) {
+        if (!looksLikeHighwayToken(hm[1])) continue
+        hwySpans.push({ start: hm.index, end: hm.index + hm[1].length })
+        const h = normalizeHwyToken(hm[1])
+        if (h && !preferHighways.includes(h) && !avoidHighways.includes(h)) {
+          preferHighways.push(h)
+        }
+      }
+
+      const stateTokRe = /\b([A-Za-z]{2})\b/g
+      let sm: RegExpExecArray | null
+      while ((sm = stateTokRe.exec(seg)) !== null) {
+        const code = sm[1].toUpperCase()
+        if (!US_STATE_CODES.has(code)) continue
+        // Skip English function words (or→OR) unless the whole segment is exactly that code
+        // (comma list "WA, OR" keeps Oregon; "US-160 or I-49" does not invent OR).
+        const tokLower = sm[1].toLowerCase()
+        if (ENGLISH_STATE_STOPWORDS.has(tokLower) && seg.trim().toUpperCase() !== code) {
+          continue
+        }
+        const at = sm.index
+        if (hwySpans.some(sp => at >= sp.start && at < sp.end)) continue
+        if (!states.includes(code)) states.push(code)
       }
     }
-
-    // Bare 2-letter states outside highway spans (MO in "MO-123" is not a state entry)
-    const stateTokRe = /\b([A-Za-z]{2})\b/g
-    let sm: RegExpExecArray | null
-    while ((sm = stateTokRe.exec(cleaned)) !== null) {
-      const code = sm[1].toUpperCase()
-      if (!US_STATE_CODES.has(code)) continue
-      const at = sm.index
-      const insideHwy = hwySpans.some(sp => at >= sp.start && at < sp.end)
-      if (insideHwy) continue
-      // Avoid-clause states are not corridor overrides
-      if (segHasAvoid) continue
-      if (!states.includes(code)) states.push(code)
+  } else {
+    // Directive mode: include-clause states become soft "include" states (not hard corridor)
+    for (const s of special.included) {
+      if (!states.includes(s)) states.push(s)
     }
-  }
-
-  // Include-clause states from special instructions (e.g. "include MS")
-  for (const s of special.included) {
-    if (!states.includes(s)) states.push(s)
+    // Prefer-clause may also use bare highway tokens after prefer verb (already in special.preferred).
+    // Also pull prefer highways from prefer clauses that share a line with avoid (clause-scoped).
+    const preferClauseRe =
+      /(?:^|[\s,.(]|\b)(use|take|prefer|via)\s+([a-z0-9,\s&\-\/]+?)(?=\s*(?:avoid|use|take|prefer|via|include|through|from|enter|to|southern|northern|interstate|stay on)\b|\s*\.|$)/gi
+    while ((m = preferClauseRe.exec(lower)) !== null) {
+      const phrase = m[2] || ''
+      const localHwy = new RegExp(ROUTE_HWY_TOKEN_RE.source, 'gi')
+      let hm: RegExpExecArray | null
+      while ((hm = localHwy.exec(phrase)) !== null) {
+        if (!looksLikeHighwayToken(hm[1])) continue
+        const h = normalizeHwyToken(hm[1])
+        if (h && !preferHighways.includes(h) && !avoidHighways.includes(h)) {
+          preferHighways.push(h)
+        }
+      }
+    }
   }
 
   const result: ParsedRoutePreferenceInput = { raw }
   if (states.length > 0) result.states = states
+  if (avoidedStates.length > 0) result.avoidedStates = avoidedStates
   if (preferHighways.length > 0) result.preferHighways = preferHighways
   if (avoidHighways.length > 0) result.avoidHighways = avoidHighways
   return result
 }
 
-/** True when at least one state or highway preference was recognized. */
+/** True when at least one state, avoid-state, or highway preference was recognized. */
 export function hasParseableRoutePreference(parsed: ParsedRoutePreferenceInput): boolean {
   return !!(
     (parsed.states && parsed.states.length > 0) ||
+    (parsed.avoidedStates && parsed.avoidedStates.length > 0) ||
     (parsed.preferHighways && parsed.preferHighways.length > 0) ||
     (parsed.avoidHighways && parsed.avoidHighways.length > 0)
   )
 }
 
 /**
- * Corridor-override path: only states, no highway prefs.
- * ("MO, NE, IA" → manualRoute array; highway lists never take this path.)
+ * Hard corridor-override path: bare state-token list only (no directive verbs, no hwys).
+ * "MO, NE, IA" → manualRoute. "include MS" / "via MO" / "avoid AR" never take this path.
  */
 export function isStatesOnlyRoutePreference(parsed: ParsedRoutePreferenceInput): boolean {
+  if (hasRoutePreferenceDirectives(parsed.raw)) return false
   return !!(
     parsed.states &&
     parsed.states.length > 0 &&
     !(parsed.preferHighways && parsed.preferHighways.length) &&
-    !(parsed.avoidHighways && parsed.avoidHighways.length)
+    !(parsed.avoidHighways && parsed.avoidHighways.length) &&
+    !(parsed.avoidedStates && parsed.avoidedStates.length)
   )
 }
 
 /**
- * Rebuild specialInstructions text so prefer/via/avoid clauses are explicit for the
- * existing OR-Tools + applyUserPreferences parsers (bare "MO-123, US160w" → prefer …).
+ * True when the only parseable prefs are unenforced highway-avoids (no prefer / state avoid / states).
+ * UI should reject rather than re-route as a silent no-op.
+ */
+export function isAvoidHighwayOnlyPreference(parsed: ParsedRoutePreferenceInput): boolean {
+  return !!(
+    parsed.avoidHighways &&
+    parsed.avoidHighways.length > 0 &&
+    !(parsed.preferHighways && parsed.preferHighways.length) &&
+    !(parsed.avoidedStates && parsed.avoidedStates.length) &&
+    !(parsed.states && parsed.states.length)
+  )
+}
+
+/**
+ * Rebuild specialInstructions text so prefer/via/avoid *state* clauses are explicit.
+ * Bare "MO-123, US160w" → prefer ….
+ * Avoid-highways are NOT emitted as bare `avoid I-49` (would be silent no-op / state pollution).
+ * They are noted as unenforced so applyUserPreferences can mark partial honesty.
  */
 export function formatRoutePreferenceAsSpecialInstructions(
   parsed: ParsedRoutePreferenceInput,
 ): string {
   const parts: string[] = []
-  const special = parseSpecialInstructions(parsed.raw)
-  if (special.avoided.length > 0) {
-    parts.push(`avoid ${special.avoided.join(', ')}`)
-  }
-  if (parsed.avoidHighways && parsed.avoidHighways.length > 0) {
-    parts.push(`avoid ${parsed.avoidHighways.join(', ')}`)
+  if (parsed.avoidedStates && parsed.avoidedStates.length > 0) {
+    parts.push(`avoid ${parsed.avoidedStates.join(', ')}`)
   }
   if (parsed.preferHighways && parsed.preferHighways.length > 0) {
     parts.push(`prefer ${parsed.preferHighways.join(', ')}`)
   }
-  if (parsed.states && parsed.states.length > 0) {
+  // Soft include for mixed bare states+hwys or include-clause states (never hard manualRoute)
+  if (parsed.states && parsed.states.length > 0 && !isStatesOnlyRoutePreference(parsed)) {
     parts.push(`include ${parsed.states.join(', ')}`)
+  }
+  if (parsed.avoidHighways && parsed.avoidHighways.length > 0) {
+    // Explicit unenforced marker — not a state-avoid clause
+    parts.push(`highway avoid not enforced: ${parsed.avoidHighways.join(', ')}`)
   }
   return parts.join('. ') || parsed.raw
 }
@@ -1711,6 +1782,9 @@ function applyUserPreferences(
   const avoided = parsed.avoided
   const included = parsed.included
   const preferredList = parsed.preferred
+  // Highway-avoid is not geometry-enforced — surface honest partial when requested
+  const routePrefs = parseRoutePreferenceInput(instructions)
+  const avoidHwyList = routePrefs.avoidHighways || []
   let avoidFilterSucceeded = false
 
   if (avoided.length > 0) {
@@ -1840,13 +1914,23 @@ function applyUserPreferences(
     }
   }
 
+  // Highway avoid is not enforced end-to-end — always note partial (no fake success)
+  for (const h of avoidHwyList) {
+    const note = `Highway avoid ${h} not enforced (geometry-level highway avoid unsupported)`
+    if (!applied.some(a => a.includes(`Highway avoid ${h}`))) {
+      applied.push(note)
+    }
+  }
+
   if (applied.length > 0) {
     const hasPartial =
       applied.some(
         a =>
           a.includes('still on primary corridor') ||
           a.includes('not on primary route') ||
-          a.includes('not on available corridors'),
+          a.includes('not on available corridors') ||
+          a.includes('Highway avoid') ||
+          a.includes('not enforced'),
       )
     const note = hasPartial
       ? `User preference partial: ${applied.join('; ')}`

@@ -90,6 +90,7 @@ import { isDevEnvironment } from '@/lib/dev-mode'
 import {
   formatRoutePreferenceAsSpecialInstructions,
   hasParseableRoutePreference,
+  isAvoidHighwayOnlyPreference,
   isStatesOnlyRoutePreference,
   parseRoutePreferenceInput,
 } from '@/lib/build-corridor'
@@ -2370,14 +2371,22 @@ export default function PermitTestPage() {
   }
 
   // Handle manual route change (Change Route feature)
-  // States-only → manual corridor override; highways (with or without states) → specialInstructions prefer path.
+  // States-only (bare list) → manual corridor override; highways / verbs → specialInstructions path.
+  // Uses changeRouteBusy only (not loading) so Approve never flips to "Saving…" during route update.
   const handleChangeRoute = async () => {
-    if (!manualRoute.trim()) return
+    if (!manualRoute.trim() || changeRouteBusy) return
 
     const parsed = parseRoutePreferenceInput(manualRoute)
     if (!hasParseableRoutePreference(parsed)) {
       setChangeRouteError(
-        'Could not parse route preferences. Try state codes (MO, NE), highways (MO-123, US-160, I-49), or mixed (prefer US-160, avoid I-49).',
+        'Could not parse route preferences. Try state codes (MO, NE), highways (MO-123, US-160, I-49), avoid AR, or prefer US-160.',
+      )
+      return
+    }
+    // Highway-avoid is not geometry-enforced — reject bare avoid-highway-only (no fake success)
+    if (isAvoidHighwayOnlyPreference(parsed)) {
+      setChangeRouteError(
+        'Highway avoid is not enforced yet. Prefer alternate roads (e.g. prefer US-160) or avoid states (e.g. avoid AR).',
       )
       return
     }
@@ -2389,9 +2398,8 @@ export default function PermitTestPage() {
       ? undefined
       : formatRoutePreferenceAsSpecialInstructions(parsed)
 
-    setLoading(true)
     setChangeRouteBusy(true)
-    setShowChangeRouteInput(false)
+    // Keep Change Route panel open so "Updating route…" is visible
 
     try {
       // Re-run — if OR-Tools mode, hit /api/optimize-route (same payload shape); else existing analyze-permit. Normalize for or-tools.
@@ -2533,12 +2541,12 @@ export default function PermitTestPage() {
       setSavedToDatabase(false)
       setManualRoute('')
       setChangeRouteError(null)
+      setShowChangeRouteInput(false) // close only on success
     } catch (error: any) {
       setResult({ error: error.message }) // make change-route errors (incl or-tools) surface in nice banner like submit; keep alert secondary for immediate feedback
       alert('Failed to analyze the new route: ' + error.message)
       setShowChangeRouteInput(true) // keep input open on error
     } finally {
-      setLoading(false)
       setChangeRouteBusy(false)
       // Dev-only: refresh OR-Tools status banner after change-route runs
       if (isDevEnvironment() && optimizationMode === 'ortools') {
@@ -4022,33 +4030,48 @@ export default function PermitTestPage() {
                     <div className="flex flex-col sm:flex-row justify-center gap-4">
                       <button
                         onClick={handleRejectAndRestart}
-                        disabled={loading}
+                        disabled={loading || changeRouteBusy}
                         className="px-8 py-3 rounded-lg text-lg font-semibold border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50"
                       >
                         Reject &amp; Start Over
                       </button>
                       <button
                         onClick={handleApproveAndSave}
-                        disabled={loading}
+                        disabled={loading || changeRouteBusy}
                         className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-8 py-3 rounded-lg text-lg disabled:bg-gray-400"
                       >
-                        {loading ? 'Saving…' : 'Approve & Continue to Portal Assist'}
+                        {/* Only Approve save uses "Saving…"; change-route uses changeRouteBusy + "Updating route…" */}
+                        {loading && !changeRouteBusy ? 'Saving…' : 'Approve & Continue to Portal Assist'}
                       </button>
                       <button
-                        onClick={() => setShowChangeRouteInput(!showChangeRouteInput)}
-                        disabled={loading}
+                        onClick={() => {
+                          if (showChangeRouteInput) {
+                            setShowChangeRouteInput(false)
+                            setChangeRouteError(null)
+                          } else {
+                            setShowChangeRouteInput(true)
+                          }
+                        }}
+                        disabled={loading || changeRouteBusy}
                         className="px-8 py-3 rounded-lg text-lg font-semibold border border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                       >
                         {showChangeRouteInput ? 'Cancel' : 'Change Route'}
                       </button>
                     </div>
 
+                    {changeRouteBusy && (
+                      <p className="text-center text-sm font-medium text-blue-700" role="status" aria-live="polite">
+                        Updating route…
+                      </p>
+                    )}
+
                     {showChangeRouteInput && (
                       <div className="max-w-md mx-auto">
                         <p className="text-sm text-gray-600 mb-2">
-                          States and/or highway preferences — e.g.{' '}
-                          <code>MO, NE</code>, <code>prefer US-160, MO-123</code>, or{' '}
-                          <code>MO-123, US160w</code>
+                          Bare state codes (e.g. <code>MO, NE</code>) set a hard corridor.
+                          Highways or mixed lists (e.g. <code>MO-123, US160w</code>,{' '}
+                          <code>MO, US-160</code>) use prefer/include bias — not a hard state list.
+                          Verbs: <code>prefer US-160</code>, <code>avoid AR</code>.
                         </p>
                         <div className="flex gap-2">
                           <input
@@ -4061,14 +4084,14 @@ export default function PermitTestPage() {
                             placeholder="MO, NE  or  MO-123, US160w"
                             className={`${fieldControlClass} flex-1 rounded px-3 py-2 text-sm`}
                             onKeyDown={(e) => { if (e.key === 'Enter') handleChangeRoute() }}
-                            disabled={loading || changeRouteBusy}
+                            disabled={changeRouteBusy}
                           />
                           <button
                             onClick={handleChangeRoute}
-                            disabled={loading || changeRouteBusy || !manualRoute.trim()}
+                            disabled={changeRouteBusy || !manualRoute.trim()}
                             className="bg-blue-600 text-white px-4 py-2 rounded text-sm disabled:bg-gray-400 min-w-[9.5rem]"
                           >
-                            {loading || changeRouteBusy ? 'Updating route…' : 'Submit New Route'}
+                            {changeRouteBusy ? 'Updating route…' : 'Submit New Route'}
                           </button>
                         </div>
                         {changeRouteError && (
