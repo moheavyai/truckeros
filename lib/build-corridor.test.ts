@@ -4,8 +4,13 @@ import {
   buildCorridorFromSteps,
   completeCorridorWithHighways,
   extractBorderCrossingsFromSteps,
+  formatRoutePreferenceAsSpecialInstructions,
+  hasParseableRoutePreference,
   hasPlausibleTransitions,
   highwayTokenPresent,
+  isStatesOnlyRoutePreference,
+  normalizeHwyToken,
+  parseRoutePreferenceInput,
   parseSpecialInstructions,
 } from './build-corridor'
 
@@ -308,6 +313,12 @@ describe('parseSpecialInstructions OD guard + avoid clause bound', () => {
     expect(parseSpecialInstructions('via I-29').preferred).toEqual(['I-29'])
   })
 
+  it('prefer clause accepts state routes and US direction suffix', () => {
+    expect(parseSpecialInstructions('prefer MO-123').preferred).toEqual(['MO 123'])
+    expect(parseSpecialInstructions('prefer US160w').preferred).toEqual(['US 160'])
+    expect(parseSpecialInstructions('prefer MO 123, US-160').preferred).toEqual(['MO 123', 'US 160'])
+  })
+
   it('avoid I-40 does not prefer I-40', () => {
     expect(parseSpecialInstructions('avoid I-40').preferred).toEqual([])
   })
@@ -352,6 +363,66 @@ describe('highwayTokenPresent equality', () => {
     expect(highwayTokenPresent('I-2', ['I-29'])).toBe(false)
     expect(highwayTokenPresent('US 136', ['US 13'])).toBe(false)
     expect(highwayTokenPresent('US 136', ['US 136 (entry 40.0,-95.5)'])).toBe(true)
+  })
+
+  it('matches state routes and strips US direction suffix', () => {
+    expect(highwayTokenPresent('MO-123', ['MO 123', 'I-49'])).toBe(true)
+    expect(highwayTokenPresent('MO 123', ['MO-123'])).toBe(true)
+    expect(highwayTokenPresent('US160w', ['US 160'])).toBe(true)
+    expect(highwayTokenPresent('US 160', ['US160W'])).toBe(true)
+  })
+})
+
+describe('parseRoutePreferenceInput (Submit New Route smart input)', () => {
+  it('MO-123, US160w → preferHighways only (no false need-states)', () => {
+    const parsed = parseRoutePreferenceInput('MO-123, US160w')
+    expect(parsed.preferHighways).toEqual(['MO 123', 'US 160'])
+    expect(parsed.states).toBeUndefined()
+    expect(parsed.avoidHighways).toBeUndefined()
+    expect(hasParseableRoutePreference(parsed)).toBe(true)
+    expect(isStatesOnlyRoutePreference(parsed)).toBe(false)
+    // Must not be treated as invalid state-code list
+    expect(formatRoutePreferenceAsSpecialInstructions(parsed)).toMatch(/prefer/i)
+    expect(formatRoutePreferenceAsSpecialInstructions(parsed)).toContain('MO 123')
+    expect(formatRoutePreferenceAsSpecialInstructions(parsed)).toContain('US 160')
+  })
+
+  it('MO, NE, IA → states corridor override still works', () => {
+    const parsed = parseRoutePreferenceInput('MO, NE, IA')
+    expect(parsed.states).toEqual(['MO', 'NE', 'IA'])
+    expect(parsed.preferHighways).toBeUndefined()
+    expect(isStatesOnlyRoutePreference(parsed)).toBe(true)
+    expect(hasParseableRoutePreference(parsed)).toBe(true)
+  })
+
+  it('avoid I-49, prefer US-160 extracts avoid + prefer highways', () => {
+    const parsed = parseRoutePreferenceInput('avoid I-49, prefer US-160')
+    expect(parsed.preferHighways).toEqual(['US 160'])
+    expect(parsed.avoidHighways).toEqual(['I-49'])
+    expect(isStatesOnlyRoutePreference(parsed)).toBe(false)
+    const text = formatRoutePreferenceAsSpecialInstructions(parsed)
+    expect(text).toMatch(/avoid.*I-49/i)
+    expect(text).toMatch(/prefer.*US 160/i)
+  })
+
+  it('mixed states + highway uses prefs path (not states-only)', () => {
+    const parsed = parseRoutePreferenceInput('MO, prefer US-160')
+    expect(parsed.preferHighways).toContain('US 160')
+    expect(isStatesOnlyRoutePreference(parsed)).toBe(false)
+  })
+
+  it('garbage input is not parseable (inline error path)', () => {
+    const parsed = parseRoutePreferenceInput('asdf qwerty')
+    expect(hasParseableRoutePreference(parsed)).toBe(false)
+    expect(isStatesOnlyRoutePreference(parsed)).toBe(false)
+  })
+
+  it('normalizeHwyToken covers dry-run tokens', () => {
+    expect(normalizeHwyToken('US160w')).toBe('US 160')
+    expect(normalizeHwyToken('MO-123')).toBe('MO 123')
+    expect(normalizeHwyToken('MO 123')).toBe('MO 123')
+    expect(normalizeHwyToken('I-49')).toBe('I-49')
+    expect(normalizeHwyToken('US-160')).toBe('US 160')
   })
 })
 

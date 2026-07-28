@@ -224,4 +224,20 @@ describe('Permit test page — OR-Tools dev chrome production gate', () => {
     // analyze-permit remains available on the non-ortools change-route branch (product path intact)
     expect(changeRoute).toContain("fetch('/api/analyze-permit'")
   })
+
+  it('Submit New Route accepts highway prefs (not state-codes-only alert)', () => {
+    const source = readPermitPageSource()
+    const changeRoute = handleChangeRouteSlice(source)
+
+    expect(source).toContain('parseRoutePreferenceInput')
+    expect(source).toContain('formatRoutePreferenceAsSpecialInstructions')
+    expect(source).toContain('isStatesOnlyRoutePreference')
+    expect(changeRoute).toContain('specialInstructions')
+    expect(changeRoute).toContain('setChangeRouteBusy')
+    expect(source).toContain('Updating route')
+    // Dead-end state-code-only validation must not remain
+    expect(source).not.toContain('Please enter a valid list of state codes')
+    expect(source).toContain('States and/or highway preferences')
+    expect(source).toContain('MO-123, US160w')
+  })
 })

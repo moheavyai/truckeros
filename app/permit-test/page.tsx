@@ -88,6 +88,12 @@ import {
 import { buildPermitCargoSnapshot } from '@/lib/permit-cargo-snapshot'
 import { isDevEnvironment } from '@/lib/dev-mode'
 import {
+  formatRoutePreferenceAsSpecialInstructions,
+  hasParseableRoutePreference,
+  isStatesOnlyRoutePreference,
+  parseRoutePreferenceInput,
+} from '@/lib/build-corridor'
+import {
   AXLE_GROUP_LABELS,
   MAX_TOTAL_AXLES,
   assignAxleGroups,
@@ -770,9 +776,10 @@ export default function PermitTestPage() {
   const [showChangeRouteInput, setShowChangeRouteInput] = useState(false)
   // manualRoute (string) is intentionally overloaded for minimal scope:
   // - Free-text prefs/specialInstructions (textarea + voice 'preferences') → sent as specialInstructions on main submit (affects ranking in buildIntelligentCorridor).
-  // - Comma-separated 2-letter states for explicit "Change Route" override → parsed to array and sent as manualRoute (bypasses intelligent + prefs entirely; precedence preserved in agent).
-  // Help text updated only on prefs textarea; parsing in handleChangeRoute filters to valid codes (often [] for natural language prefs text).
+  // - "Change Route" / Submit New Route: states-only → manualRoute array; highways (or mixed) → specialInstructions prefer path (same as prefs).
   const [manualRoute, setManualRoute] = useState('')
+  const [changeRouteError, setChangeRouteError] = useState<string | null>(null)
+  const [changeRouteBusy, setChangeRouteBusy] = useState(false)
 
   // Tier selector for cost estimation (temporary for testing)
   const [selectedTier, setSelectedTier] = useState<'Free' | 'Starter' | 'Pro'>('Starter')
@@ -2351,6 +2358,8 @@ export default function PermitTestPage() {
     setResult(null)
     setShowChangeRouteInput(false)
     setManualRoute('')
+    setChangeRouteError(null)
+    setChangeRouteBusy(false)
     setRouteProgress('idle')
     setRouteProgressDetail('')
     // Scroll back to the form for convenience
@@ -2361,28 +2370,34 @@ export default function PermitTestPage() {
   }
 
   // Handle manual route change (Change Route feature)
+  // States-only → manual corridor override; highways (with or without states) → specialInstructions prefer path.
   const handleChangeRoute = async () => {
     if (!manualRoute.trim()) return
 
-    // Parse comma-separated states (e.g. "AL, MS, TN, MO, NE")
-    const states = manualRoute
-      .split(',')
-      .map(s => s.trim().toUpperCase())
-      .filter(s => s.length === 2)
-
-    if (states.length === 0) {
-      alert('Please enter a valid list of state codes (e.g., AL, MS, TN, MO, NE)')
+    const parsed = parseRoutePreferenceInput(manualRoute)
+    if (!hasParseableRoutePreference(parsed)) {
+      setChangeRouteError(
+        'Could not parse route preferences. Try state codes (MO, NE), highways (MO-123, US-160, I-49), or mixed (prefer US-160, avoid I-49).',
+      )
       return
     }
+    setChangeRouteError(null)
+
+    const statesOnly = isStatesOnlyRoutePreference(parsed)
+    const states = parsed.states || []
+    const specialInstructions = statesOnly
+      ? undefined
+      : formatRoutePreferenceAsSpecialInstructions(parsed)
 
     setLoading(true)
+    setChangeRouteBusy(true)
     setShowChangeRouteInput(false)
 
     try {
       // Re-run — if OR-Tools mode, hit /api/optimize-route (same payload shape); else existing analyze-permit. Normalize for or-tools.
       if (optimizationMode === 'ortools') {
         const synced = syncDestinationFromDrops(formData)
-        const changePayload = {
+        const changePayload: Record<string, unknown> = {
           origin: synced.origin,
           destination: synced.destination,
           drops: synced.drops.map((d) => ({
@@ -2403,7 +2418,6 @@ export default function PermitTestPage() {
           destinationLat: synced.destinationLat,
           destinationLon: synced.destinationLon,
           routingEngine,
-          manualRoute: states,
           trailerLengthFt: Number(formData.trailerLengthFt) || undefined,
           axles: Number(formData.axles) || undefined,
           axleWeights: trimAxleWeightsForSubmit(
@@ -2419,6 +2433,12 @@ export default function PermitTestPage() {
               }
             : undefined,
           ...permitFormToLoadDetailsCarrierFields(formData),
+        }
+        if (statesOnly) {
+          changePayload.manualRoute = states
+        } else if (specialInstructions) {
+          // Highway bias / mixed prefs — same path as main form specialInstructions (not corridor override)
+          changePayload.specialInstructions = specialInstructions
         }
         const startTime = Date.now()
         console.log('OR-Tools fetch started')
@@ -2450,48 +2470,53 @@ export default function PermitTestPage() {
       } else {
         // Existing quick path unchanged. Use explicit payload subset (parity with or-tools changePayload + submit analyzePayload; Issue 11).
         const synced = syncDestinationFromDrops(formData)
+        const analyzeBody: Record<string, unknown> = {
+          origin: synced.origin,
+          destination: synced.destination,
+          drops: synced.drops.map((d) => ({
+            id: d.id,
+            query: d.query,
+            street: d.street,
+            city: d.city,
+            state: d.state,
+            zip: d.zip,
+            lat: d.lat,
+            lon: d.lon,
+          })),
+          weight: resolveSubmitWeightLbs(formData),
+          length: formData.length,
+          width: formData.width,
+          height: formData.height,
+          originLat: synced.originLat,
+          originLon: synced.originLon,
+          destinationLat: synced.destinationLat,
+          destinationLon: synced.destinationLon,
+          routingEngine,
+          trailerLengthFt: Number(formData.trailerLengthFt) || undefined,
+          axles: Number(formData.axles) || undefined,
+          axleWeights: trimAxleWeightsForSubmit(
+            formData.axleWeights,
+            formData.axles,
+            selectedRigSnapshot
+          ),
+          equipment: selectedRigSnapshot
+            ? {
+                tractor: selectedRigSnapshot.tractor,
+                trailers: selectedRigSnapshot.trailers,
+                axleGroups: selectedRigSnapshot.axleGroups ?? null,
+              }
+            : undefined,
+          ...permitFormToLoadDetailsCarrierFields(formData),
+        }
+        if (statesOnly) {
+          analyzeBody.manualRoute = states
+        } else if (specialInstructions) {
+          analyzeBody.specialInstructions = specialInstructions
+        }
         const response = await fetch('/api/analyze-permit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            origin: synced.origin,
-            destination: synced.destination,
-            drops: synced.drops.map((d) => ({
-              id: d.id,
-              query: d.query,
-              street: d.street,
-              city: d.city,
-              state: d.state,
-              zip: d.zip,
-              lat: d.lat,
-              lon: d.lon,
-            })),
-            weight: resolveSubmitWeightLbs(formData),
-            length: formData.length,
-            width: formData.width,
-            height: formData.height,
-            originLat: synced.originLat,
-            originLon: synced.originLon,
-            destinationLat: synced.destinationLat,
-            destinationLon: synced.destinationLon,
-            routingEngine,
-            manualRoute: states,
-            trailerLengthFt: Number(formData.trailerLengthFt) || undefined,
-            axles: Number(formData.axles) || undefined,
-            axleWeights: trimAxleWeightsForSubmit(
-              formData.axleWeights,
-              formData.axles,
-              selectedRigSnapshot
-            ),
-            equipment: selectedRigSnapshot
-              ? {
-                  tractor: selectedRigSnapshot.tractor,
-                  trailers: selectedRigSnapshot.trailers,
-                  axleGroups: selectedRigSnapshot.axleGroups ?? null,
-                }
-              : undefined,
-            ...permitFormToLoadDetailsCarrierFields(formData),
-          }),
+          body: JSON.stringify(analyzeBody),
         })
 
         const newAgentData = await response.json()
@@ -2507,12 +2532,14 @@ export default function PermitTestPage() {
       setResult(null) // clear any prior error banner (mirrors submit at 892; addresses Issue 2 + 6)
       setSavedToDatabase(false)
       setManualRoute('')
+      setChangeRouteError(null)
     } catch (error: any) {
       setResult({ error: error.message }) // make change-route errors (incl or-tools) surface in nice banner like submit; keep alert secondary for immediate feedback
       alert('Failed to analyze the new route: ' + error.message)
       setShowChangeRouteInput(true) // keep input open on error
     } finally {
       setLoading(false)
+      setChangeRouteBusy(false)
       // Dev-only: refresh OR-Tools status banner after change-route runs
       if (isDevEnvironment() && optimizationMode === 'ortools') {
         void checkOrToolsHealthRef.current?.()
@@ -4019,25 +4046,36 @@ export default function PermitTestPage() {
                     {showChangeRouteInput && (
                       <div className="max-w-md mx-auto">
                         <p className="text-sm text-gray-600 mb-2">
-                          Enter a new route as comma-separated state codes (e.g., <code>AL, MS, TN, MO, NE</code>)
+                          States and/or highway preferences — e.g.{' '}
+                          <code>MO, NE</code>, <code>prefer US-160, MO-123</code>, or{' '}
+                          <code>MO-123, US160w</code>
                         </p>
                         <div className="flex gap-2">
                           <input
                             type="text"
                             value={manualRoute}
-                            onChange={(e) => setManualRoute(e.target.value)}
-                            placeholder="AL, MS, TN, MO, NE"
+                            onChange={(e) => {
+                              setManualRoute(e.target.value)
+                              if (changeRouteError) setChangeRouteError(null)
+                            }}
+                            placeholder="MO, NE  or  MO-123, US160w"
                             className={`${fieldControlClass} flex-1 rounded px-3 py-2 text-sm`}
                             onKeyDown={(e) => { if (e.key === 'Enter') handleChangeRoute() }}
+                            disabled={loading || changeRouteBusy}
                           />
                           <button
                             onClick={handleChangeRoute}
-                            disabled={loading || !manualRoute.trim()}
-                            className="bg-blue-600 text-white px-4 py-2 rounded text-sm disabled:bg-gray-400"
+                            disabled={loading || changeRouteBusy || !manualRoute.trim()}
+                            className="bg-blue-600 text-white px-4 py-2 rounded text-sm disabled:bg-gray-400 min-w-[9.5rem]"
                           >
-                            Submit New Route
+                            {loading || changeRouteBusy ? 'Updating route…' : 'Submit New Route'}
                           </button>
                         </div>
+                        {changeRouteError && (
+                          <p className="mt-2 text-sm text-red-600" role="alert">
+                            {changeRouteError}
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
