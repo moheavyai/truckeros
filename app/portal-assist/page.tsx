@@ -36,6 +36,10 @@ import {
 } from '@/lib/portal-assistant'
 import { getPlaybook } from '@/lib/portal-playbooks'
 import { formatLoadDisplay } from '@/lib/parse-dimension'
+import {
+  formatPortalAddress,
+  resolvePortalAddressParts,
+} from '@/lib/format-address'
 import { formatPortalEquipmentSnapshot } from '@/lib/portal-equipment-display'
 import {
   formatCarrierReviewFields,
@@ -53,6 +57,28 @@ interface PermitRequest {
   origin_state: string
   destination_city: string
   destination_state: string
+  /** Full NL query / resolved street when saved with the request. */
+  origin_query?: string | null
+  destination_query?: string | null
+  origin_street?: string | null
+  destination_street?: string | null
+  origin_zip?: string | null
+  destination_zip?: string | null
+  /** Nested loadDetails-style stops when present. */
+  origin?: {
+    query?: string
+    street?: string
+    city?: string
+    state?: string
+    zip?: string
+  } | null
+  destination?: {
+    query?: string
+    street?: string
+    city?: string
+    state?: string
+    zip?: string
+  } | null
   weight: number
   length: number
   width: number
@@ -1048,7 +1074,12 @@ export default function PortalAssistPage() {
                 <div className="text-sm space-y-3">
                   <div>
                     <span className={`${fieldLabelClass} block`}>ROUTE</span>
-                    <span className="font-medium text-gray-900">{request.origin_city}, {request.origin_state} → {request.destination_city}, {request.destination_state}</span>
+                    <span className="font-medium text-gray-900 break-words">
+                      {formatPortalAddress(resolvePortalAddressParts(request, 'origin')) || '—'}
+                      {' → '}
+                      {formatPortalAddress(resolvePortalAddressParts(request, 'destination')) ||
+                        '—'}
+                    </span>
                   </div>
                   <div className="grid grid-cols-2 gap-x-6">
                     <div>

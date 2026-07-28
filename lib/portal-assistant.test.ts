@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   STATE_PORTAL_CONFIGS,
   formatBorderPoint,
+  formatPortalAddress,
   formatPortalCityState,
   generatePortalPrefill,
   getPortalStatesForAnalysis,
@@ -1143,6 +1144,159 @@ describe('buildPortalCompletenessChecklist', () => {
     expect(formatPortalCityState(undefined, 'TX')).toBe('')
     expect(formatPortalCityState(undefined, undefined)).toBe('')
     expect(formatPortalCityState('Houston', 'TX')).toBe('Houston, TX')
+  })
+
+  it('prefills full origin/destination street addresses when structured parts exist', () => {
+    const prefill = generatePortalPrefill(
+      {
+        origin_city: 'Willard',
+        origin_state: 'MO',
+        origin_street: '6851 MO 123',
+        origin_zip: '65781',
+        destination_city: 'Lamar',
+        destination_state: 'MO',
+        destination_street: '805 12th Street West',
+        destination_zip: '64759',
+        weight: 90000,
+        length: 70,
+        width: 10,
+        height: 13.5,
+        route_corridor: ['MO'],
+      },
+      'MO'
+    )
+    expect(prefill.generatedFields.origin).toBe('6851 MO 123, Willard, MO 65781')
+    expect(prefill.generatedFields.destination).toBe(
+      '805 12th Street West, Lamar, MO 64759'
+    )
+    expect(prefill.generatedFields.origin_street).toBe('6851 MO 123')
+    expect(prefill.generatedFields.origin_city).toBe('Willard')
+    expect(prefill.generatedFields.origin_state).toBe('MO')
+    expect(prefill.generatedFields.origin_zip).toBe('65781')
+    expect(prefill.generatedFields.destination_street).toBe('805 12th Street West')
+    expect(prefill.generatedFields.destination_city).toBe('Lamar')
+    expect(prefill.generatedFields.destination_state).toBe('MO')
+    expect(prefill.generatedFields.destination_zip).toBe('64759')
+
+    const packet = buildPortalClipboardPacket(prefill, STATE_PORTAL_CONFIGS.MO)
+    expect(packet).toContain('Origin: 6851 MO 123, Willard, MO 65781')
+    expect(packet).toContain('Destination: 805 12th Street West, Lamar, MO 64759')
+  })
+
+  it('uses nested loadDetails origin/destination and street-like query fallback', () => {
+    const nested = generatePortalPrefill(
+      {
+        origin: {
+          query: '6851 MO 123, Willard, MO 65781',
+          street: '6851 MO 123',
+          city: 'Willard',
+          state: 'MO',
+          zip: '65781',
+        },
+        destination: {
+          query: '805 12th Street West, Lamar, MO 64759',
+          street: '805 12th Street West',
+          city: 'Lamar',
+          state: 'MO',
+          zip: '64759',
+        },
+        weight: 90000,
+        length: 70,
+        width: 10,
+        height: 13.5,
+        route_corridor: ['MO'],
+      },
+      'MO'
+    )
+    expect(nested.generatedFields.origin).toBe('6851 MO 123, Willard, MO 65781')
+    expect(nested.generatedFields.destination).toBe(
+      '805 12th Street West, Lamar, MO 64759'
+    )
+
+    const queryOnly = generatePortalPrefill(
+      {
+        origin_city: 'Willard',
+        origin_state: 'MO',
+        origin_query: '6851 MO 123, Willard, MO 65781',
+        destination_city: 'Lamar',
+        destination_state: 'MO',
+        destination_query: '805 12th Street West, Lamar, MO 64759',
+        weight: 90000,
+        length: 70,
+        width: 10,
+        height: 13.5,
+        route_corridor: ['MO'],
+      },
+      'MO'
+    )
+    expect(queryOnly.generatedFields.origin).toBe('6851 MO 123, Willard, MO 65781')
+    expect(queryOnly.generatedFields.destination).toBe(
+      '805 12th Street West, Lamar, MO 64759'
+    )
+    // Query-only must not invent street/zip split fields
+    expect(queryOnly.generatedFields.origin_street).toBeUndefined()
+    expect(queryOnly.generatedFields.origin_zip).toBeUndefined()
+    expect(queryOnly.generatedFields.destination_street).toBeUndefined()
+    expect(queryOnly.generatedFields.destination_zip).toBeUndefined()
+    // City/state splits still populated from request fields
+    expect(queryOnly.generatedFields.origin_city).toBe('Willard')
+    expect(queryOnly.generatedFields.origin_state).toBe('MO')
+    expect(queryOnly.generatedFields.destination_city).toBe('Lamar')
+    expect(queryOnly.generatedFields.destination_state).toBe('MO')
+
+    const queryPacket = buildPortalClipboardPacket(queryOnly, STATE_PORTAL_CONFIGS.MO)
+    expect(queryPacket).toContain('Origin: 6851 MO 123, Willard, MO 65781')
+    expect(queryPacket).toContain(
+      'Destination: 805 12th Street West, Lamar, MO 64759'
+    )
+
+    const cityOnly = generatePortalPrefill(
+      {
+        origin_city: 'Willard',
+        origin_state: 'MO',
+        destination_city: 'Lamar',
+        destination_state: 'MO',
+        weight: 90000,
+        length: 70,
+        width: 10,
+        height: 13.5,
+        route_corridor: ['MO'],
+      },
+      'MO'
+    )
+    expect(cityOnly.generatedFields.origin).toBe('Willard, MO')
+    expect(cityOnly.generatedFields.destination).toBe('Lamar, MO')
+    expect(cityOnly.generatedFields.origin_street).toBeUndefined()
+    expect(cityOnly.generatedFields.origin_zip).toBeUndefined()
+    expect(cityOnly.generatedFields.destination_street).toBeUndefined()
+    expect(cityOnly.generatedFields.destination_zip).toBeUndefined()
+    expect(cityOnly.generatedFields.origin_city).toBe('Willard')
+    expect(cityOnly.generatedFields.origin_state).toBe('MO')
+    expect(cityOnly.generatedFields.destination_city).toBe('Lamar')
+    expect(cityOnly.generatedFields.destination_state).toBe('MO')
+  })
+
+  it('business-name query-only still prefills origin (intentional last resort)', () => {
+    const prefill = generatePortalPrefill(
+      {
+        origin_query: 'Case IH plant Grand Island',
+        destination_city: 'Lamar',
+        destination_state: 'MO',
+        weight: 90000,
+        length: 70,
+        width: 10,
+        height: 13.5,
+        route_corridor: ['NE', 'MO'],
+      },
+      'MO'
+    )
+    expect(prefill.generatedFields.origin).toBe('Case IH plant Grand Island')
+    expect(hasPrefillValue(prefill.generatedFields.origin)).toBe(true)
+    expect(prefill.generatedFields.origin_street).toBeUndefined()
+  })
+
+  it('re-exports formatPortalAddress from portal-assistant', () => {
+    expect(typeof formatPortalAddress).toBe('function')
   })
 
   it('warns multi-state when route string empty (not circular on corridor length)', () => {

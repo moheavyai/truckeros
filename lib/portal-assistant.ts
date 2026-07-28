@@ -29,6 +29,11 @@
 // to prevent Turbopack client bundle errors. This file must remain safe for both client and server.
 
 import { formatDimensionDisplay } from '@/lib/parse-dimension'
+import {
+  cleanAddressFragment,
+  formatPortalAddress,
+  resolvePortalAddressParts,
+} from '@/lib/format-address'
 import { classifyTrailerRole, normalizeTrailerTypeLabel } from '@/lib/trailer-types'
 import {
   getPlaybook,
@@ -39,6 +44,12 @@ import {
   resolveStepTips,
   resolveStepTitle,
 } from '@/lib/portal-playbooks'
+
+export {
+  formatPortalAddress,
+  formatPortalCityState,
+  resolvePortalAddressParts,
+} from '@/lib/format-address'
 
 export type PortalType = 'online' | 'gotpermits' | 'phone' | 'efee'
 
@@ -1873,24 +1884,6 @@ function formatPortalWeight(lbs: number | null | undefined): string | number {
   return `${Math.round(Number(lbs)).toLocaleString()} lbs`
 }
 
-/**
- * Formats "City, ST" for portal prefill. Requires both city and state;
- * empty / null / "undefined" fragments → '' so checklist does not false-pass
- * on "undefined, TX", ", TX", or city-only.
- */
-export function formatPortalCityState(city: unknown, state: unknown): string {
-  const clean = (v: unknown): string => {
-    if (v == null) return ''
-    const t = String(v).trim()
-    if (!t || /^(undefined|null)$/i.test(t)) return ''
-    return t
-  }
-  const c = clean(city)
-  const s = clean(state)
-  if (!c || !s) return ''
-  return `${c}, ${s}`
-}
-
 function pickEquipmentField(equip: Record<string, any>, ...keys: string[]): any {
   for (const key of keys) {
     const val = equip[key]
@@ -1960,12 +1953,30 @@ export function generatePortalPrefill(
 
   const generated: Record<string, any> = {}
 
+  // Origin / destination: full street line when available, else city/state (or street-like query)
+  const originParts = resolvePortalAddressParts(request, 'origin')
+  const destParts = resolvePortalAddressParts(request, 'destination')
+  generated.origin = formatPortalAddress(originParts)
+  generated.destination = formatPortalAddress(destParts)
+  // Split components when present (for playbooks / portals that want street vs city/state/zip)
+  const originStreet = cleanAddressFragment(originParts.street)
+  const originCity = cleanAddressFragment(originParts.city)
+  const originState = cleanAddressFragment(originParts.state)
+  const originZip = cleanAddressFragment(originParts.zip)
+  if (originStreet) generated.origin_street = originStreet
+  if (originCity) generated.origin_city = originCity
+  if (originState) generated.origin_state = originState
+  if (originZip) generated.origin_zip = originZip
+  const destStreet = cleanAddressFragment(destParts.street)
+  const destCity = cleanAddressFragment(destParts.city)
+  const destState = cleanAddressFragment(destParts.state)
+  const destZip = cleanAddressFragment(destParts.zip)
+  if (destStreet) generated.destination_street = destStreet
+  if (destCity) generated.destination_city = destCity
+  if (destState) generated.destination_state = destState
+  if (destZip) generated.destination_zip = destZip
+
   // Map common fields (dimensions as clean X' Y" for portal copy-paste)
-  generated.origin = formatPortalCityState(request.origin_city, request.origin_state)
-  generated.destination = formatPortalCityState(
-    request.destination_city,
-    request.destination_state
-  )
   generated.weight = formatPortalWeight(request.weight) || request.weight
   generated.length = formatPortalDimension(request.length) || request.length
   generated.width = formatPortalDimension(request.width) || request.width
