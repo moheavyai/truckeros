@@ -152,7 +152,14 @@ describe('Portal Assist page UX', () => {
     const source = readSource(pagePath)
     expect(source).toContain('window.confirm')
     expect(source).toContain('Regenerating will clear your approval for this state')
-    expect(source).toMatch(/if \(isApproved\)[\s\S]*handleRegeneratePrefill/)
+    expect(source).toMatch(
+      /if \(isStateHumanApproved\(selectedState\)\)[\s\S]*handleRegeneratePrefill|const handleRegeneratePrefill[\s\S]*isStateHumanApproved\(selectedState\)/
+    )
+    const regenStart = source.indexOf('const handleRegeneratePrefill = () => {')
+    const regenEnd = source.indexOf('const copyToClipboard', regenStart)
+    const regen = source.slice(regenStart, regenEnd > regenStart ? regenEnd : regenStart + 800)
+    expect(regen).toContain('isStateHumanApproved(selectedState)')
+    expect(regen).toContain('addForceReapprove(selectedState)')
   })
 
   it('includes carrierDriver in demo request', () => {
@@ -409,6 +416,161 @@ describe('Portal Assist — Launch all corridor portals', () => {
   })
 })
 
+describe('Portal Assist — post-approve launch panel + per-state Open pills', () => {
+  it('exposes portal-launch-panel as scroll/focus target after approve success', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="portal-launch-panel"')
+    expect(source).toContain('portalLaunchPanelRef')
+    expect(source).toContain('portalLaunchHeadingRef')
+    expect(source).toContain('scroll-mt-20')
+    expect(source).toContain('tabIndex={-1}')
+    // Scroll helper uses double rAF + reduced-motion; approve success only calls helper
+    expect(source).toContain('const scrollFocusPortalLaunch = () => {')
+    expect(source).toContain("matchMedia('(prefers-reduced-motion: reduce)')")
+    expect(source).toContain("reduceMotion ? 'auto' : 'smooth'")
+    expect(source).toContain("scrollIntoView({ behavior, block: 'start' })")
+    const scrollHelperStart = source.indexOf('const scrollFocusPortalLaunch = () => {')
+    const approveGateStart = source.indexOf('const handleApproveGate = async () => {')
+    const parseOutputStart = source.indexOf('const handleParseOutput = async () => {')
+    const scrollHelper = source.slice(scrollHelperStart, approveGateStart)
+    const approveGate = source.slice(approveGateStart, parseOutputStart)
+    expect(scrollHelper).toContain('requestAnimationFrame(() => {')
+    expect(scrollHelper).toContain('requestAnimationFrame(run)')
+    expect(scrollHelper).toContain('portalLaunchPanelRef')
+    expect(scrollHelper).toContain('portalLaunchHeadingRef')
+    expect(scrollHelper).toContain(`[data-testid="open-portal-\${selectedState}"]`)
+    expect(scrollHelper).toContain('focus({ preventScroll: true })')
+    expect(approveGate).toContain('scrollFocusPortalLaunch()')
+    // Success path only — never auto-open tabs on approve
+    expect(approveGate).not.toContain('openStatePortals')
+    expect(approveGate).not.toContain('window.open')
+    expect(approveGate).not.toContain('handleOpenStatePortal')
+  })
+
+  it('renders Open ST portal buttons only for portalStatesForRequest corridor', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="corridor-open-portals"')
+    expect(source).toContain('data-testid={`open-portal-${st}`}')
+    expect(source).toContain('Open {st} portal')
+    expect(source).toContain('portalStatesForRequest.map((st)')
+    expect(source).toContain('handleOpenStatePortal(st)')
+    expect(source).toContain('isStateHumanApproved')
+    // Batch launch still present; exclusivity: pills only map corridor states
+    expect(source).toContain('Launch all corridor portals')
+    expect(source).not.toMatch(/allStateCodes\.map\(\(st\)[\s\S]{0,80}Open \{st\} portal/)
+  })
+
+  it('marks approved corridor states with success class and data-human-approved', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain("data-human-approved={approved ? 'true' : 'false'}")
+    expect(source).toContain('isStateHumanApproved(st)')
+    const pillMapStart = source.indexOf('portalStatesForRequest.map((st) => {')
+    // End before batch Launch all (which may be disabled when corridor empty)
+    const pillMapEnd = source.indexOf('{/* Batch CTA stays emerald', pillMapStart)
+    const pillBlock = source.slice(
+      pillMapStart,
+      pillMapEnd > pillMapStart ? pillMapEnd : pillMapStart + 900
+    )
+    expect(pillBlock).toContain('Open {st} portal')
+    expect(pillBlock).not.toMatch(/disabled=\{/)
+    expect(pillBlock).not.toContain('disabled=')
+    // Class ternary asserted inside open-portal map slice
+    expect(pillBlock).toContain('buttonSuccessClass')
+    expect(pillBlock).toContain('buttonSecondaryClass')
+    expect(pillBlock).toMatch(
+      /approved \? `\$\{buttonSuccessClass\} rounded-lg` : buttonSecondaryClass/
+    )
+    // human_approved from submissions; forceReapproveStates suppresses; session isApproved for selected
+    const helperStart = source.indexOf('const isStateHumanApproved = (st: string)')
+    expect(helperStart).toBeGreaterThan(-1)
+    const helperEnd = source.indexOf('const corridorStateSet', helperStart)
+    const helper = source.slice(helperStart, helperEnd > helperStart ? helperEnd : helperStart + 600)
+    expect(helper).toContain('human_approved')
+    expect(helper).toContain('isApproved')
+    expect(helper).toContain('selectedState')
+    expect(helper).toContain('submissions.find')
+    expect(helper).toContain('forceReapproveStates.has(st)')
+    expect(helper).toMatch(/if \(forceReapproveStates\.has\(st\)\) return false/)
+  })
+
+  it('tracks force-reapprove per state (survives switch; cleared on re-approve / new request)', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('forceReapproveStates')
+    expect(source).toContain('addForceReapprove')
+    expect(source).toContain('removeForceReapprove')
+    expect(source).toContain('useState<ReadonlySet<string>>')
+    // applyPortalState: only wipe overrides when loading a new request (resetTripType)
+    const applyStart = source.indexOf('const applyPortalState = (')
+    const applyEnd = source.indexOf('// Load auth + optional', applyStart)
+    const applyBody = source.slice(applyStart, applyEnd > applyStart ? applyEnd : applyStart + 2500)
+    expect(applyBody).toContain('opts?.resetTripType')
+    expect(applyBody).toContain('Do not clear forceReapproveStates on state switch')
+    const resetIdx = applyBody.indexOf('if (opts?.resetTripType)')
+    expect(resetIdx).toBeGreaterThan(-1)
+    const resetBlock = applyBody.slice(resetIdx, resetIdx + 280)
+    expect(resetBlock).toContain('setForceReapproveStates(new Set())')
+    // Outside resetTripType branch, no unconditional clear (count of setForce… is 1 inside apply)
+    const clearMatches = applyBody.match(/setForceReapproveStates\(new Set\(\)\)/g) || []
+    expect(clearMatches.length).toBe(1)
+    // Approve clears only the approved state
+    const approveGateStart = source.indexOf('const handleApproveGate = async () => {')
+    const parseOutputStart = source.indexOf('const handleParseOutput = async () => {')
+    const approveGate = source.slice(approveGateStart, parseOutputStart)
+    expect(approveGate).toContain('removeForceReapprove(selectedState)')
+    expect(approveGate).not.toContain('setForceReapproveStates(new Set())')
+  })
+
+  it('shows short post-approve copy near the launch panel with aria-live', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="post-approve-launch-hint"')
+    expect(source).toContain('approved — open portal when ready')
+    // Gated by shared approval truth, not session isApproved alone
+    expect(source).toContain('selectedIsHumanApproved && (')
+    expect(source).toContain('const selectedIsHumanApproved = isStateHumanApproved(selectedState)')
+    const hintIdx = source.indexOf('data-testid="post-approve-launch-hint"')
+    const hintSlice = source.slice(hintIdx, hintIdx + 280)
+    expect(hintSlice).toContain('aria-live="polite"')
+    expect(hintSlice).toContain('role="status"')
+    // Hint lives inside the same portal-launch-panel
+    const panelIdx = source.indexOf('data-testid="portal-launch-panel"')
+    const outputIdx = source.indexOf('4. Portal Output Paste')
+    expect(panelIdx).toBeGreaterThan(-1)
+    expect(hintIdx).toBeGreaterThan(panelIdx)
+    expect(outputIdx).toBeGreaterThan(hintIdx)
+  })
+
+  it('always provides selected-state open CTA (fallback when corridor empty / off-corridor)', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('showSelectedOpenFallback')
+    expect(source).toContain('selectedInCorridor')
+    expect(source).toContain('portalStatesForRequest.length === 0 || !selectedInCorridor')
+    expect(source).toContain('data-open-fallback="true"')
+    expect(source).toContain('data-testid={`open-portal-${selectedState}`}')
+    expect(source).toContain('Open {selectedState} portal')
+    // Gate UX uses same approval helper as pills
+    expect(source).toContain('!selectedIsHumanApproved ? (')
+    // No-request path uses real anchor for middle-click / copy-link
+    expect(source).toContain('href={config.portalUrl}')
+    expect(source).toContain('rel="noopener noreferrer"')
+    const fallbackIdx = source.indexOf('showSelectedOpenFallback && config.portalUrl')
+    const fallbackSlice = source.slice(fallbackIdx, fallbackIdx + 900)
+    expect(fallbackSlice).toContain('!request ? (')
+    expect(fallbackSlice).toContain('<a')
+    expect(fallbackSlice).toContain('href={config.portalUrl}')
+  })
+
+  it('per-state open sets corridorLaunchHint like batch launch', () => {
+    const source = readSource(pagePath)
+    const handlerStart = source.indexOf('const handleOpenStatePortal = (st: string) => {')
+    expect(handlerStart).toBeGreaterThan(-1)
+    const handlerEnd = source.indexOf('const scrollFocusPortalLaunch', handlerStart)
+    const handler = source.slice(handlerStart, handlerEnd)
+    expect(handler).toContain('openStatePortals([st], { staggerMs: 0 })')
+    expect(handler).toContain('setCorridorLaunchHint')
+    expect(handler).toContain('Opened ${st} portal tab.')
+  })
+})
+
 describe('Portal Assist — Filing kit (copy, checklist, trip type, workflow)', () => {
   it('imports clipboard packet + completeness checklist helpers', () => {
     const source = readSource(pagePath)
@@ -481,6 +643,8 @@ describe('Portal Assist — Filing kit (copy, checklist, trip type, workflow)', 
     const handler = source.slice(handlerStart, handlerEnd)
     expect(handler).toContain('setIsApproved(false)')
     expect(handler).toContain('setApprovalChecked(false)')
+    // Per-state force reapprove so gate/pills/hint leave approved via submissions
+    expect(handler).toContain('addForceReapprove(selectedState)')
   })
 
   it('resets tripType when loading a new request', () => {
@@ -511,7 +675,7 @@ describe('Portal Assist — Filing kit (copy, checklist, trip type, workflow)', 
     const source = readSource(pagePath)
     expect(source).toContain('handleApproveGate')
     expect(source).toContain('Launch all corridor portals')
-    expect(source).toContain('Open Real {selectedState} Portal')
+    expect(source).toContain('Open {selectedState} portal')
     // Still must not auto-open portals when loading a request
     const loadStart = source.indexOf('const loadRealRequest = async (')
     const loadEnd = source.indexOf('const loadSubmissionsForRequest', loadStart)
