@@ -464,7 +464,10 @@ describe('Portal Assist — post-approve launch panel + per-state Open pills', (
     const source = readSource(pagePath)
     expect(source).toContain("data-human-approved={approved ? 'true' : 'false'}")
     expect(source).toContain('isStateHumanApproved(st)')
-    const pillMapStart = source.indexOf('portalStatesForRequest.map((st) => {')
+    // Scope to corridor open pills (not bulk-approve checklist map earlier in the file)
+    const openPillsStart = source.indexOf('data-testid="corridor-open-portals"')
+    expect(openPillsStart).toBeGreaterThan(-1)
+    const pillMapStart = source.indexOf('portalStatesForRequest.map((st) => {', openPillsStart)
     // End before batch Launch all (which may be disabled when corridor empty)
     const pillMapEnd = source.indexOf('{/* Batch CTA stays emerald', pillMapStart)
     const pillBlock = source.slice(
@@ -547,8 +550,10 @@ describe('Portal Assist — post-approve launch panel + per-state Open pills', (
     expect(source).toContain('data-open-fallback="true"')
     expect(source).toContain('data-testid={`open-portal-${selectedState}`}')
     expect(source).toContain('Open {selectedState} portal')
-    // Gate UX uses same approval helper as pills
-    expect(source).toContain('!selectedIsHumanApproved ? (')
+    // Gate UX uses same approval helper as pills (bulk form + single-state CTA when unapproved)
+    expect(source).toContain('showApprovalConfirm')
+    expect(source).toContain('!selectedIsHumanApproved && (')
+    expect(source).toContain('selectedIsHumanApproved')
     // No-request path uses real anchor for middle-click / copy-link
     expect(source).toContain('href={config.portalUrl}')
     expect(source).toContain('rel="noopener noreferrer"')
@@ -682,6 +687,210 @@ describe('Portal Assist — Filing kit (copy, checklist, trip type, workflow)', 
     const loadBody = source.slice(loadStart, loadEnd > loadStart ? loadEnd : loadStart + 2000)
     expect(loadBody).not.toContain('openStatePortals')
     expect(loadBody).not.toContain('window.open')
+  })
+})
+
+describe('Portal Assist — bulk approve selected corridor states', () => {
+  it('renders States to approve checklist from portalStatesForRequest', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="bulk-approve-states"')
+    expect(source).toContain('States to approve')
+    expect(source).toContain('bulkSelectedStates')
+    expect(source).toContain('toggleBulkState')
+    // Options = corridor / permit analysis states in stable origin→dest order
+    const checklistIdx = source.indexOf('data-testid="bulk-approve-states"')
+    expect(checklistIdx).toBeGreaterThan(-1)
+    const checklistEnd = source.indexOf('data-testid="bulk-approve-submit"', checklistIdx)
+    const checklistBlock = source.slice(
+      checklistIdx,
+      checklistEnd > checklistIdx ? checklistEnd : checklistIdx + 3500
+    )
+    expect(checklistBlock).toContain('portalStatesForRequest.map((st)')
+    expect(checklistBlock).toContain('data-testid={`bulk-approve-state-${st}`}')
+    expect(checklistBlock).toContain('data-testid={`bulk-approve-status-${st}`}')
+    expect(checklistBlock).toContain('isStateHumanApproved(st)')
+    expect(checklistBlock).toContain('getStateStatus(st)')
+    expect(checklistBlock).toContain('Already approved')
+    expect(checklistBlock).toContain('Needed')
+  })
+
+  it('uncheck removes state from bulk batch payload', () => {
+    const source = readSource(pagePath)
+    // Toggle helper deletes when unchecked
+    const toggleStart = source.indexOf('const toggleBulkState = (st: string, checked: boolean) => {')
+    expect(toggleStart).toBeGreaterThan(-1)
+    const toggleEnd = source.indexOf('// Parse + Compare', toggleStart)
+    const toggle = source.slice(toggleStart, toggleEnd > toggleStart ? toggleEnd : toggleStart + 400)
+    expect(toggle).toContain('next.delete(st)')
+    expect(toggle).toContain('next.add(st)')
+    // Batch payload filters corridor by bulkSelectedStates.has
+    const bulkStart = source.indexOf('const handleBulkApproveSelected = async () => {')
+    expect(bulkStart).toBeGreaterThan(-1)
+    const bulkEnd = source.indexOf('const toggleBulkState', bulkStart)
+    const bulk = source.slice(bulkStart, bulkEnd > bulkStart ? bulkEnd : bulkStart + 2500)
+    expect(bulk).toContain(
+      'portalStatesForRequest.filter((st) => bulkSelectedStates.has(st))'
+    )
+  })
+
+  it('Approve selected calls recordStateApproval per selected state with per-state prefill', () => {
+    const source = readSource(pagePath)
+    // Shared helper used by single + bulk (no drift)
+    expect(source).toContain('const recordStateApproval = async (')
+    expect(source).toContain('createPortalSubmissionRecord')
+    expect(source).toContain("fetch('/api/portal-submissions'")
+    expect(source).toContain('record_approval: true')
+
+    const bulkStart = source.indexOf('const handleBulkApproveSelected = async () => {')
+    const bulkEnd = source.indexOf('const toggleBulkState', bulkStart)
+    const bulk = source.slice(bulkStart, bulkEnd > bulkStart ? bulkEnd : bulkStart + 4000)
+
+    // Prefer on-screen prefill for selected; others generate per-state
+    expect(bulk).toContain('st === selectedStateSnapshot && prefillSnapshot')
+    expect(bulk).toContain('generatePortalPrefill(request, st, { tripType: tripTypeSnapshot })')
+    expect(bulk).toContain('await recordStateApproval(st, stPrefill')
+    expect(bulk).toContain('for (const st of toApprove)')
+    // Skip already human-approved (idempotent)
+    expect(bulk).toContain('!isStateHumanApproved(st)')
+    // Partial failure reporting + refresh
+    expect(bulk).toContain('succeeded')
+    expect(bulk).toContain('failed')
+    expect(bulk).toContain('failed.push')
+    expect(bulk).toContain('loadSubmissionsForRequest(request.id)')
+    // Full success scrolls; partial fail does not scroll
+    expect(bulk).toContain('scrollFocusPortalLaunch()')
+    expect(bulk).toContain('Partial success: do not scroll')
+    expect(bulk).toContain('setBulkApproveSummary(summary)')
+    expect(bulk).not.toContain('openStatePortals')
+    expect(bulk).not.toContain('window.open')
+    expect(bulk).not.toContain('handleOpenStatePortal')
+
+    // Single-state path still uses same helper
+    const approveStart = source.indexOf('const handleApproveGate = async () => {')
+    const approveEnd = source.indexOf('const handleBulkApproveSelected', approveStart)
+    const approve = source.slice(
+      approveStart,
+      approveEnd > approveStart ? approveEnd : approveStart + 1500
+    )
+    expect(approve).toContain('recordStateApproval(selectedState, prefill')
+    expect(approve).toContain('removeForceReapprove(selectedState)')
+  })
+
+  it('uses bulkPendingCount for CTA label/disable (not checked-already-approved count)', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="bulk-approve-submit"')
+    expect(source).toContain('bulkPendingCount')
+    // CTA disabled when no pending work among selection
+    expect(source).toMatch(
+      /disabled=\{\s*!approvalChecked \|\| approving \|\| bulkPendingCount === 0\s*\}/
+    )
+    // Label uses pending count
+    expect(source).toContain('Approve ${bulkPendingCount} states')
+    expect(source).toContain('Approve 1 state')
+    expect(source).toContain('All selected already approved')
+    expect(source).toContain('Approve selected states')
+  })
+
+  it('empty selection / all-already-approved no-ops with message (no silent scroll)', () => {
+    const source = readSource(pagePath)
+    const bulkStart = source.indexOf('const handleBulkApproveSelected = async () => {')
+    const bulkEnd = source.indexOf('const toggleBulkState', bulkStart)
+    const bulk = source.slice(bulkStart, bulkEnd > bulkStart ? bulkEnd : bulkStart + 2000)
+    expect(bulk).toContain('selected.length === 0')
+    expect(bulk).toContain('Select at least one state to approve.')
+    // Already-approved: message, no scroll-as-success
+    expect(bulk).toContain('All selected states already approved.')
+    expect(bulk).toContain('Not a success path — do not scroll')
+    // toApprove empty branch must not call scrollFocusPortalLaunch before setApproving
+    const alreadyIdx = bulk.indexOf('All selected states already approved.')
+    const scrollAfter = bulk.indexOf('scrollFocusPortalLaunch()', alreadyIdx)
+    // scroll only appears later on full-success path, not immediately after already-approved message
+    const nextReturn = bulk.indexOf('return', alreadyIdx)
+    const between = bulk.slice(alreadyIdx, nextReturn > alreadyIdx ? nextReturn + 20 : alreadyIdx + 200)
+    expect(between).not.toContain('scrollFocusPortalLaunch')
+  })
+
+  it('guards against double-submit with approving lock on single and bulk', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('approvingLockRef')
+    const approveStart = source.indexOf('const handleApproveGate = async () => {')
+    const bulkStart = source.indexOf('const handleBulkApproveSelected = async () => {')
+    const toggleStart = source.indexOf('const toggleBulkState = (st: string, checked: boolean) => {')
+    const approve = source.slice(approveStart, bulkStart)
+    const bulk = source.slice(bulkStart, toggleStart)
+    expect(approve).toContain('if (approvingLockRef.current || approving) return')
+    expect(bulk).toContain('if (approvingLockRef.current || approving) return')
+    expect(approve).toContain('approvingLockRef.current = true')
+    expect(bulk).toContain('approvingLockRef.current = true')
+    expect(approve).toContain('approvingLockRef.current = false')
+    expect(bulk).toContain('approvingLockRef.current = false')
+  })
+
+  it('omits PDF reference on non-selected bulk states', () => {
+    const source = readSource(pagePath)
+    const bulkStart = source.indexOf('const handleBulkApproveSelected = async () => {')
+    const bulkEnd = source.indexOf('const toggleBulkState', bulkStart)
+    const bulk = source.slice(bulkStart, bulkEnd > bulkStart ? bulkEnd : bulkStart + 3500)
+    expect(bulk).toContain(
+      'pdfReference: st === selectedStateSnapshot ? pdfRefSnapshot : null'
+    )
+    // Helper accepts explicit pdfReference (bulk controls attachment)
+    const helperStart = source.indexOf('const recordStateApproval = async (')
+    const helperEnd = source.indexOf('const handleApproveGate', helperStart)
+    const helper = source.slice(helperStart, helperEnd)
+    expect(helper).toContain('pdfReference?: string | null')
+    expect(helper).toContain("opts && 'pdfReference' in opts")
+  })
+
+  it('disables trip type, regenerate, checklist, and notes while approving', () => {
+    const source = readSource(pagePath)
+    // Trip type buttons
+    const tripIdx = source.indexOf('data-testid="trip-type-control"')
+    const tripSlice = source.slice(tripIdx, tripIdx + 800)
+    expect(tripSlice).toContain('disabled={approving}')
+    // Checklist checkboxes (disabled before data-testid on the input)
+    const checklistIdx = source.indexOf('data-testid="bulk-approve-states"')
+    const checklistSlice = source.slice(checklistIdx, checklistIdx + 2000)
+    expect(checklistSlice).toContain('disabled={approving}')
+    expect(checklistSlice).toContain('data-testid={`bulk-approve-state-${st}`}')
+    // Notes textarea disabled while approving
+    expect(source).toMatch(
+      /value=\{approvalNotes\}[\s\S]{0,120}disabled=\{approving\}/
+    )
+    // Regenerate disabled while approving
+    expect(source).toContain('disabled={!request || approving}')
+    // toggle + regenerate + tripType handlers guard approving
+    expect(source).toContain('if (approving || approvingLockRef.current) return')
+  })
+
+  it('surfaces partial failure messaging and launch-panel summary', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="bulk-approve-summary"')
+    expect(source).toContain('data-testid="bulk-approve-error"')
+    expect(source).toContain("Failed: ${failed.map((f) => `${f.state} (${f.error})`).join('; ')}")
+    expect(source).toContain('setBulkApproveSummary(summary)')
+    expect(source).toContain('Approved ${succeeded.join(')
+  })
+
+  it('defaults bulk checklist to all corridor states when request loads', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('setBulkSelectedStates(new Set(portalStatesForRequest))')
+    expect(source).toContain('request?.id')
+  })
+
+  it('keeps single-state Approve & Record path for one-off fixes', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="approve-single-state"')
+    expect(source).toContain('Approve & Record for ${selectedState} Submission')
+    expect(source).toContain('onClick={handleApproveGate}')
+    // Bulk is primary success CTA; single remains available when selected not yet approved
+    expect(source).toContain('onClick={handleBulkApproveSelected}')
+    expect(source).toContain('handleApproveGate')
+    // Re-ack after single so bulk cannot fire on stale check
+    const approveStart = source.indexOf('const handleApproveGate = async () => {')
+    const bulkStart = source.indexOf('const handleBulkApproveSelected', approveStart)
+    const approve = source.slice(approveStart, bulkStart)
+    expect(approve).toContain('setApprovalChecked(false)')
   })
 })
 

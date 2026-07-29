@@ -222,6 +222,17 @@ export default function PortalAssistPage() {
   const [approvalNotes, setApprovalNotes] = useState('')
   const [approving, setApproving] = useState(false)
   const [approvalError, setApprovalError] = useState<string | null>(null)
+  /**
+   * Corridor states checked for bulk "Approve selected states".
+   * Defaults to all portalStatesForRequest when a request loads; user may uncheck.
+   */
+  const [bulkSelectedStates, setBulkSelectedStates] = useState<ReadonlySet<string>>(
+    () => new Set()
+  )
+  /** Post-bulk result strip near launch panel (partial fail stays visible off-gate). */
+  const [bulkApproveSummary, setBulkApproveSummary] = useState<string | null>(null)
+  /** Sync lock so bulk+single cannot double-fire before approving re-render. */
+  const approvingLockRef = useRef(false)
 
   const [parseError, setParseError] = useState<string | null>(null)
   const [savingSubmission, setSavingSubmission] = useState(false)
@@ -256,6 +267,16 @@ export default function PortalAssistPage() {
         permitRequiredStates: request.permit_required_states,
       })
     : []
+
+  // Default bulk checklist to full corridor when request loads (or corridor identity changes).
+  useEffect(() => {
+    if (!request) {
+      setBulkSelectedStates(new Set())
+      return
+    }
+    setBulkSelectedStates(new Set(portalStatesForRequest))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally reset on request id / corridor join only
+  }, [request?.id, portalStatesForRequest.join(',')])
 
   /**
    * Single source of truth for human approval of a state:
@@ -651,58 +672,86 @@ export default function PortalAssistPage() {
     })
   }
 
+  /**
+   * Shared POST path for human approval of one state.
+   * Used by single-state gate and bulk "Approve selected states" — keeps payloads identical.
+   * pdfReference is caller-controlled: bulk only attaches for selectedState (PDF is per-selection).
+   */
+  const recordStateApproval = async (
+    stateCode: string,
+    prefillPkg: PrefillPackage,
+    opts?: { notes?: string; pdfReference?: string | null }
+  ): Promise<PortalSubmissionRecord> => {
+    if (!request) throw new Error('No request loaded')
+
+    const recordBase = createPortalSubmissionRecord(
+      request.id,
+      stateCode,
+      prefillPkg,
+      undefined,
+      { humanApproved: true }
+    )
+
+    const record: PortalSubmissionRecord = {
+      ...recordBase,
+      status: 'prefilled',
+      user_notes: (opts?.notes ?? approvalNotes).trim() || null,
+      // Explicit null when omitted by bulk for non-selected states — do not stamp selected PDF on every ST
+      pdf_reference:
+        opts && 'pdfReference' in opts ? opts.pdfReference ?? null : currentPdfReference,
+    }
+
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('Auth required')
+
+    const res = await fetch('/api/portal-submissions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        ...record,
+        record_approval: true,
+        raw_portal_output: null,
+      }),
+    })
+
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}))
+      throw new Error(j.error || 'Failed to record approved prefill submission')
+    }
+
+    return record
+  }
+
   // Prominent HUMAN APPROVAL GATE — records submission with human_approved + status
   const handleApproveGate = async () => {
+    // In-flight lock: block dual bulk+single fire before re-render
+    if (approvingLockRef.current || approving) return
     if (!prefill || !request) return
     if (!approvalChecked) {
       setApprovalError('Please check the review confirmation box to proceed.')
       return
     }
 
+    approvingLockRef.current = true
     setApproving(true)
     setApprovalError(null)
+    setBulkApproveSummary(null)
 
     try {
-      const recordBase = createPortalSubmissionRecord(
-        request.id,
-        selectedState,
-        prefill,
-        undefined,
-        { humanApproved: true }
-      )
-
-      const record: PortalSubmissionRecord = {
-        ...recordBase,
-        status: 'prefilled',
-        user_notes: approvalNotes.trim() || null,
-        pdf_reference: currentPdfReference,
-      }
-
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) throw new Error('Auth required')
-
-      const res = await fetch('/api/portal-submissions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          ...record,
-          record_approval: true,
-          raw_portal_output: null,
-        }),
+      const record = await recordStateApproval(selectedState, prefill, {
+        notes: approvalNotes,
+        pdfReference: currentPdfReference,
       })
-
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.error || 'Failed to record approved prefill submission')
-      }
 
       setIsApproved(true)
       removeForceReapprove(selectedState)
       setSubmissionRecord(record)
+      // Require re-ack before a subsequent bulk batch can fire
+      setApprovalChecked(false)
 
       // Refresh submissions so pills update immediately (yellow for prefilled)
       if (request) await loadSubmissionsForRequest(request.id)
@@ -715,8 +764,123 @@ export default function PortalAssistPage() {
       console.error('[portal-assist] approve gate error', e)
       setApprovalError(e.message || 'Approval record failed.')
     } finally {
+      approvingLockRef.current = false
       setApproving(false)
     }
+  }
+
+  /**
+   * Bulk approve: one review gate, per-state prefill + recordStateApproval.
+   * Skips already human-approved states (idempotent). No auto-open of portal tabs.
+   */
+  const handleBulkApproveSelected = async () => {
+    // In-flight lock: block dual bulk+single fire before re-render
+    if (approvingLockRef.current || approving) return
+    if (!request) return
+    if (!approvalChecked) {
+      setApprovalError('Please check the review confirmation box to proceed.')
+      return
+    }
+
+    // Batch payload = corridor states still checked by the user
+    const selected = portalStatesForRequest.filter((st) => bulkSelectedStates.has(st))
+    if (selected.length === 0) {
+      setApprovalError('Select at least one state to approve.')
+      return
+    }
+
+    // Skip states already human-approved (session + submissions; force-reapprove still needs POST)
+    const toApprove = selected.filter((st) => !isStateHumanApproved(st))
+    if (toApprove.length === 0) {
+      // Not a success path — do not scroll as if approvals just recorded
+      setApprovalError('All selected states already approved.')
+      setBulkApproveSummary(null)
+      return
+    }
+
+    approvingLockRef.current = true
+    setApproving(true)
+    setApprovalError(null)
+    setBulkApproveSummary(null)
+
+    // Snapshot notes + tripType for the whole batch so mid-flight edits cannot skew later POSTs
+    const notesSnapshot = approvalNotes
+    const tripTypeSnapshot = tripType
+    const selectedStateSnapshot = selectedState
+    const prefillSnapshot = prefill
+    const pdfRefSnapshot = currentPdfReference
+
+    const succeeded: string[] = []
+    const failed: Array<{ state: string; error: string }> = []
+
+    try {
+      for (const st of toApprove) {
+        try {
+          // Prefer on-screen prefill for selected state (may diverge after trip-type patch);
+          // other states get fresh per-state generatePortalPrefill (entry/exit differ).
+          const stPrefill =
+            st === selectedStateSnapshot && prefillSnapshot
+              ? prefillSnapshot
+              : generatePortalPrefill(request, st, { tripType: tripTypeSnapshot })
+          // PDF ref is for selected state only — never stamp it under every bulk state_code
+          const record = await recordStateApproval(st, stPrefill, {
+            notes: notesSnapshot,
+            pdfReference: st === selectedStateSnapshot ? pdfRefSnapshot : null,
+          })
+          removeForceReapprove(st)
+          if (st === selectedStateSnapshot) {
+            setIsApproved(true)
+            setSubmissionRecord(record)
+            // Keep UI prefill when we used the snapshot; no need to overwrite
+          }
+          succeeded.push(st)
+          console.log(
+            '[portal-assist] HUMAN APPROVED + recorded submission for',
+            st,
+            'human_approved=true (bulk)'
+          )
+        } catch (e: any) {
+          failed.push({ state: st, error: e?.message || 'Approval record failed.' })
+          console.error('[portal-assist] bulk approve failed for', st, e)
+        }
+      }
+
+      await loadSubmissionsForRequest(request.id)
+
+      if (failed.length > 0) {
+        const okPart =
+          succeeded.length > 0 ? `Approved: ${succeeded.join(', ')}. ` : 'No states approved. '
+        const failPart = `Failed: ${failed.map((f) => `${f.state} (${f.error})`).join('; ')}`
+        const summary = okPart + failPart
+        // Keep fail details on the gate; also surface near launch without scrolling away
+        setApprovalError(summary)
+        setBulkApproveSummary(summary)
+        // Partial success: do not scroll — user must see left-column failure details
+      } else if (succeeded.length > 0) {
+        setApprovalChecked(false)
+        setBulkApproveSummary(
+          `Approved ${succeeded.join(', ')}. Open portal(s) when ready.`
+        )
+        // Full success only — scroll to launch panel
+        scrollFocusPortalLaunch()
+      }
+    } catch (e: any) {
+      console.error('[portal-assist] bulk approve error', e)
+      setApprovalError(e.message || 'Bulk approval failed.')
+    } finally {
+      approvingLockRef.current = false
+      setApproving(false)
+    }
+  }
+
+  const toggleBulkState = (st: string, checked: boolean) => {
+    if (approving || approvingLockRef.current) return
+    setBulkSelectedStates((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(st)
+      else next.delete(st)
+      return next
+    })
   }
 
   // Parse + Compare using framework. Persists (with human_approved if gate passed). Updates status pills.
@@ -917,6 +1081,17 @@ export default function PortalAssistPage() {
   const selectedInCorridor = portalStatesForRequest.includes(selectedState)
   const showSelectedOpenFallback =
     !request || portalStatesForRequest.length === 0 || !selectedInCorridor
+  /** Bulk approve checklist: checked corridor states (batch payload source). */
+  const bulkSelectedCount = portalStatesForRequest.filter((st) =>
+    bulkSelectedStates.has(st)
+  ).length
+  /** Checked states that still need a human-approval POST. */
+  const bulkPendingCount = portalStatesForRequest.filter(
+    (st) => bulkSelectedStates.has(st) && !isStateHumanApproved(st)
+  ).length
+  /** Show amber confirmation when single-state or bulk still has work. */
+  const showApprovalConfirm =
+    !selectedIsHumanApproved || bulkPendingCount > 0
   /** PortalPlaybook when registered for selected state (MO today; NE/KS later). */
   const playbook = getPlaybook(selectedState)
   const payLastNote = playbook?.notes?.payLast || MO_PAY_LAST_NOTE
@@ -941,7 +1116,7 @@ export default function PortalAssistPage() {
     : null
 
   const handleRegeneratePrefill = () => {
-    if (!request) return
+    if (!request || approving || approvingLockRef.current) return
     if (isStateHumanApproved(selectedState)) {
       const confirmed = window.confirm(
         'Regenerating will clear your approval for this state. Continue?'
@@ -1004,6 +1179,7 @@ export default function PortalAssistPage() {
   }
 
   const handleTripTypeChange = (next: PortalTripType) => {
+    if (approving || approvingLockRef.current) return
     if (next === tripType) return
     setTripType(next)
     setPrefill((prev) =>
@@ -1264,6 +1440,7 @@ export default function PortalAssistPage() {
                         key={t}
                         type="button"
                         onClick={() => handleTripTypeChange(t)}
+                        disabled={approving}
                         className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${
                           tripType === t
                             ? 'bg-gray-900 text-white border-gray-900'
@@ -1973,60 +2150,159 @@ export default function PortalAssistPage() {
 
                 {/* Human approval gate + action row — uses isStateHumanApproved (session + submissions) */}
                 <div className="mt-6 pt-6 border-t border-gray-300 sm:border-gray-200">
-                  <h3 className="font-semibold mb-2 text-sm text-gray-900">Record approval for {selectedState}</h3>
+                  <h3 className="font-semibold mb-2 text-sm text-gray-900">
+                    Record approval
+                    {portalStatesForRequest.length > 1
+                      ? ' — shared load data for corridor'
+                      : ` for ${selectedState}`}
+                  </h3>
 
-                  {!selectedIsHumanApproved ? (
+                  {/* Bulk corridor checklist — one review, multi-state approve */}
+                  {request && portalStatesForRequest.length > 0 && (
+                    <div
+                      data-testid="bulk-approve-states"
+                      className="mb-4 p-3 bg-gray-50 border border-gray-300 sm:border-gray-200 rounded-xl"
+                    >
+                      <div className="text-sm font-medium text-gray-900 mb-1">States to approve</div>
+                      <p className={`${fieldHintClass} mb-2`}>
+                        Shared carrier/driver/load/equipment above is the source of truth. Uncheck states to exclude
+                        from this batch. Each selected state still gets its own prefill (entry/exit borders).
+                      </p>
+                      <ul className="space-y-1.5" role="group" aria-label="States to approve">
+                        {portalStatesForRequest.map((st) => {
+                          const checked = bulkSelectedStates.has(st)
+                          const approved = isStateHumanApproved(st)
+                          const stStatus = getStateStatus(st)
+                          return (
+                            <li
+                              key={st}
+                              className="flex items-center gap-2 text-sm text-gray-900"
+                              data-testid={`bulk-approve-row-${st}`}
+                            >
+                              <label
+                                className={`flex items-center gap-2 min-w-0 flex-1 ${
+                                  approving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={approving}
+                                  onChange={(e) => toggleBulkState(st, e.target.checked)}
+                                  data-testid={`bulk-approve-state-${st}`}
+                                  className="h-4 w-4 accent-emerald-700 border-gray-500 shrink-0"
+                                />
+                                <span className="font-mono font-semibold">{st}</span>
+                              </label>
+                              <span
+                                className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${
+                                  approved
+                                    ? 'bg-emerald-700 text-white'
+                                    : getStatusClasses(stStatus)
+                                }`}
+                                data-testid={`bulk-approve-status-${st}`}
+                              >
+                                {approved
+                                  ? 'Already approved'
+                                  : stStatus === 'red'
+                                    ? 'Needed'
+                                    : getStatusLabel(stStatus, st)}
+                              </span>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  )}
+
+                  {selectedIsHumanApproved && (
+                    <div className="mb-3 p-3 bg-emerald-50 border border-emerald-300 sm:border-emerald-200 rounded-xl text-sm text-emerald-900 sm:text-emerald-800">
+                      ✓ Human approved for {selectedState}. Record created with human_approved=true.
+                    </div>
+                  )}
+
+                  {showApprovalConfirm ? (
                     <div className="p-4 bg-amber-50 border border-amber-300 sm:border-amber-200 rounded-2xl">
                       <label className="flex items-start gap-3 text-sm text-gray-900 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={approvalChecked}
+                          disabled={approving}
                           onChange={(e) => setApprovalChecked(e.target.checked)}
                           className="mt-1 h-4 w-4 accent-emerald-700 border-gray-500"
                         />
                         <span>
-                          I have personally reviewed the prefill data (dimensions, corridor, vehicle/equipment details, state-specific notes), the target portal instructions, and any route differences. I approve this for portal submission on behalf of the carrier.
+                          {portalStatesForRequest.length > 1 || bulkPendingCount > 1
+                            ? 'I have personally reviewed the shared load data (dimensions, corridor, vehicle/equipment details) and the selected corridor state(s) for this batch. I understand each state uses its own entry/exit prefill. I approve portal submission for the checked state(s) on behalf of the carrier.'
+                            : 'I have personally reviewed the prefill data (dimensions, corridor, vehicle/equipment details, state-specific notes), the target portal instructions, and any route differences. I approve this for portal submission on behalf of the carrier.'}
                         </span>
                       </label>
 
                       <textarea
                         value={approvalNotes}
                         onChange={(e) => setApprovalNotes(e.target.value)}
+                        disabled={approving}
                         placeholder="Optional notes for audit (e.g. reviewed bridge list 2026-06-07)"
                         className={`mt-3 w-full ${textareaClass} h-16`}
                       />
 
-                      <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                      <div className="mt-3 flex flex-col sm:flex-row flex-wrap gap-2">
                         <button
                           onClick={handleRegeneratePrefill}
-                          disabled={!request}
+                          disabled={!request || approving}
                           className={`px-5 py-2 ${buttonSecondaryClass}`}
                         >
                           Regenerate Prefill
                         </button>
-                        <button
-                          onClick={handleApproveGate}
-                          disabled={!approvalChecked || approving || !prefill}
-                          className={`px-5 py-2 ${buttonSuccessClass} rounded-xl`}
-                        >
-                          {approving ? 'Recording approval…' : `Approve & Record for ${selectedState} Submission`}
-                        </button>
+                        {request && portalStatesForRequest.length > 0 && (
+                          <button
+                            type="button"
+                            data-testid="bulk-approve-submit"
+                            onClick={handleBulkApproveSelected}
+                            disabled={
+                              !approvalChecked || approving || bulkPendingCount === 0
+                            }
+                            className={`px-5 py-2 ${buttonSuccessClass} rounded-xl`}
+                          >
+                            {approving
+                              ? 'Recording approvals…'
+                              : bulkPendingCount === 0
+                                ? bulkSelectedCount === 0
+                                  ? 'Approve selected states'
+                                  : 'All selected already approved'
+                                : bulkPendingCount === 1
+                                  ? 'Approve 1 state'
+                                  : `Approve ${bulkPendingCount} states`}
+                          </button>
+                        )}
+                        {!selectedIsHumanApproved && (
+                          <button
+                            onClick={handleApproveGate}
+                            disabled={!approvalChecked || approving || !prefill}
+                            className={`px-5 py-2 ${buttonSecondaryClass}`}
+                            data-testid="approve-single-state"
+                          >
+                            {approving
+                              ? 'Recording approval…'
+                              : `Approve & Record for ${selectedState} Submission`}
+                          </button>
+                        )}
                       </div>
                       {approvalError && (
-                        <div className="mt-2">
+                        <div className="mt-2" data-testid="bulk-approve-error">
                           <ErrorDisplay message={approvalError} variant="inline" onRetry={() => setApprovalError(null)} />
                         </div>
                       )}
-                      <div className="text-[10px] text-amber-800 sm:text-amber-700 mt-2">Sets human_approved=true on the submission record. No automated submit.</div>
+                      <div className="text-[10px] text-amber-800 sm:text-amber-700 mt-2">
+                        Sets human_approved=true on each selected state submission. No automated submit. Already
+                        approved states are skipped.
+                      </div>
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className="p-3 bg-emerald-50 border border-emerald-300 sm:border-emerald-200 rounded-xl text-sm text-emerald-900 sm:text-emerald-800">
-                        ✓ Human approved for {selectedState}. Record created with human_approved=true.
-                      </div>
                       <button
                         onClick={handleRegeneratePrefill}
-                        disabled={!request}
+                        disabled={!request || approving}
                         className={`px-5 py-2 ${buttonSecondaryClass}`}
                       >
                         Regenerate Prefill
@@ -2105,6 +2381,21 @@ export default function PortalAssistPage() {
                       >
                         {selectedState} approved — open portal when ready, or select another corridor
                         state to review.
+                      </p>
+                    )}
+                    {/* Bulk approve outcome near launch (full success + partial fail summary) */}
+                    {bulkApproveSummary && (
+                      <p
+                        data-testid="bulk-approve-summary"
+                        role="status"
+                        aria-live="polite"
+                        className={`mb-2 text-xs ${
+                          bulkApproveSummary.includes('Failed:')
+                            ? 'text-amber-900 sm:text-amber-800'
+                            : 'text-emerald-900 sm:text-emerald-800'
+                        }`}
+                      >
+                        {bulkApproveSummary}
                       </p>
                     )}
                     {/* Per-corridor-state open pills: muted until human_approved, then emerald; never disabled */}
