@@ -176,8 +176,31 @@ export default function PortalAssistPage() {
   const [routeComparison, setRouteComparison] = useState<RouteComparison | null>(null)
   const [submissionRecord, setSubmissionRecord] = useState<PortalSubmissionRecord | null>(null)
   const [isApproved, setIsApproved] = useState(false)
-  /** After regenerate, force gate re-prompt even if submissions still have human_approved. */
-  const [forceReapproveSelected, setForceReapproveSelected] = useState(false)
+  /**
+   * Per-state force re-prompt after regenerate / trip-type change.
+   * Survives state switch until that state is re-approved (not cleared by applyPortalState).
+   */
+  const [forceReapproveStates, setForceReapproveStates] = useState<ReadonlySet<string>>(
+    () => new Set()
+  )
+
+  const addForceReapprove = (st: string) => {
+    setForceReapproveStates((prev) => {
+      if (prev.has(st)) return prev
+      const next = new Set(prev)
+      next.add(st)
+      return next
+    })
+  }
+
+  const removeForceReapprove = (st: string) => {
+    setForceReapproveStates((prev) => {
+      if (!prev.has(st)) return prev
+      const next = new Set(prev)
+      next.delete(st)
+      return next
+    })
+  }
 
   // Creds (secure: never hold plain pw client-side)
   const [savingCreds, setSavingCreds] = useState(false)
@@ -237,11 +260,12 @@ export default function PortalAssistPage() {
   /**
    * Single source of truth for human approval of a state:
    * current-session gate (isApproved + selected) OR submissions.human_approved.
-   * forceReapproveSelected suppresses submissions after regenerate for selected state.
+   * forceReapproveStates (per state) suppresses DB approval after regenerate / trip-type change
+   * until that state is re-approved — survives switch away/back.
    * Used for pills, gate UX, post-approve hint, and persist paths.
    */
   const isStateHumanApproved = (st: string): boolean => {
-    if (st === selectedState && forceReapproveSelected) return false
+    if (forceReapproveStates.has(st)) return false
     if (st === selectedState && isApproved) return true
     const sub = submissions.find(
       (s) => s.permit_request_id === request?.id && s.state_code === st
@@ -274,11 +298,15 @@ export default function PortalAssistPage() {
       return
     }
     const effectiveTripType: PortalTripType = opts?.resetTripType ? 'Single trip' : tripType
-    if (opts?.resetTripType) setTripType('Single trip')
+    if (opts?.resetTripType) {
+      setTripType('Single trip')
+      // New request load — clear all per-state re-prompt overrides
+      setForceReapproveStates(new Set())
+    }
     setSelectedState(state)
     setPrefill(generatePortalPrefill(req, state, { tripType: effectiveTripType }))
     setIsApproved(false)
-    setForceReapproveSelected(false)
+    // Do not clear forceReapproveStates on state switch — per-state overrides must stick
     setRouteComparison(null)
     setSubmissionRecord(null)
     setApprovalChecked(false)
@@ -673,7 +701,7 @@ export default function PortalAssistPage() {
       }
 
       setIsApproved(true)
-      setForceReapproveSelected(false)
+      removeForceReapprove(selectedState)
       setSubmissionRecord(record)
 
       // Refresh submissions so pills update immediately (yellow for prefilled)
@@ -921,8 +949,8 @@ export default function PortalAssistPage() {
       if (!confirmed) return
     }
     applyPortalState(request, selectedState)
-    // Re-prompt gate for selected state even if prior submission was human_approved
-    setForceReapproveSelected(true)
+    // Per-state re-prompt: survives switch away/back until this state is re-approved
+    addForceReapprove(selectedState)
   }
 
   /** Brief clipboard feedback for per-field or copy-all controls (aria-live + fail message). */
@@ -986,8 +1014,9 @@ export default function PortalAssistPage() {
           }
         : prev
     )
-    // Trip type is part of the filing package — clear approval like regenerate
+    // Trip type is part of the filing package — clear approval like regenerate (per-state)
     setIsApproved(false)
+    addForceReapprove(selectedState)
     setApprovalChecked(false)
     setApprovalNotes('')
     setApprovalError(null)
@@ -2027,18 +2056,35 @@ export default function PortalAssistPage() {
                 </h2>
                 {/* Selected-state open when corridor pills do not cover it (no request / empty / off-corridor) */}
                 {showSelectedOpenFallback && config.portalUrl && (
-                  <button
-                    type="button"
-                    data-testid={`open-portal-${selectedState}`}
-                    data-human-approved={selectedIsHumanApproved ? 'true' : 'false'}
-                    data-open-fallback="true"
-                    onClick={() => handleOpenStatePortal(selectedState)}
-                    className={`inline-block px-4 py-2 rounded-lg mb-3 text-sm font-medium ${
-                      selectedIsHumanApproved ? buttonSuccessClass : buttonPrimaryClass
-                    }`}
-                  >
-                    Open {selectedState} portal
-                  </button>
+                  !request ? (
+                    // Real link when no request: middle-click / copy-link / open-in-new-tab work
+                    <a
+                      href={config.portalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid={`open-portal-${selectedState}`}
+                      data-human-approved={selectedIsHumanApproved ? 'true' : 'false'}
+                      data-open-fallback="true"
+                      className={`inline-block px-4 py-2 rounded-lg mb-3 text-sm font-medium ${
+                        selectedIsHumanApproved ? buttonSuccessClass : buttonPrimaryClass
+                      }`}
+                    >
+                      Open {selectedState} portal
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      data-testid={`open-portal-${selectedState}`}
+                      data-human-approved={selectedIsHumanApproved ? 'true' : 'false'}
+                      data-open-fallback="true"
+                      onClick={() => handleOpenStatePortal(selectedState)}
+                      className={`inline-block px-4 py-2 rounded-lg mb-3 text-sm font-medium ${
+                        selectedIsHumanApproved ? buttonSuccessClass : buttonPrimaryClass
+                      }`}
+                    >
+                      Open {selectedState} portal
+                    </button>
+                  )
                 )}
                 {!request && (
                   <button
