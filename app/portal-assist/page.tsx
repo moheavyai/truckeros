@@ -176,6 +176,8 @@ export default function PortalAssistPage() {
   const [routeComparison, setRouteComparison] = useState<RouteComparison | null>(null)
   const [submissionRecord, setSubmissionRecord] = useState<PortalSubmissionRecord | null>(null)
   const [isApproved, setIsApproved] = useState(false)
+  /** After regenerate, force gate re-prompt even if submissions still have human_approved. */
+  const [forceReapproveSelected, setForceReapproveSelected] = useState(false)
 
   // Creds (secure: never hold plain pw client-side)
   const [savingCreds, setSavingCreds] = useState(false)
@@ -232,6 +234,21 @@ export default function PortalAssistPage() {
       })
     : []
 
+  /**
+   * Single source of truth for human approval of a state:
+   * current-session gate (isApproved + selected) OR submissions.human_approved.
+   * forceReapproveSelected suppresses submissions after regenerate for selected state.
+   * Used for pills, gate UX, post-approve hint, and persist paths.
+   */
+  const isStateHumanApproved = (st: string): boolean => {
+    if (st === selectedState && forceReapproveSelected) return false
+    if (st === selectedState && isApproved) return true
+    const sub = submissions.find(
+      (s) => s.permit_request_id === request?.id && s.state_code === st
+    )
+    return !!sub?.human_approved
+  }
+
   // Corridor/permit states first (origin → destination), then remaining configs A–Z.
   const corridorStateSet = new Set(portalStatesForRequest)
   const orderedStateCodes = [
@@ -261,6 +278,7 @@ export default function PortalAssistPage() {
     setSelectedState(state)
     setPrefill(generatePortalPrefill(req, state, { tripType: effectiveTripType }))
     setIsApproved(false)
+    setForceReapproveSelected(false)
     setRouteComparison(null)
     setSubmissionRecord(null)
     setApprovalChecked(false)
@@ -573,6 +591,38 @@ export default function PortalAssistPage() {
     )
   }
 
+  /** Open one state portal tab + same feedback strip as Launch all. */
+  const handleOpenStatePortal = (st: string) => {
+    openStatePortals([st], { staggerMs: 0 })
+    setCorridorLaunchHint(`Opened ${st} portal tab.`)
+  }
+
+  /**
+   * After approve success: wait for layout (gate collapses), then scroll/focus launch panel.
+   * Respects prefers-reduced-motion; no auto-open of portal tabs.
+   */
+  const scrollFocusPortalLaunch = () => {
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const behavior: ScrollBehavior = reduceMotion ? 'auto' : 'smooth'
+    const run = () => {
+      portalLaunchPanelRef.current?.scrollIntoView({ behavior, block: 'start' })
+      const openBtn = document.querySelector<HTMLElement>(
+        `[data-testid="open-portal-${selectedState}"]`
+      )
+      if (openBtn) {
+        openBtn.focus({ preventScroll: true })
+      } else {
+        portalLaunchHeadingRef.current?.focus({ preventScroll: true })
+      }
+    }
+    // Double rAF so isApproved re-render paints before measuring scroll target
+    requestAnimationFrame(() => {
+      requestAnimationFrame(run)
+    })
+  }
+
   // Prominent HUMAN APPROVAL GATE — records submission with human_approved + status
   const handleApproveGate = async () => {
     if (!prefill || !request) return
@@ -623,6 +673,7 @@ export default function PortalAssistPage() {
       }
 
       setIsApproved(true)
+      setForceReapproveSelected(false)
       setSubmissionRecord(record)
 
       // Refresh submissions so pills update immediately (yellow for prefilled)
@@ -631,10 +682,7 @@ export default function PortalAssistPage() {
       console.log('[portal-assist] HUMAN APPROVED + recorded submission for', selectedState, 'human_approved=true')
 
       // Snap focus to portal launch area so user is not stranded on the approval banner
-      requestAnimationFrame(() => {
-        portalLaunchPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        portalLaunchHeadingRef.current?.focus({ preventScroll: true })
-      })
+      scrollFocusPortalLaunch()
     } catch (e: any) {
       console.error('[portal-assist] approve gate error', e)
       setApprovalError(e.message || 'Approval record failed.')
@@ -671,13 +719,14 @@ export default function PortalAssistPage() {
         { ...parsed, route_corridor: parsed.route_corridor || [] }
       )
 
+      const stateApproved = isStateHumanApproved(selectedState)
       const record: any = {
         ...base,
-        human_approved: isApproved,
+        human_approved: stateApproved,
         pdf_reference: currentPdfReference,
         raw_portal_output: portalOutput,
         // Improve status for pill colors: if parsed approved or we have pdf → green path
-        status: (parsed.status === 'approved' || currentPdfReference) ? 'pdf-received' : (isApproved ? 'submitted' : 'submitted'),
+        status: (parsed.status === 'approved' || currentPdfReference) ? 'pdf-received' : (stateApproved ? 'submitted' : 'submitted'),
       }
 
       const supabase = createClient()
@@ -759,7 +808,8 @@ export default function PortalAssistPage() {
       setCurrentPdfReference(path)
 
       // If we already have a submission record or approved, optionally update it with pdf ref
-      if (submissionRecord || isApproved) {
+      const stateApproved = isStateHumanApproved(selectedState)
+      if (submissionRecord || stateApproved) {
         try {
           const { data: { session } } = await supabase.auth.getSession()
           if (session && request) {
@@ -770,7 +820,7 @@ export default function PortalAssistPage() {
                 permit_request_id: request.id,
                 state_code: selectedState,
                 status: 'pdf-received',
-                human_approved: isApproved,
+                human_approved: stateApproved,
                 pdf_reference: path,
                 our_recommended_corridor: prefill?.routeCorridor || [],
                 portal_returned_corridor: null,
@@ -805,15 +855,6 @@ export default function PortalAssistPage() {
     return 'gray'
   }
 
-  /** True when a corridor state has a submission with human_approved (or current session gate for selected). */
-  const isStateHumanApproved = (st: string): boolean => {
-    if (st === selectedState && isApproved) return true
-    const sub = submissions.find(
-      (s) => s.permit_request_id === request?.id && s.state_code === st
-    )
-    return !!sub?.human_approved
-  }
-
   const getStatusClasses = (status: 'red' | 'yellow' | 'green' | 'gray') => {
     // Mobile outdoor readability: dark text on mid yellow; emerald-700 matches success CTAs
     if (status === 'green') return 'bg-emerald-700 text-white'
@@ -842,6 +883,12 @@ export default function PortalAssistPage() {
   }
 
   const config = STATE_PORTAL_CONFIGS[selectedState] || null
+  /** Gate / hint / banners — same source of truth as green open pills. */
+  const selectedIsHumanApproved = isStateHumanApproved(selectedState)
+  /** Selected-state open CTA when no corridor pills cover it (empty corridor or off-corridor selection). */
+  const selectedInCorridor = portalStatesForRequest.includes(selectedState)
+  const showSelectedOpenFallback =
+    !request || portalStatesForRequest.length === 0 || !selectedInCorridor
   /** PortalPlaybook when registered for selected state (MO today; NE/KS later). */
   const playbook = getPlaybook(selectedState)
   const payLastNote = playbook?.notes?.payLast || MO_PAY_LAST_NOTE
@@ -867,13 +914,15 @@ export default function PortalAssistPage() {
 
   const handleRegeneratePrefill = () => {
     if (!request) return
-    if (isApproved) {
+    if (isStateHumanApproved(selectedState)) {
       const confirmed = window.confirm(
         'Regenerating will clear your approval for this state. Continue?'
       )
       if (!confirmed) return
     }
     applyPortalState(request, selectedState)
+    // Re-prompt gate for selected state even if prior submission was human_approved
+    setForceReapproveSelected(true)
   }
 
   /** Brief clipboard feedback for per-field or copy-all controls (aria-live + fail message). */
@@ -1893,11 +1942,11 @@ export default function PortalAssistPage() {
                   <p className={`${fieldHintTinyClass} mt-1`}>Encrypted server-side; never stored in plain text.</p>
                 </div>
 
-                {/* Human approval gate + action row */}
+                {/* Human approval gate + action row — uses isStateHumanApproved (session + submissions) */}
                 <div className="mt-6 pt-6 border-t border-gray-300 sm:border-gray-200">
                   <h3 className="font-semibold mb-2 text-sm text-gray-900">Record approval for {selectedState}</h3>
 
-                  {!isApproved ? (
+                  {!selectedIsHumanApproved ? (
                     <div className="p-4 bg-amber-50 border border-amber-300 sm:border-amber-200 rounded-2xl">
                       <label className="flex items-start gap-3 text-sm text-gray-900 cursor-pointer">
                         <input
@@ -1962,12 +2011,12 @@ export default function PortalAssistPage() {
 
           {/* RIGHT COLUMN: Portal + Output + PDF + Analysis */}
           <div className="lg:col-span-5 space-y-6">
-            {/* Portal Actions — scroll/focus target after Approve & Record */}
+            {/* Portal Actions — scroll/focus target after Approve & Record (scroll-mt clears sticky header) */}
             {config && (
               <div
                 ref={portalLaunchPanelRef}
                 data-testid="portal-launch-panel"
-                className={cardClass}
+                className={`${cardClass} scroll-mt-20`}
               >
                 <h2
                   ref={portalLaunchHeadingRef}
@@ -1976,37 +2025,43 @@ export default function PortalAssistPage() {
                 >
                   {config.name} Portal
                 </h2>
-                {/* No request yet: single open for selected state + demo loader */}
+                {/* Selected-state open when corridor pills do not cover it (no request / empty / off-corridor) */}
+                {showSelectedOpenFallback && config.portalUrl && (
+                  <button
+                    type="button"
+                    data-testid={`open-portal-${selectedState}`}
+                    data-human-approved={selectedIsHumanApproved ? 'true' : 'false'}
+                    data-open-fallback="true"
+                    onClick={() => handleOpenStatePortal(selectedState)}
+                    className={`inline-block px-4 py-2 rounded-lg mb-3 text-sm font-medium ${
+                      selectedIsHumanApproved ? buttonSuccessClass : buttonPrimaryClass
+                    }`}
+                  >
+                    Open {selectedState} portal
+                  </button>
+                )}
                 {!request && (
-                  <>
-                    <a
-                      href={config.portalUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className={`inline-block text-sm px-4 py-2 ${buttonPrimaryClass} mb-3`}
-                    >
-                      Open Real {selectedState} Portal →
-                    </a>
-                    <button
-                      onClick={loadDemoRequest}
-                      className={`inline-block px-4 py-2 ${buttonSuccessClass} rounded-lg mb-3 ml-2`}
-                    >
-                      Load Rich Demo Request for {selectedState}
-                    </button>
-                  </>
+                  <button
+                    onClick={loadDemoRequest}
+                    className={`inline-block px-4 py-2 ${buttonSuccessClass} rounded-lg mb-3 ml-2`}
+                  >
+                    Load Rich Demo Request for {selectedState}
+                  </button>
                 )}
                 {request && (
                   <div className="mb-3">
-                    {isApproved && (
+                    {selectedIsHumanApproved && (
                       <p
                         data-testid="post-approve-launch-hint"
+                        role="status"
+                        aria-live="polite"
                         className="mb-2 text-xs text-emerald-900 sm:text-emerald-800"
                       >
                         {selectedState} approved — open portal when ready, or select another corridor
                         state to review.
                       </p>
                     )}
-                    {/* Per-corridor-state open pills: muted until human_approved, then emerald */}
+                    {/* Per-corridor-state open pills: muted until human_approved, then emerald; never disabled */}
                     {portalStatesForRequest.length > 0 && (
                       <div
                         data-testid="corridor-open-portals"
@@ -2024,11 +2079,9 @@ export default function PortalAssistPage() {
                               type="button"
                               data-testid={`open-portal-${st}`}
                               data-human-approved={approved ? 'true' : 'false'}
-                              onClick={() => openStatePortals([st], { staggerMs: 0 })}
-                              className={`inline-block px-3 py-1.5 rounded-lg text-sm font-medium ${
-                                approved
-                                  ? buttonSuccessClass
-                                  : 'bg-gray-200 hover:bg-gray-300 text-gray-800 border border-gray-400 sm:border-gray-300'
+                              onClick={() => handleOpenStatePortal(st)}
+                              className={`inline-block px-3 py-1.5 text-sm font-medium ${
+                                approved ? `${buttonSuccessClass} rounded-lg` : buttonSecondaryClass
                               }`}
                             >
                               Open {st} portal
@@ -2037,6 +2090,7 @@ export default function PortalAssistPage() {
                         })}
                       </div>
                     )}
+                    {/* Batch CTA stays emerald (batch affordance); individual pills use approval state */}
                     <button
                       type="button"
                       onClick={handleLaunchCorridorPortals}
@@ -2066,8 +2120,10 @@ export default function PortalAssistPage() {
                     Typical restrictions: {config.typicalRestrictions.join(' • ')}
                   </div>
                 )}
-                {isApproved && (
-                  <div className="mt-3 p-3 bg-emerald-50 border border-emerald-300 sm:border-emerald-200 rounded text-xs text-emerald-900">Approved — ready for your manual entry or paste of portal response below.</div>
+                {selectedIsHumanApproved && (
+                  <div className="mt-3 p-3 bg-emerald-50 border border-emerald-300 sm:border-emerald-200 rounded text-xs text-emerald-900">
+                    Ready for manual entry or paste of portal response below.
+                  </div>
                 )}
               </div>
             )}
