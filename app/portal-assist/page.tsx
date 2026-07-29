@@ -212,6 +212,9 @@ export default function PortalAssistPage() {
   /** Clipboard status for aria-live (success or fail). */
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Portal launch panel — scroll/focus target after Approve & Record. */
+  const portalLaunchPanelRef = useRef<HTMLDivElement | null>(null)
+  const portalLaunchHeadingRef = useRef<HTMLHeadingElement | null>(null)
 
   const router = useRouter()
 
@@ -626,6 +629,12 @@ export default function PortalAssistPage() {
       if (request) await loadSubmissionsForRequest(request.id)
 
       console.log('[portal-assist] HUMAN APPROVED + recorded submission for', selectedState, 'human_approved=true')
+
+      // Snap focus to portal launch area so user is not stranded on the approval banner
+      requestAnimationFrame(() => {
+        portalLaunchPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        portalLaunchHeadingRef.current?.focus({ preventScroll: true })
+      })
     } catch (e: any) {
       console.error('[portal-assist] approve gate error', e)
       setApprovalError(e.message || 'Approval record failed.')
@@ -794,6 +803,15 @@ export default function PortalAssistPage() {
     }
     if ((request?.permit_required_states || []).includes(st)) return 'red'
     return 'gray'
+  }
+
+  /** True when a corridor state has a submission with human_approved (or current session gate for selected). */
+  const isStateHumanApproved = (st: string): boolean => {
+    if (st === selectedState && isApproved) return true
+    const sub = submissions.find(
+      (s) => s.permit_request_id === request?.id && s.state_code === st
+    )
+    return !!sub?.human_approved
   }
 
   const getStatusClasses = (status: 'red' | 'yellow' | 'green' | 'gray') => {
@@ -1944,28 +1962,81 @@ export default function PortalAssistPage() {
 
           {/* RIGHT COLUMN: Portal + Output + PDF + Analysis */}
           <div className="lg:col-span-5 space-y-6">
-            {/* Portal Actions */}
+            {/* Portal Actions — scroll/focus target after Approve & Record */}
             {config && (
-              <div className={cardClass}>
-                <h2 className="font-semibold mb-3 text-gray-900">{config.name} Portal</h2>
-                <a
-                  href={config.portalUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={`inline-block text-sm px-4 py-2 ${buttonPrimaryClass} mb-3`}
+              <div
+                ref={portalLaunchPanelRef}
+                data-testid="portal-launch-panel"
+                className={cardClass}
+              >
+                <h2
+                  ref={portalLaunchHeadingRef}
+                  tabIndex={-1}
+                  className="font-semibold mb-3 text-gray-900 outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2 rounded"
                 >
-                  Open Real {selectedState} Portal →
-                </a>
+                  {config.name} Portal
+                </h2>
+                {/* No request yet: single open for selected state + demo loader */}
                 {!request && (
-                  <button
-                    onClick={loadDemoRequest}
-                    className={`inline-block px-4 py-2 ${buttonSuccessClass} rounded-lg mb-3 ml-2`}
-                  >
-                    Load Rich Demo Request for {selectedState}
-                  </button>
+                  <>
+                    <a
+                      href={config.portalUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={`inline-block text-sm px-4 py-2 ${buttonPrimaryClass} mb-3`}
+                    >
+                      Open Real {selectedState} Portal →
+                    </a>
+                    <button
+                      onClick={loadDemoRequest}
+                      className={`inline-block px-4 py-2 ${buttonSuccessClass} rounded-lg mb-3 ml-2`}
+                    >
+                      Load Rich Demo Request for {selectedState}
+                    </button>
+                  </>
                 )}
                 {request && (
                   <div className="mb-3">
+                    {isApproved && (
+                      <p
+                        data-testid="post-approve-launch-hint"
+                        className="mb-2 text-xs text-emerald-900 sm:text-emerald-800"
+                      >
+                        {selectedState} approved — open portal when ready, or select another corridor
+                        state to review.
+                      </p>
+                    )}
+                    {/* Per-corridor-state open pills: muted until human_approved, then emerald */}
+                    {portalStatesForRequest.length > 0 && (
+                      <div
+                        data-testid="corridor-open-portals"
+                        className="flex flex-wrap gap-2 mb-3"
+                        role="group"
+                        aria-label="Open individual corridor state portals"
+                      >
+                        {portalStatesForRequest.map((st) => {
+                          const stCfg = STATE_PORTAL_CONFIGS[st]
+                          if (!stCfg?.portalUrl) return null
+                          const approved = isStateHumanApproved(st)
+                          return (
+                            <button
+                              key={st}
+                              type="button"
+                              data-testid={`open-portal-${st}`}
+                              data-human-approved={approved ? 'true' : 'false'}
+                              onClick={() => openStatePortals([st], { staggerMs: 0 })}
+                              className={`inline-block px-3 py-1.5 rounded-lg text-sm font-medium ${
+                                approved
+                                  ? buttonSuccessClass
+                                  : 'bg-gray-200 hover:bg-gray-300 text-gray-800 border border-gray-400 sm:border-gray-300'
+                              }`}
+                            >
+                              Open {st} portal
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={handleLaunchCorridorPortals}

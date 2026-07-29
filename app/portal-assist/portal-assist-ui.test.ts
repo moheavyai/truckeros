@@ -409,6 +409,66 @@ describe('Portal Assist — Launch all corridor portals', () => {
   })
 })
 
+describe('Portal Assist — post-approve launch panel + per-state Open pills', () => {
+  it('exposes portal-launch-panel as scroll/focus target after approve success', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="portal-launch-panel"')
+    expect(source).toContain('portalLaunchPanelRef')
+    expect(source).toContain('portalLaunchHeadingRef')
+    const approveGateStart = source.indexOf('const handleApproveGate = async () => {')
+    const parseOutputStart = source.indexOf('const handleParseOutput = async () => {')
+    const approveGate = source.slice(approveGateStart, parseOutputStart)
+    // Scroll to launch panel after success — never auto-open tabs
+    expect(approveGate).toContain("scrollIntoView({ behavior: 'smooth', block: 'start' })")
+    expect(approveGate).toContain('portalLaunchPanelRef')
+    expect(approveGate).toContain('portalLaunchHeadingRef')
+    expect(approveGate).toContain('focus({ preventScroll: true })')
+    expect(approveGate).not.toContain('openStatePortals')
+    expect(approveGate).not.toContain('window.open')
+  })
+
+  it('renders Open ST portal buttons only for portalStatesForRequest corridor', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="corridor-open-portals"')
+    expect(source).toContain('data-testid={`open-portal-${st}`}')
+    expect(source).toContain('Open {st} portal')
+    expect(source).toContain('portalStatesForRequest.map((st)')
+    expect(source).toContain('openStatePortals([st], { staggerMs: 0 })')
+    expect(source).toContain('isStateHumanApproved')
+    // Batch launch still present
+    expect(source).toContain('Launch all corridor portals')
+  })
+
+  it('marks approved corridor states with success class and data-human-approved', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain("data-human-approved={approved ? 'true' : 'false'}")
+    expect(source).toContain('isStateHumanApproved(st)')
+    // Green when approved; muted gray when not (still clickable — no disabled on per-state open)
+    expect(source).toContain('buttonSuccessClass')
+    expect(source).toContain('bg-gray-200 hover:bg-gray-300 text-gray-800')
+    // human_approved from submissions (plus current-session isApproved for selected)
+    const helperStart = source.indexOf('const isStateHumanApproved = (st: string)')
+    expect(helperStart).toBeGreaterThan(-1)
+    const helperEnd = source.indexOf('const getStatusClasses', helperStart)
+    const helper = source.slice(helperStart, helperEnd > helperStart ? helperEnd : helperStart + 500)
+    expect(helper).toContain('human_approved')
+    expect(helper).toContain('isApproved')
+  })
+
+  it('shows short post-approve copy near the launch panel', () => {
+    const source = readSource(pagePath)
+    expect(source).toContain('data-testid="post-approve-launch-hint"')
+    expect(source).toContain('approved — open portal when ready')
+    // Hint lives inside the same portal-launch-panel
+    const panelIdx = source.indexOf('data-testid="portal-launch-panel"')
+    const hintIdx = source.indexOf('data-testid="post-approve-launch-hint"')
+    const outputIdx = source.indexOf('4. Portal Output Paste')
+    expect(panelIdx).toBeGreaterThan(-1)
+    expect(hintIdx).toBeGreaterThan(panelIdx)
+    expect(outputIdx).toBeGreaterThan(hintIdx)
+  })
+})
+
 describe('Portal Assist — Filing kit (copy, checklist, trip type, workflow)', () => {
   it('imports clipboard packet + completeness checklist helpers', () => {
     const source = readSource(pagePath)
