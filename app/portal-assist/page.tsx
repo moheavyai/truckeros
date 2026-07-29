@@ -229,6 +229,10 @@ export default function PortalAssistPage() {
   const [bulkSelectedStates, setBulkSelectedStates] = useState<ReadonlySet<string>>(
     () => new Set()
   )
+  /** Post-bulk result strip near launch panel (partial fail stays visible off-gate). */
+  const [bulkApproveSummary, setBulkApproveSummary] = useState<string | null>(null)
+  /** Sync lock so bulk+single cannot double-fire before approving re-render. */
+  const approvingLockRef = useRef(false)
 
   const [parseError, setParseError] = useState<string | null>(null)
   const [savingSubmission, setSavingSubmission] = useState(false)
@@ -671,12 +675,12 @@ export default function PortalAssistPage() {
   /**
    * Shared POST path for human approval of one state.
    * Used by single-state gate and bulk "Approve selected states" — keeps payloads identical.
-   * Always generates/records per-state prefill (borders/entry/exit differ by state).
+   * pdfReference is caller-controlled: bulk only attaches for selectedState (PDF is per-selection).
    */
   const recordStateApproval = async (
     stateCode: string,
     prefillPkg: PrefillPackage,
-    opts?: { notes?: string }
+    opts?: { notes?: string; pdfReference?: string | null }
   ): Promise<PortalSubmissionRecord> => {
     if (!request) throw new Error('No request loaded')
 
@@ -692,7 +696,9 @@ export default function PortalAssistPage() {
       ...recordBase,
       status: 'prefilled',
       user_notes: (opts?.notes ?? approvalNotes).trim() || null,
-      pdf_reference: currentPdfReference,
+      // Explicit null when omitted by bulk for non-selected states — do not stamp selected PDF on every ST
+      pdf_reference:
+        opts && 'pdfReference' in opts ? opts.pdfReference ?? null : currentPdfReference,
     }
 
     const supabase = createClient()
@@ -722,23 +728,30 @@ export default function PortalAssistPage() {
 
   // Prominent HUMAN APPROVAL GATE — records submission with human_approved + status
   const handleApproveGate = async () => {
+    // In-flight lock: block dual bulk+single fire before re-render
+    if (approvingLockRef.current || approving) return
     if (!prefill || !request) return
     if (!approvalChecked) {
       setApprovalError('Please check the review confirmation box to proceed.')
       return
     }
 
+    approvingLockRef.current = true
     setApproving(true)
     setApprovalError(null)
+    setBulkApproveSummary(null)
 
     try {
       const record = await recordStateApproval(selectedState, prefill, {
         notes: approvalNotes,
+        pdfReference: currentPdfReference,
       })
 
       setIsApproved(true)
       removeForceReapprove(selectedState)
       setSubmissionRecord(record)
+      // Require re-ack before a subsequent bulk batch can fire
+      setApprovalChecked(false)
 
       // Refresh submissions so pills update immediately (yellow for prefilled)
       if (request) await loadSubmissionsForRequest(request.id)
@@ -751,15 +764,18 @@ export default function PortalAssistPage() {
       console.error('[portal-assist] approve gate error', e)
       setApprovalError(e.message || 'Approval record failed.')
     } finally {
+      approvingLockRef.current = false
       setApproving(false)
     }
   }
 
   /**
-   * Bulk approve: one review gate, per-state generatePortalPrefill + recordStateApproval.
+   * Bulk approve: one review gate, per-state prefill + recordStateApproval.
    * Skips already human-approved states (idempotent). No auto-open of portal tabs.
    */
   const handleBulkApproveSelected = async () => {
+    // In-flight lock: block dual bulk+single fire before re-render
+    if (approvingLockRef.current || approving) return
     if (!request) return
     if (!approvalChecked) {
       setApprovalError('Please check the review confirmation box to proceed.')
@@ -776,13 +792,23 @@ export default function PortalAssistPage() {
     // Skip states already human-approved (session + submissions; force-reapprove still needs POST)
     const toApprove = selected.filter((st) => !isStateHumanApproved(st))
     if (toApprove.length === 0) {
-      setApprovalError(null)
-      scrollFocusPortalLaunch()
+      // Not a success path — do not scroll as if approvals just recorded
+      setApprovalError('All selected states already approved.')
+      setBulkApproveSummary(null)
       return
     }
 
+    approvingLockRef.current = true
     setApproving(true)
     setApprovalError(null)
+    setBulkApproveSummary(null)
+
+    // Snapshot notes + tripType for the whole batch so mid-flight edits cannot skew later POSTs
+    const notesSnapshot = approvalNotes
+    const tripTypeSnapshot = tripType
+    const selectedStateSnapshot = selectedState
+    const prefillSnapshot = prefill
+    const pdfRefSnapshot = currentPdfReference
 
     const succeeded: string[] = []
     const failed: Array<{ state: string; error: string }> = []
@@ -790,16 +816,22 @@ export default function PortalAssistPage() {
     try {
       for (const st of toApprove) {
         try {
-          // Per-state prefill — do not reuse one package under every state_code
-          const stPrefill = generatePortalPrefill(request, st, { tripType })
+          // Prefer on-screen prefill for selected state (may diverge after trip-type patch);
+          // other states get fresh per-state generatePortalPrefill (entry/exit differ).
+          const stPrefill =
+            st === selectedStateSnapshot && prefillSnapshot
+              ? prefillSnapshot
+              : generatePortalPrefill(request, st, { tripType: tripTypeSnapshot })
+          // PDF ref is for selected state only — never stamp it under every bulk state_code
           const record = await recordStateApproval(st, stPrefill, {
-            notes: approvalNotes,
+            notes: notesSnapshot,
+            pdfReference: st === selectedStateSnapshot ? pdfRefSnapshot : null,
           })
           removeForceReapprove(st)
-          if (st === selectedState) {
+          if (st === selectedStateSnapshot) {
             setIsApproved(true)
             setSubmissionRecord(record)
-            setPrefill(stPrefill)
+            // Keep UI prefill when we used the snapshot; no need to overwrite
           }
           succeeded.push(st)
           console.log(
@@ -819,21 +851,30 @@ export default function PortalAssistPage() {
         const okPart =
           succeeded.length > 0 ? `Approved: ${succeeded.join(', ')}. ` : 'No states approved. '
         const failPart = `Failed: ${failed.map((f) => `${f.state} (${f.error})`).join('; ')}`
-        setApprovalError(okPart + failPart)
-      }
-
-      if (succeeded.length > 0) {
+        const summary = okPart + failPart
+        // Keep fail details on the gate; also surface near launch without scrolling away
+        setApprovalError(summary)
+        setBulkApproveSummary(summary)
+        // Partial success: do not scroll — user must see left-column failure details
+      } else if (succeeded.length > 0) {
+        setApprovalChecked(false)
+        setBulkApproveSummary(
+          `Approved ${succeeded.join(', ')}. Open portal(s) when ready.`
+        )
+        // Full success only — scroll to launch panel
         scrollFocusPortalLaunch()
       }
     } catch (e: any) {
       console.error('[portal-assist] bulk approve error', e)
       setApprovalError(e.message || 'Bulk approval failed.')
     } finally {
+      approvingLockRef.current = false
       setApproving(false)
     }
   }
 
   const toggleBulkState = (st: string, checked: boolean) => {
+    if (approving || approvingLockRef.current) return
     setBulkSelectedStates((prev) => {
       const next = new Set(prev)
       if (checked) next.add(st)
@@ -1075,7 +1116,7 @@ export default function PortalAssistPage() {
     : null
 
   const handleRegeneratePrefill = () => {
-    if (!request) return
+    if (!request || approving || approvingLockRef.current) return
     if (isStateHumanApproved(selectedState)) {
       const confirmed = window.confirm(
         'Regenerating will clear your approval for this state. Continue?'
@@ -1138,6 +1179,7 @@ export default function PortalAssistPage() {
   }
 
   const handleTripTypeChange = (next: PortalTripType) => {
+    if (approving || approvingLockRef.current) return
     if (next === tripType) return
     setTripType(next)
     setPrefill((prev) =>
@@ -1398,6 +1440,7 @@ export default function PortalAssistPage() {
                         key={t}
                         type="button"
                         onClick={() => handleTripTypeChange(t)}
+                        disabled={approving}
                         className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${
                           tripType === t
                             ? 'bg-gray-900 text-white border-gray-900'
@@ -2136,10 +2179,15 @@ export default function PortalAssistPage() {
                               className="flex items-center gap-2 text-sm text-gray-900"
                               data-testid={`bulk-approve-row-${st}`}
                             >
-                              <label className="flex items-center gap-2 cursor-pointer min-w-0 flex-1">
+                              <label
+                                className={`flex items-center gap-2 min-w-0 flex-1 ${
+                                  approving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                                }`}
+                              >
                                 <input
                                   type="checkbox"
                                   checked={checked}
+                                  disabled={approving}
                                   onChange={(e) => toggleBulkState(st, e.target.checked)}
                                   data-testid={`bulk-approve-state-${st}`}
                                   className="h-4 w-4 accent-emerald-700 border-gray-500 shrink-0"
@@ -2179,17 +2227,21 @@ export default function PortalAssistPage() {
                         <input
                           type="checkbox"
                           checked={approvalChecked}
+                          disabled={approving}
                           onChange={(e) => setApprovalChecked(e.target.checked)}
                           className="mt-1 h-4 w-4 accent-emerald-700 border-gray-500"
                         />
                         <span>
-                          I have personally reviewed the prefill data (dimensions, corridor, vehicle/equipment details, state-specific notes), the target portal instructions, and any route differences. I approve this for portal submission on behalf of the carrier.
+                          {portalStatesForRequest.length > 1 || bulkPendingCount > 1
+                            ? 'I have personally reviewed the shared load data (dimensions, corridor, vehicle/equipment details) and the selected corridor state(s) for this batch. I understand each state uses its own entry/exit prefill. I approve portal submission for the checked state(s) on behalf of the carrier.'
+                            : 'I have personally reviewed the prefill data (dimensions, corridor, vehicle/equipment details, state-specific notes), the target portal instructions, and any route differences. I approve this for portal submission on behalf of the carrier.'}
                         </span>
                       </label>
 
                       <textarea
                         value={approvalNotes}
                         onChange={(e) => setApprovalNotes(e.target.value)}
+                        disabled={approving}
                         placeholder="Optional notes for audit (e.g. reviewed bridge list 2026-06-07)"
                         className={`mt-3 w-full ${textareaClass} h-16`}
                       />
@@ -2197,7 +2249,7 @@ export default function PortalAssistPage() {
                       <div className="mt-3 flex flex-col sm:flex-row flex-wrap gap-2">
                         <button
                           onClick={handleRegeneratePrefill}
-                          disabled={!request}
+                          disabled={!request || approving}
                           className={`px-5 py-2 ${buttonSecondaryClass}`}
                         >
                           Regenerate Prefill
@@ -2208,17 +2260,19 @@ export default function PortalAssistPage() {
                             data-testid="bulk-approve-submit"
                             onClick={handleBulkApproveSelected}
                             disabled={
-                              !approvalChecked || approving || bulkSelectedCount === 0
+                              !approvalChecked || approving || bulkPendingCount === 0
                             }
                             className={`px-5 py-2 ${buttonSuccessClass} rounded-xl`}
                           >
                             {approving
                               ? 'Recording approvals…'
-                              : bulkSelectedCount === 0
-                                ? 'Approve selected states'
-                                : bulkSelectedCount === 1
+                              : bulkPendingCount === 0
+                                ? bulkSelectedCount === 0
+                                  ? 'Approve selected states'
+                                  : 'All selected already approved'
+                                : bulkPendingCount === 1
                                   ? 'Approve 1 state'
-                                  : `Approve ${bulkSelectedCount} states`}
+                                  : `Approve ${bulkPendingCount} states`}
                           </button>
                         )}
                         {!selectedIsHumanApproved && (
@@ -2235,7 +2289,7 @@ export default function PortalAssistPage() {
                         )}
                       </div>
                       {approvalError && (
-                        <div className="mt-2">
+                        <div className="mt-2" data-testid="bulk-approve-error">
                           <ErrorDisplay message={approvalError} variant="inline" onRetry={() => setApprovalError(null)} />
                         </div>
                       )}
@@ -2248,7 +2302,7 @@ export default function PortalAssistPage() {
                     <div className="space-y-3">
                       <button
                         onClick={handleRegeneratePrefill}
-                        disabled={!request}
+                        disabled={!request || approving}
                         className={`px-5 py-2 ${buttonSecondaryClass}`}
                       >
                         Regenerate Prefill
@@ -2327,6 +2381,21 @@ export default function PortalAssistPage() {
                       >
                         {selectedState} approved — open portal when ready, or select another corridor
                         state to review.
+                      </p>
+                    )}
+                    {/* Bulk approve outcome near launch (full success + partial fail summary) */}
+                    {bulkApproveSummary && (
+                      <p
+                        data-testid="bulk-approve-summary"
+                        role="status"
+                        aria-live="polite"
+                        className={`mb-2 text-xs ${
+                          bulkApproveSummary.includes('Failed:')
+                            ? 'text-amber-900 sm:text-amber-800'
+                            : 'text-emerald-900 sm:text-emerald-800'
+                        }`}
+                      >
+                        {bulkApproveSummary}
                       </p>
                     )}
                     {/* Per-corridor-state open pills: muted until human_approved, then emerald; never disabled */}
