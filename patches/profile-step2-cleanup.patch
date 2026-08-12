@@ -1,0 +1,60 @@
+diff --git a/app/profile/page.tsx b/app/profile/page.tsx
+index f5f282d..51c14bc 100644
+--- a/app/profile/page.tsx
++++ b/app/profile/page.tsx
+@@ -1681,10 +1681,15 @@ export default function ProfilePage() {
+         finalText = `${baseSuccessText} Review submission failed: ${changeRequestError}`
+       }
+ 
+-      setSaveMessage({
+-        type: finalType,
+-        text: finalText,
+-      })
++      // Bootstrap success: Step 2 card is enough — skip duplicate green banner.
++      if (!(wasProfileBootstrap && finalType === 'success')) {
++        setSaveMessage({
++          type: finalType,
++          text: finalText,
++        })
++      } else {
++        setSaveMessage(null)
++      }
+ 
+       if (isDriverSelfServiceActor(profile)) {
+         await loadOwnPendingChangeRequests(supabase, user.id)
+@@ -1693,9 +1698,16 @@ export default function ProfilePage() {
+         await loadAdminPendingChangeRequests(accessToken)
+       }
+ 
+-      requestAnimationFrame(() => {
+-        teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+-      })
++      // Bootstrap: keep viewport on Step 2. Do not jump to team roster.
++      if (wasProfileBootstrap) {
++        requestAnimationFrame(() => {
++          window.scrollTo({ top: 0, behavior: 'smooth' })
++        })
++      } else {
++        requestAnimationFrame(() => {
++          teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
++        })
++      }
+     } catch (error) {
+       console.warn('profile save', error)
+       setSaveMessage({
+@@ -2197,12 +2209,14 @@ export default function ProfilePage() {
+     isProfileBootstrap,
+     roleWelcomeSeen,
+   })
+-  const showFullWelcomeBanner = showGuidedWelcomeBanner || showTeamRoleWelcome
+   const showGuidedNextSteps =
+     !isProfileBootstrap &&
+     showLandingView &&
+     guidedStep === 'team_or_equipment' &&
+     canSeeSetupGuidance(setupActor)
++  // Step 2 card already explains next actions — skip the duplicate Welcome card.
++  const showFullWelcomeBanner =
++    (showGuidedWelcomeBanner || showTeamRoleWelcome) && !showGuidedNextSteps
+   const guidedCopy = getGuidedOnboardingCopy(guidedStep)
+   if (loading) {
+     return (
