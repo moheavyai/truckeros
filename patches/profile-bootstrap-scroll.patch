@@ -1,0 +1,24 @@
+diff --git a/app/profile/page.tsx b/app/profile/page.tsx
+index f5f282d..d4dfffc 100644
+--- a/app/profile/page.tsx
++++ b/app/profile/page.tsx
+@@ -1693,9 +1693,16 @@ export default function ProfilePage() {
+         await loadAdminPendingChangeRequests(accessToken)
+       }
+ 
+-      requestAnimationFrame(() => {
+-        teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+-      })
++      // Bootstrap: keep viewport on Step 2 (team/equipment). Do not jump to roster.
++      if (wasProfileBootstrap) {
++        requestAnimationFrame(() => {
++          window.scrollTo({ top: 0, behavior: 'smooth' })
++        })
++      } else {
++        requestAnimationFrame(() => {
++          teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
++        })
++      }
+     } catch (error) {
+       console.warn('profile save', error)
+       setSaveMessage({
