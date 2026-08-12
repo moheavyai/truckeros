@@ -23,7 +23,7 @@ export default function TruckerOSLanding() {
       <main className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
         <div className="max-w-3xl mx-auto">
           <h1 className="text-5xl sm:text-6xl font-semibold tracking-tighter text-gray-900 mb-6">
-            Oversize &amp; Overweight<br />Permits. Simplified.
+            Oversize & Overweight<br />Permits. Simplified.
           </h1>
           <p className="text-xl text-gray-600 mb-10">
             Fast, data-driven permitting for owner-operators and carriers.
@@ -38,7 +38,7 @@ export default function TruckerOSLanding() {
               Log In
             </a>
             <a
-              href="/login"
+              href="/login?mode=signup"
               className="inline-flex h-12 items-center justify-center rounded-lg border border-gray-300 px-8 text-sm font-semibold text-gray-900 hover:bg-gray-50 transition-colors"
             >
               Get Started
