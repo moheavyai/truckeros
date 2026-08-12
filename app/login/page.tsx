@@ -22,14 +22,39 @@ import {
 import { fetchActorTeamContext } from '@/lib/roster-profile-link'
 import type { User } from '@supabase/supabase-js'
 
+type AuthMode = 'signin' | 'signup'
+
+function readInitialMode(): AuthMode {
+  if (typeof window === 'undefined') return 'signin'
+  try {
+    const params = new URLSearchParams(window.location.search)
+    const mode = (params.get('mode') || '').toLowerCase()
+    if (mode === 'signup' || mode === 'create' || mode === 'register') return 'signup'
+  } catch {
+    // ignore
+  }
+  return 'signin'
+}
+
 export default function LoginPage() {
+  const [mode, setMode] = useState<AuthMode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
   const [authError, setAuthError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const router = useRouter()
   const redirectingRef = useRef(false)
+  const modeInitializedRef = useRef(false)
+
+  // Honor ?mode=signup from landing "Get Started" (or any deep link).
+  useEffect(() => {
+    if (modeInitializedRef.current) return
+    modeInitializedRef.current = true
+    setMode(readInitialMode())
+  }, [])
 
   /** Candidate from ?redirect= / storage only (no onboarding check yet). */
   const candidatePostLoginPath = useMemo(() => {
@@ -148,16 +173,32 @@ export default function LoginPage() {
     return () => listener.subscription.unsubscribe()
   }, [redirectAuthenticated])
 
+  const switchMode = (next: AuthMode) => {
+    setMode(next)
+    setAuthError(null)
+    setSuccessMessage(null)
+    // Keep email; clear passwords when switching to avoid accidental reuse.
+    setPassword('')
+    setConfirmPassword('')
+  }
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setAuthError(null)
+    setSuccessMessage(null)
+
+    if (!email.trim() || !password) {
+      setAuthError('Enter your email and password to sign in.')
+      setLoading(false)
+      return
+    }
 
     const supabase = createClient()
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim(),
         password,
       })
 
@@ -168,12 +209,16 @@ export default function LoginPage() {
 
       // Explicitly fetch the session to ensure the refresh token is properly stored
       // before redirecting. This helps avoid "Invalid Refresh Token" errors.
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
 
       if (session?.user) {
         await redirectAuthenticated(session.user)
       } else {
-        setAuthError('Login succeeded but no active session was found. Please try again or confirm your email if required.')
+        setAuthError(
+          'Login succeeded but no active session was found. Please try again or confirm your email if required.'
+        )
       }
     } catch (err: any) {
       // This catches network-level failures such as "Failed to fetch" (TypeError)
@@ -195,6 +240,24 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setAuthError(null)
+    setSuccessMessage(null)
+
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail || !password) {
+      setAuthError('Enter an email and password to create your account.')
+      setLoading(false)
+      return
+    }
+    if (password.length < 6) {
+      setAuthError('Password must be at least 6 characters.')
+      setLoading(false)
+      return
+    }
+    if (confirmPassword && password !== confirmPassword) {
+      setAuthError('Passwords do not match.')
+      setLoading(false)
+      return
+    }
 
     const supabase = createClient()
 
@@ -211,17 +274,32 @@ export default function LoginPage() {
             : `${window.location.origin}/login`
           : undefined
 
-      const { error } = await supabase.auth.signUp({
-        email,
+      const { data, error } = await supabase.auth.signUp({
+        email: trimmedEmail,
         password,
         options: emailRedirectTo ? { emailRedirectTo } : undefined,
       })
 
       if (error) {
         setAuthError(error.message)
-      } else {
-        alert('Account created! Check your email for the confirmation link. You must confirm before you can log in.')
+        return
       }
+
+      // When email confirmation is disabled in Supabase, signUp returns a session
+      // and the user is already authenticated. Redirect immediately — no stuck page,
+      // no "check your email" message that is wrong for this config.
+      if (data.session?.user) {
+        await redirectAuthenticated(data.session.user)
+        return
+      }
+
+      // Confirmation required: show clear next step and leave the form ready for sign-in.
+      setSuccessMessage(
+        'Account created. Check your email for the confirmation link. After you confirm, return here and sign in.'
+      )
+      setMode('signin')
+      setPassword('')
+      setConfirmPassword('')
     } catch (err: any) {
       const message = err?.message || 'An unexpected error occurred during sign up.'
       if (message.toLowerCase().includes('fetch')) {
@@ -240,13 +318,12 @@ export default function LoginPage() {
   if (checkingSession) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <BrandedLoader
-          message="Checking authentication..."
-          subMessage="Please wait"
-        />
+        <BrandedLoader message="Checking authentication..." subMessage="Please wait" />
       </div>
     )
   }
+
+  const isSignUp = mode === 'signup'
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -261,43 +338,72 @@ export default function LoginPage() {
           </a>
         </div>
 
-        {/* Login Card */}
+        {/* Auth Card */}
         <div className="bg-white border rounded-2xl p-8 shadow-sm">
-          <h1 className="text-2xl font-semibold tracking-tight mb-1">Welcome back</h1>
-          <p className="text-gray-600 text-sm mb-6">Sign in to access the Permit Agent</p>
+          <h1 className="text-2xl font-semibold tracking-tight mb-1">
+            {isSignUp ? 'Create your account' : 'Welcome back'}
+          </h1>
+          <p className="text-gray-600 text-sm mb-6">
+            {isSignUp
+              ? 'Get started with the Permit Agent for owner-operators and carriers.'
+              : 'Sign in to access the Permit Agent'}
+          </p>
 
           {/* Placeholder config warning (only visible when .env.local still has example values) */}
           {isUsingPlaceholderEnv && (
             <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
-              <strong>Supabase not configured yet.</strong> Your <code>.env.local</code> still contains the placeholder values
-              from <code>.env.local.example</code>. Replace <code>NEXT_PUBLIC_SUPABASE_URL</code> and{' '}
-              <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> with the real values from your Supabase project, then restart the dev server.
+              <strong>Supabase not configured yet.</strong> Your <code>.env.local</code> still contains
+              the placeholder values from <code>.env.local.example</code>. Replace{' '}
+              <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> with
+              the real values from your Supabase project, then restart the dev server.
             </div>
           )}
 
-          {/* Auth errors (network "Failed to fetch", invalid credentials, etc.) — replaces the old alert() */}
+          {/* Auth errors */}
           {authError && (
             <div className="mb-4">
               <ErrorDisplay message={authError} variant="inline" />
             </div>
           )}
 
-          {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-4">
+          {/* Success (email confirmation required path) */}
+          {successMessage && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">
+              {successMessage}
+            </div>
+          )}
+
+          {/* Form — same fields, different submit handler + labels by mode */}
+          <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-4">
             <input
               type="email"
               placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
               className="border p-3 w-full rounded"
+              required
             />
             <input
               type="password"
-              placeholder="Password"
+              placeholder={isSignUp ? 'Password (min 6 characters)' : 'Password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete={isSignUp ? 'new-password' : 'current-password'}
               className="border p-3 w-full rounded"
+              required
+              minLength={isSignUp ? 6 : undefined}
             />
+            {isSignUp && (
+              <input
+                type="password"
+                placeholder="Confirm password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                className="border p-3 w-full rounded"
+              />
+            )}
 
             <button
               type="submit"
@@ -306,23 +412,39 @@ export default function LoginPage() {
             >
               {loading ? (
                 <>
-                  <span className="animate-spin">⏳</span> Logging in...
+                  <span className="animate-spin">⏳</span>{' '}
+                  {isSignUp ? 'Creating account...' : 'Signing in...'}
                 </>
+              ) : isSignUp ? (
+                'Create account'
               ) : (
                 'Sign in'
               )}
             </button>
           </form>
 
-          {/* Sign Up Link */}
+          {/* Mode switch */}
           <div className="mt-5 pt-5 border-t text-center">
-            <button
-              onClick={handleSignUp}
-              disabled={loading}
-              className="text-sm text-gray-600 hover:text-black"
-            >
-              Don&apos;t have an account? <span className="font-medium text-black">Create one</span>
-            </button>
+            {isSignUp ? (
+              <button
+                type="button"
+                onClick={() => switchMode('signin')}
+                disabled={loading}
+                className="text-sm text-gray-600 hover:text-black"
+              >
+                Already have an account? <span className="font-medium text-black">Sign in</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => switchMode('signup')}
+                disabled={loading}
+                className="text-sm text-gray-600 hover:text-black"
+              >
+                Don't have an account?{' '}
+                <span className="font-medium text-black">Create one</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
