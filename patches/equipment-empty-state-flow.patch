@@ -1,0 +1,53 @@
+diff --git a/app/equipment/default-rig-button.test.ts b/app/equipment/default-rig-button.test.ts
+index e9070e1..43ede4e 100644
+--- a/app/equipment/default-rig-button.test.ts
++++ b/app/equipment/default-rig-button.test.ts
+@@ -48,13 +48,14 @@ describe('Default rig button labels', () => {
+     expect(source).not.toContain('Edit in Builder')
+   })
+ 
+-  it('opens on Saved Rigs tab with Saved Rigs first in tab order', () => {
++  it('opens on Rigs tab with Tractors → Trailers → Rigs order', () => {
+     const filePath = path.join(process.cwd(), 'app', 'equipment', 'page.tsx')
+     const source = readFileSync(filePath, 'utf8')
+ 
+-    expect(source).toMatch(/useState<Tab>\('saved'\)/)
+-    expect(source).toMatch(/\{ k: 'saved', label: 'Saved Rigs' \},\s*\n\s*\{ k: 'tractors'/)
+-    expect(source).toMatch(/\{ k: 'trailers', label: 'Trailers' \},\s*\n\s*\{ k: 'builder', label: 'Rig Builder' \}/)
++    expect(source).toMatch(/useState<Tab>\('rigs'\)/)
++    expect(source).toMatch(/\{ k: 'tractors', label: 'Tractors' \},\s*\n\s*\{ k: 'trailers', label: 'Trailers' \},\s*\n\s*\{ k: 'rigs', label: 'Rigs' \}/)
++    expect(source).toContain('hasChosenTab')
++    expect(source).toContain('rigBuilderOpen')
+   })
+ })
+ 
+diff --git a/app/equipment/equipment-scope-ui.test.ts b/app/equipment/equipment-scope-ui.test.ts
+index 66fc8d2..7f58405 100644
+--- a/app/equipment/equipment-scope-ui.test.ts
++++ b/app/equipment/equipment-scope-ui.test.ts
+@@ -232,19 +232,18 @@ describe('Equipment page — mobile contrast classes', () => {
+     expect(source).toMatch(/const buttonSecondaryClass =[\s\S]*?min-h-\[44px\]/)
+   })
+ 
+-  it('surfaces Axle Group Optimizer entry near top of main content', () => {
++  it('demotes Axle Group Optimizer below main equipment flow as a specialty tool', () => {
+     const source = readEquipmentSource()
+     expect(source).toContain('Axle Group Optimizer')
+     expect(source).toContain('href="/axle-optimizer"')
+-    // Placed after page title block, before tabs
++    expect(source).toContain('Specialty')
++    // Below tabs / main panels (not above the primary workflow)
+     const titleIdx = source.indexOf('Equipment & Rig Builder')
+-    const axleIdx = source.indexOf('Axle Group Optimizer')
+     const tabsIdx = source.indexOf('{/* Tabs */}')
++    const axleIdx = source.indexOf('Axle Group Optimizer')
+     expect(titleIdx).toBeGreaterThan(-1)
+-    expect(axleIdx).toBeGreaterThan(titleIdx)
+-    expect(tabsIdx).toBeGreaterThan(axleIdx)
+-    // D2: entry card uses shared cardClass padding (axle-optimizer parity)
+-    expect(source).toMatch(/cardClass.*mb-6|mb-6.*cardClass/)
++    expect(tabsIdx).toBeGreaterThan(titleIdx)
++    expect(axleIdx).toBeGreaterThan(tabsIdx)
+     // Touch target + keyboard focus parity with hover
+     expect(source).toMatch(/axle-optimizer[\s\S]{0,200}min-h-\[44px\]/)
+     expect(source).toMatch(/axle-optimizer[\s\S]{0,250}focus-visible:ring-2/)

@@ -1,0 +1,240 @@
+diff --git a/app/equipment/page.tsx b/app/equipment/page.tsx
+index 052b2d7..f46737a 100644
+--- a/app/equipment/page.tsx
++++ b/app/equipment/page.tsx
+@@ -48,7 +48,7 @@ import {
+   type AxleGroupType,
+ } from '@/lib/axle-groups'
+ 
+-type Tab = 'tractors' | 'trailers' | 'builder' | 'saved'
++type Tab = 'tractors' | 'trailers' | 'rigs'
+ 
+ /** Mobile-first contrast: stronger borders/text on small screens; softer from sm: up (matches permit-test / portal-assist). */
+ const fieldControlClass =
+@@ -95,7 +95,11 @@ export default function EquipmentPage() {
+   const { workspaceMode, effectiveOrganizationId } = useOrganizationContext(ownOrganizationId)
+   const isServiceModeReadOnly = workspaceMode === 'service'
+ 
+-  const [activeTab, setActiveTab] = useState<Tab>('saved')
++  const [activeTab, setActiveTab] = useState<Tab>('rigs')
++  /** Show builder panel inside Rigs tab (edit existing or first-time build). */
++  const [rigBuilderOpen, setRigBuilderOpen] = useState(false)
++  /** Once the user picks a tab, do not override with smart default. */
++  const [hasChosenTab, setHasChosenTab] = useState(false)
+ 
+   // Data
+   const [tractors, setTractors] = useState<Tractor[]>([])
+@@ -124,6 +128,22 @@ export default function EquipmentPage() {
+   const [loadedRigId, setLoadedRigId] = useState<string | null>(null)
+   const [settingDefaultRigId, setSettingDefaultRigId] = useState<string | null>(null)
+ 
++  // First visit / empty fleet: land on the next missing step (tractor → trailer → rigs).
++  useEffect(() => {
++    if (loading || loadingAuth || hasChosenTab) return
++    if (tractors.length === 0) {
++      setActiveTab('tractors')
++      return
++    }
++    if (trailers.length === 0) {
++      setActiveTab('trailers')
++      return
++    }
++    setActiveTab('rigs')
++    // No saved rigs yet → open builder so the empty Rigs tab is actionable.
++    if (rigs.length === 0) setRigBuilderOpen(true)
++  }, [loading, loadingAuth, hasChosenTab, tractors.length, trailers.length, rigs.length])
++
+   // Derived for builder
+   const currentTractor = tractors.find((t) => t.id === selectedTractorId) || null
+   const currentTrailers = selectedTrailerIds
+@@ -951,7 +971,7 @@ export default function EquipmentPage() {
+     }
+     alert(editingExisting ? `Updated rig "${name}"` : `Saved rig "${name}"`)
+     await loadAll()
+-    setActiveTab('saved')
++    setActiveTab('rigs'); setRigBuilderOpen(false)
+     clearBuilder()
+   }
+ 
+@@ -996,7 +1016,7 @@ export default function EquipmentPage() {
+     setRigName(rig.rig_name)
+     setBuilderNote(rig.notes || '')
+     setLoadedRigId(rig.id)
+-    setActiveTab('builder')
++    setActiveTab('rigs'); setRigBuilderOpen(true)
+     window.scrollTo({ top: 120, behavior: 'smooth' })
+   }
+ 
+@@ -1065,7 +1085,7 @@ export default function EquipmentPage() {
+               Equipment & Rig Builder
+             </h1>
+             <p className={`${bodyTextClass} mt-2 text-sm sm:text-[15px] max-w-2xl`}>
+-              Save tractor and trailer profiles, then build rigs for OSOW dimensions.
++              Add your tractor and trailer, then build a rig for OSOW dimensions.
+             </p>
+           </div>
+           <div className="flex flex-wrap gap-2 sm:gap-3 shrink-0">
+@@ -1073,31 +1093,21 @@ export default function EquipmentPage() {
+           </div>
+         </div>
+ 
+-        {/* Axle Group Optimizer — primary entry for equipment-capable roles */}
+-        <a
+-          href="/axle-optimizer"
+-          className={`${cardClass} mb-6 min-h-[44px] flex items-center justify-between gap-3 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 transition-colors`}
+-        >
+-          <div className="min-w-0">
+-            <div className="font-semibold text-gray-900">Axle Group Optimizer</div>
+-            <p className={`${mutedTextClass} text-xs mt-0.5`}>
+-              Tune axle spacing for tandem, spread, and tridem legal groups.
+-            </p>
+-          </div>
+-          <span className="shrink-0 text-sm font-medium text-gray-900">Open →</span>
+-        </a>
+ 
+         {/* Tabs */}
+         <div className={`flex gap-1 border-b ${dividerBorderClass} mb-6`}>
+           {([
+-            { k: 'saved', label: 'Saved Rigs' },
+             { k: 'tractors', label: 'Tractors' },
+             { k: 'trailers', label: 'Trailers' },
+-            { k: 'builder', label: 'Rig Builder' },
++            { k: 'rigs', label: 'Rigs' },
+           ] as const).map((t) => (
+             <button
+               key={t.k}
+-              onClick={() => setActiveTab(t.k)}
++              onClick={() => {
++                setHasChosenTab(true)
++                setActiveTab(t.k)
++                if (t.k === 'rigs' && rigs.length === 0) setRigBuilderOpen(true)
++              }}
+               className={`min-h-[44px] px-5 py-2.5 text-sm font-medium border-b-2 transition-all touch-manipulation ${
+                 activeTab === t.k
+                   ? 'border-emerald-600 text-emerald-700'
+@@ -1110,7 +1120,7 @@ export default function EquipmentPage() {
+         </div>
+ 
+         {/* RIG BUILDER TAB */}
+-        {activeTab === 'builder' && (
++        {activeTab === 'rigs' && rigBuilderOpen && (
+           <div className="space-y-6">
+             <div className={cardClass}>
+               <h2 className="font-semibold text-xl tracking-tight mb-1">Build a Combination</h2>
+@@ -1754,12 +1764,20 @@ export default function EquipmentPage() {
+         )}
+ 
+         {/* SAVED RIGS TAB */}
+-        {activeTab === 'saved' && (
++        {activeTab === 'rigs' && (
+           <div>
+             <div className="flex justify-between mb-3 items-center">
+-              <div className="font-semibold">Saved Rig Configurations ({rigs.length}) — ready to use in analyses</div>
++              <div className="font-semibold">{rigs.length === 0 ? 'Rigs' : `Saved Rig Configurations (${rigs.length}) — ready to use in analyses`}</div>
+               {!isServiceModeReadOnly && (
+-                <button onClick={() => setActiveTab('builder')} className={buttonSecondaryClass}>+ Build New Rig</button>
++                <button
++                  onClick={() => {
++                    setHasChosenTab(true)
++                    setRigBuilderOpen(true)
++                  }}
++                  className={buttonSecondaryClass}
++                >
++                  {rigBuilderOpen ? 'Building…' : '+ Build New Rig'}
++                </button>
+               )}
+             </div>
+ 
+@@ -1883,17 +1901,88 @@ export default function EquipmentPage() {
+                   </div>
+                 )
+               })}
+-              {rigs.length === 0 && (
+-                <div className={`text-sm ${mutedTextClass} col-span-2 ${cardClass}`}>
+-                  No saved rigs yet. You're on <b>Saved Rigs</b> — open the <b>Rig Builder</b> tab to create your first tractor + trailer combination.
++              {rigs.length === 0 && !rigBuilderOpen && (
++                <div className={`text-sm ${bodyTextClass} col-span-2 ${cardClass} space-y-3`}>
++                  <p className="font-medium text-gray-900">No rigs yet</p>
++                  {tractors.length === 0 ? (
++                    <p className={mutedTextClass}>
++                      Start with a <b>tractor</b> profile, then add a trailer and build your first rig.
++                    </p>
++                  ) : trailers.length === 0 ? (
++                    <p className={mutedTextClass}>
++                      You have a tractor — add a <b>trailer</b> next, then build the combination.
++                    </p>
++                  ) : (
++                    <p className={mutedTextClass}>
++                      Tractor and trailer are ready. Build your first combination for permit analysis.
++                    </p>
++                  )}
++                  <div className="flex flex-wrap gap-2">
++                    {tractors.length === 0 && (
++                      <button
++                        type="button"
++                        onClick={() => {
++                          setHasChosenTab(true)
++                          setActiveTab('tractors')
++                        }}
++                        className={buttonPrimaryClass}
++                      >
++                        Add tractor
++                      </button>
++                    )}
++                    {tractors.length > 0 && trailers.length === 0 && (
++                      <button
++                        type="button"
++                        onClick={() => {
++                          setHasChosenTab(true)
++                          setActiveTab('trailers')
++                        }}
++                        className={buttonPrimaryClass}
++                      >
++                        Add trailer
++                      </button>
++                    )}
++                    {tractors.length > 0 && trailers.length > 0 && !isServiceModeReadOnly && (
++                      <button
++                        type="button"
++                        onClick={() => {
++                          setHasChosenTab(true)
++                          setRigBuilderOpen(true)
++                        }}
++                        className={buttonPrimaryClass}
++                      >
++                        Build first rig
++                      </button>
++                    )}
++                  </div>
+                 </div>
+               )}
+             </div>
+           </div>
+         )}
+ 
++
++        {/* Specialty tool — demoted for most carriers; useful for superloads / axle planning */}
++        <a
++          href="/axle-optimizer"
++          className={`${cardClass} mt-10 mb-2 min-h-[44px] flex items-center justify-between gap-3 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 transition-colors`}
++        >
++          <div className="min-w-0">
++            <div className="flex flex-wrap items-center gap-2">
++              <span className="font-semibold text-gray-900">Axle Group Optimizer</span>
++              <span className="text-[10px] font-semibold uppercase tracking-wide rounded-full bg-gray-100 text-gray-600 px-2 py-0.5">
++                Specialty
++              </span>
++            </div>
++            <p className={`${mutedTextClass} text-xs mt-0.5`}>
++              Optional tool for superloads and tight axle-group planning — most setups do not need this first.
++            </p>
++          </div>
++          <span className="shrink-0 text-sm font-medium text-gray-900">Open →</span>
++        </a>
++
+         {/* Footer help */}
+-        <p className={`mt-10 text-xs ${mutedTextClass} text-center`}>
++        <p className={`mt-4 text-xs ${mutedTextClass} text-center`}>
+           Private to your account — accurate 5th-wheel / kingpin data improves OSOW predictions.
+         </p>
+       </main>

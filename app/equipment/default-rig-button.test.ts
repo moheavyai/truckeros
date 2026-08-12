@@ -48,13 +48,14 @@ describe('Default rig button labels', () => {
     expect(source).not.toContain('Edit in Builder')
   })
 
-  it('opens on Saved Rigs tab with Saved Rigs first in tab order', () => {
+  it('opens on Rigs tab with Tractors → Trailers → Rigs order', () => {
     const filePath = path.join(process.cwd(), 'app', 'equipment', 'page.tsx')
     const source = readFileSync(filePath, 'utf8')
 
-    expect(source).toMatch(/useState<Tab>\('saved'\)/)
-    expect(source).toMatch(/\{ k: 'saved', label: 'Saved Rigs' \},\s*\n\s*\{ k: 'tractors'/)
-    expect(source).toMatch(/\{ k: 'trailers', label: 'Trailers' \},\s*\n\s*\{ k: 'builder', label: 'Rig Builder' \}/)
+    expect(source).toMatch(/useState<Tab>\('rigs'\)/)
+    expect(source).toMatch(/\{ k: 'tractors', label: 'Tractors' \},\s*\n\s*\{ k: 'trailers', label: 'Trailers' \},\s*\n\s*\{ k: 'rigs', label: 'Rigs' \}/)
+    expect(source).toContain('hasChosenTab')
+    expect(source).toContain('rigBuilderOpen')
   })
 })
 
