@@ -64,4 +64,22 @@ describe('Login page redirect handling', () => {
     expect(source).toContain('profileError')
     expect(source).toMatch(/if \(profileError\) \{[\s\S]*return ONBOARDING_PATH/)
   })
+
+  it('supports dual-mode sign-in and create-account UX', () => {
+    const source = readLoginSource()
+    expect(source).toContain("type AuthMode = 'signin' | 'signup'")
+    expect(source).toContain('Create your account')
+    expect(source).toContain('Create account')
+    expect(source).toContain('readInitialMode')
+    expect(source).toMatch(/mode === 'signup'|mode === "signup"/)
+  })
+
+  it('redirects immediately when signUp returns a session (no confirmation required)', () => {
+    const source = readLoginSource()
+    const handleSignUp = source.slice(source.indexOf('const handleSignUp'))
+    expect(handleSignUp).toContain('data.session')
+    expect(handleSignUp).toContain('redirectAuthenticated')
+    // Must not hard-code a misleading always-show "check your email" alert on the session path
+    expect(handleSignUp).not.toMatch(/alert\(['"]Account created!/)
+  })
 })
