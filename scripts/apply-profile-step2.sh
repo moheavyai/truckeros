@@ -3,23 +3,51 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 F=app/profile/page.tsx
 [ -f "$F" ] || { echo "missing $F"; exit 1; }
+
+# Normalize CRLF -> LF for reliable matching (Windows Git Bash)
+if grep -q $'\r' "$F" 2>/dev/null; then
+  echo "Normalizing CRLF -> LF in $F"
+  sed -i 's/\r$//' "$F"
+fi
+
 cp "$F" "$F.bak-step2"
 
 # --- 1) Skip duplicate success banner on bootstrap ---
-if ! grep -q "Bootstrap success: Step 2 card is enough" "$F"; then
+if grep -q "Bootstrap success: Step 2 card is enough" "$F"; then
+  echo "1/3 banner skip: already present"
+else
   perl -i -0pe 's/      setSaveMessage\(\{\n        type: finalType,\n        text: finalText,\n      \}\)\n\n      if \(isDriverSelfServiceActor\(profile\)\) \{/      \/\/ Bootstrap success: Step 2 card is enough — skip duplicate green banner.\n      if (!(wasProfileBootstrap && finalType === '\''success'\'')) {\n        setSaveMessage({\n          type: finalType,\n          text: finalText,\n        })\n      } else {\n        setSaveMessage(null)\n      }\n\n      if (isDriverSelfServiceActor(profile)) {/s' "$F"
+  if grep -q "Bootstrap success: Step 2 card is enough" "$F"; then
+    echo "1/3 banner skip: applied"
+  else
+    echo "1/3 banner skip: FAILED to match setSaveMessage block"
+    grep -n "setSaveMessage\|isDriverSelfServiceActor" "$F" | head -15
+  fi
 fi
 
-# --- 2) Bootstrap: stay on Step 2 (no jump to team) ---
+# --- 2) Bootstrap: stay on Step 2 ---
 if grep -q "keep viewport on Step 2" "$F"; then
-  echo "scroll fix already present"
+  echo "2/3 scroll fix: already present"
 else
   perl -i -0pe 's/      if \(isPrimaryOwner\(profile\) && accessToken\) \{\n        await loadAdminPendingChangeRequests\(accessToken\)\n      \}\n\n      requestAnimationFrame\(\(\) => \{\n        teamSectionRef\.current\?\.scrollIntoView\(\{ behavior: '\''smooth'\'', block: '\''start'\'' \}\)\n      \}\)/      if (isPrimaryOwner(profile) && accessToken) {\n        await loadAdminPendingChangeRequests(accessToken)\n      }\n\n      \/\/ Bootstrap: keep viewport on Step 2. Do not jump to team roster.\n      if (wasProfileBootstrap) {\n        requestAnimationFrame(() => {\n          window.scrollTo({ top: 0, behavior: '\''smooth'\'' })\n        })\n      } else {\n        requestAnimationFrame(() => {\n          teamSectionRef.current?.scrollIntoView({ behavior: '\''smooth'\'', block: '\''start'\'' })\n        })\n      }/s' "$F"
+  if grep -q "keep viewport on Step 2" "$F"; then
+    echo "2/3 scroll fix: applied"
+  else
+    echo "2/3 scroll fix: FAILED"
+  fi
 fi
 
 # --- 3) Hide Welcome card when Step 2 is showing ---
-if ! grep -q "skip the duplicate Welcome card" "$F"; then
+if grep -q "skip the duplicate Welcome card" "$F"; then
+  echo "3/3 welcome hide: already present"
+else
   perl -i -0pe 's/  const showFullWelcomeBanner = showGuidedWelcomeBanner \|\| showTeamRoleWelcome\n  const showGuidedNextSteps =\n    !isProfileBootstrap &&\n    showLandingView &&\n    guidedStep === '\''team_or_equipment'\'' &&\n    canSeeSetupGuidance\(setupActor\)/  const showGuidedNextSteps =\n    !isProfileBootstrap &&\n    showLandingView &&\n    guidedStep === '\''team_or_equipment'\'' &&\n    canSeeSetupGuidance(setupActor)\n  \/\/ Step 2 card already explains next actions — skip the duplicate Welcome card.\n  const showFullWelcomeBanner =\n    (showGuidedWelcomeBanner || showTeamRoleWelcome) && !showGuidedNextSteps/s' "$F"
+  if grep -q "skip the duplicate Welcome card" "$F"; then
+    echo "3/3 welcome hide: applied"
+  else
+    echo "3/3 welcome hide: FAILED to match showFullWelcomeBanner block"
+    grep -n "showFullWelcomeBanner\|showGuidedNextSteps" "$F" | head -15
+  fi
 fi
 
 ok=1
@@ -27,7 +55,7 @@ grep -q "Bootstrap success: Step 2 card is enough" "$F" || ok=0
 grep -q "keep viewport on Step 2" "$F" || ok=0
 grep -q "skip the duplicate Welcome card" "$F" || ok=0
 if [[ "$ok" -eq 1 ]]; then
-  echo "OK: profile Step 2 cleanup applied"
+  echo "OK: profile Step 2 cleanup complete"
   rm -f "$F.bak-step2"
   grep -n "Step 2 card is enough\|keep viewport on Step 2\|skip the duplicate Welcome" "$F" | head -10
   exit 0
