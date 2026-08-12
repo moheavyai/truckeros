@@ -40,6 +40,10 @@ import {
   getOwnerBootstrapSetupCardSubtitle,
   getOwnerBootstrapOwnerOperatorHint,
   getOwnerBootstrapSaveButtonLabel,
+  formatUsPhoneInput,
+  formatEinInput,
+  formatProfileFieldInput,
+  digitsOnly,
   carrierFieldsDiffer,
   emptyMemberProfileForm,
   formatCarrierNameSummary,
@@ -1848,8 +1852,8 @@ describe('owner bootstrap setup helpers', () => {
     expect(getOwnerBootstrapSetupCardTitle()).toBe('Welcome to Truckeros')
     expect(getOwnerBootstrapSetupCardSubtitle()).toContain('account Owner')
     expect(getOwnerBootstrapOwnerOperatorHint()).toContain('Team Roster')
-    expect(getOwnerBootstrapSaveButtonLabel(false)).toBe('Complete Setup')
-    expect(getOwnerBootstrapSaveButtonLabel(true)).toBe('Setting up...')
+    expect(getOwnerBootstrapSaveButtonLabel(false)).toBe('Save - Next')
+    expect(getOwnerBootstrapSaveButtonLabel(true)).toBe('Saving...')
   })
 
   it('validates bootstrap required fields and trims email', () => {
@@ -1945,5 +1949,33 @@ describe('teamMemberProfileToPayload', () => {
       driver_full_name: 'Riley Roster',
       user_roles: ['Driver'],
     })
+  })
+})
+describe('formatUsPhoneInput / formatEinInput', () => {
+  it('formats US phones as (XXX) XXX-XXXX while typing', () => {
+    expect(formatUsPhoneInput('5')).toBe('(5')
+    expect(formatUsPhoneInput('555')).toBe('(555')
+    expect(formatUsPhoneInput('5551')).toBe('(555) 1')
+    expect(formatUsPhoneInput('5551234567')).toBe('(555) 123-4567')
+    expect(formatUsPhoneInput('15551234567')).toBe('(555) 123-4567')
+    expect(formatUsPhoneInput('(555) 123-4567')).toBe('(555) 123-4567')
+    expect(formatUsPhoneInput('')).toBe('')
+  })
+
+  it('formats EIN as XX-XXXXXXX', () => {
+    expect(formatEinInput('1')).toBe('1')
+    expect(formatEinInput('12')).toBe('12')
+    expect(formatEinInput('123')).toBe('12-3')
+    expect(formatEinInput('123456789')).toBe('12-3456789')
+    expect(formatEinInput('12-3456789')).toBe('12-3456789')
+    expect(formatEinInput('')).toBe('')
+  })
+
+  it('routes profile field keys through the shared formatter', () => {
+    expect(formatProfileFieldInput('carrier_phone', '5551234567')).toBe('(555) 123-4567')
+    expect(formatProfileFieldInput('driver_phone', '5559876543')).toBe('(555) 987-6543')
+    expect(formatProfileFieldInput('ein', '123456789')).toBe('12-3456789')
+    expect(formatProfileFieldInput('company_name', 'Acme LLC')).toBe('Acme LLC')
+    expect(digitsOnly('(555) 123-4567')).toBe('5551234567')
   })
 })

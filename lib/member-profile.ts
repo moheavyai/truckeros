@@ -11,6 +11,13 @@ import {
   type UserRole,
 } from '@/types/member-profile'
 
+export {
+  digitsOnly,
+  formatUsPhoneInput,
+  formatEinInput,
+  formatProfileFieldInput,
+} from '@/lib/profile-field-format'
+
 export const CARRIER_FIELD_KEYS = [
   'company_name',
   'usdot_number',
@@ -589,7 +596,7 @@ export function getOwnerBootstrapOwnerOperatorHint(): string {
 }
 
 export function getOwnerBootstrapSaveButtonLabel(saving: boolean): string {
-  return saving ? 'Setting up...' : 'Complete Setup'
+  return saving ? 'Saving...' : 'Save - Next'
 }
 
 export function shouldShowCarrierInformationCard(

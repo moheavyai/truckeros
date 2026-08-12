@@ -45,6 +45,7 @@ import {
   CARRIER_SAVE_FORBIDDEN_MESSAGE,
   applyOwnerOperatorRoles,
   ensureBootstrapOwnerRoles,
+  formatProfileFieldInput,
   getOwnerBootstrapSaveButtonLabel,
   isOwnerOperatorSelected,
   ownerAdminBadgeRole,
@@ -989,7 +990,8 @@ export default function ProfilePage() {
   }
 
   function updateField(key: keyof MemberProfileFormData, value: string) {
-    setForm((prev) => ({ ...prev, [key]: value }))
+    const nextValue = formatProfileFieldInput(key, value)
+    setForm((prev) => ({ ...prev, [key]: nextValue }))
     if (saveMessage) setSaveMessage(null)
     if (carrierMessage) setCarrierMessage(null)
   }
@@ -1655,8 +1657,8 @@ export default function ProfilePage() {
         : createdNewRosterMember
           ? 'New team member saved.'
           : wasEditingOther
-            ? `Updated ${updatedName} successfully.${reviewSuffix}`
-            : `Profile saved successfully.${reviewSuffix}`
+            ? `Updated  successfully.`
+            : `Profile saved successfully.`
 
       let finalText = baseSuccessText
       let finalType: 'success' | 'error' | 'warning' = 'success'
@@ -1691,11 +1693,9 @@ export default function ProfilePage() {
         await loadAdminPendingChangeRequests(accessToken)
       }
 
-      if (!wasProfileBootstrap) {
-        requestAnimationFrame(() => {
-          teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        })
-      }
+      requestAnimationFrame(() => {
+        teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
     } catch (error) {
       console.warn('profile save', error)
       setSaveMessage({
