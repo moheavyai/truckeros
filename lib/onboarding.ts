@@ -1,1 +1,1 @@
-PLACEHOLDER_ONBOARDING
+test content placeholder - will be replaced
