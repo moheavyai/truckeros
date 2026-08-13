@@ -2,6 +2,15 @@
  * lib/escort-analysis.ts
  *
  * Per-state escort requirement analysis using state_permit_rules + baseline thresholds.
+ *
+ * Output distinguishes:
+ * - requirementLevel: may_require vs required (hard)
+ * - count + positions (lead / chase)
+ * - escort types (civilian vs law enforcement)
+ * - height pole: none | recommended | required
+ * - road-class / local-road caveats
+ *
+ * Backward compatible: escortCount, warning, heightPoleRecommended remain populated.
  */
 
 import { formatDimensionDisplay } from '@/lib/parse-dimension'
@@ -14,6 +23,39 @@ export const BASELINE_TWO_ESCORT_LENGTH_FT = 110.0
 export const BASELINE_HEIGHT_POLE_FT = 14.5 // 14'6"
 export const BASELINE_HEIGHT_POLE_STRONG_FT = 15.5 // 15'6"
 
+export type EscortRequirementLevel = 'none' | 'may_require' | 'required'
+export type EscortPosition = 'lead' | 'chase'
+export type EscortVehicleType = 'civilian' | 'law_enforcement'
+export type HeightPoleLevel = 'none' | 'recommended' | 'required'
+export type RoadClassHint = 'interstate' | 'us_highway' | 'state_highway' | 'local' | 'mixed'
+
+/**
+ * Optional structured band stored in state_permit_rules.escort_rules (jsonb).
+ * When present, bands are evaluated in order; strongest match wins.
+ */
+export interface EscortRuleBand {
+  when: {
+    minWidthFt?: number
+    minHeightFt?: number
+    minLengthFt?: number
+    minWeightLbs?: number
+  }
+  requirement: 'may_require' | 'required'
+  count: number
+  positions?: EscortPosition[]
+  types?: EscortVehicleType[]
+  heightPole?: Exclude<HeightPoleLevel, 'none'>
+  roadClasses?: RoadClassHint[]
+  notes?: string
+}
+
+export interface StructuredEscortRules {
+  bands?: EscortRuleBand[]
+  defaultNote?: string
+  source?: string
+  lastVerified?: string
+}
+
 export interface EscortLoadDimensions {
   width: number
   length: number
@@ -23,12 +65,19 @@ export interface EscortLoadDimensions {
 
 export interface StateEscortDetail {
   stateCode: string
-  /** 2 means "2+ escorts". */
+  /** 2 means "2+ escorts". Kept for existing UI. */
   escortCount: 0 | 1 | 2
+  /** @deprecated Prefer heightPoleLevel — still set for older callers. */
   heightPoleRecommended: boolean
+  heightPoleLevel: HeightPoleLevel
+  requirementLevel: EscortRequirementLevel
+  positions: EscortPosition[]
+  escortTypes: EscortVehicleType[]
+  roadClassHint?: RoadClassHint
   highwayContext?: string
   warning: string
   triggers: string[]
+  notes?: string
 }
 
 export interface EscortAnalysisInput {
@@ -50,7 +99,6 @@ const EMPTY_RESULT: EscortAnalysisResult = {
   escortDetails: [],
 }
 
-/** True when all load dimensions are finite positive numbers. */
 export function hasValidEscortLoadDimensions(load: EscortLoadDimensions): boolean {
   return (
     Number.isFinite(load.width) &&
@@ -74,7 +122,6 @@ function effectiveThreshold(
   return ruleValue
 }
 
-/** Tier-2 / strong checks: use baseline when state column is null; otherwise max(state, baseline). */
 function effectiveTier2Threshold(
   ruleValue: number | null | undefined,
   baseline: number
@@ -85,9 +132,42 @@ function effectiveTier2Threshold(
   return Math.max(ruleValue, baseline)
 }
 
-function formatHighwayContext(highways?: string[]): string | undefined {
+function parseStructuredRules(rule: StatePermitRule | undefined): StructuredEscortRules | null {
+  const raw = (rule as StatePermitRule & { escort_rules?: unknown })?.escort_rules
+  if (raw == null) return null
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as StructuredEscortRules
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') return parsed as StructuredEscortRules
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+function bandMatches(band: EscortRuleBand, load: EscortLoadDimensions): boolean {
+  const { when } = band
+  const checks: boolean[] = []
+  if (when.minWidthFt != null) checks.push(load.width >= when.minWidthFt)
+  if (when.minHeightFt != null) checks.push(load.height >= when.minHeightFt)
+  if (when.minLengthFt != null) checks.push(load.length >= when.minLengthFt)
+  if (when.minWeightLbs != null) checks.push(load.weight >= when.minWeightLbs)
+  return checks.length > 0 && checks.some(Boolean)
+}
+
+function formatHighwayContext(highways?: string[]): {
+  text?: string
+  roadClassHint: RoadClassHint
+} {
   if (!highways || highways.length === 0) {
-    return 'local/non-interstate segments — confirm escorts with state DOT'
+    return {
+      text: 'local/non-interstate segments — confirm escorts with state DOT',
+      roadClassHint: 'local',
+    }
   }
 
   const majors = highways
@@ -96,17 +176,86 @@ function formatHighwayContext(highways?: string[]): string | undefined {
     .slice(0, 3)
 
   if (majors.length === 0) {
-    return 'may include local roads — confirm escorts with state DOT'
+    return {
+      text: 'may include local roads — confirm escorts with state DOT',
+      roadClassHint: 'local',
+    }
   }
 
-  return `on ${majors.join(', ')}`
+  const hasInterstate = majors.some((h) => /^I-/i.test(h))
+  const hasUs = majors.some((h) => /^US /i.test(h))
+  const roadClassHint: RoadClassHint =
+    hasInterstate && hasUs ? 'mixed' : hasInterstate ? 'interstate' : hasUs ? 'us_highway' : 'mixed'
+
+  return {
+    text: `on ${majors.join(', ')}`,
+    roadClassHint,
+  }
 }
 
-function analyzeStateEscort(
+function clampCount(n: number): 0 | 1 | 2 {
+  if (n <= 0) return 0
+  if (n === 1) return 1
+  return 2
+}
+
+function defaultPositions(count: 0 | 1 | 2): EscortPosition[] {
+  if (count >= 2) return ['lead', 'chase']
+  if (count === 1) return ['chase']
+  return []
+}
+
+function buildWarning(detail: {
+  stateCode: string
+  requirementLevel: EscortRequirementLevel
+  escortCount: 0 | 1 | 2
+  heightPoleLevel: HeightPoleLevel
+  positions: EscortPosition[]
+  escortTypes: EscortVehicleType[]
+  highwayContext?: string
+}): string {
+  const parts: string[] = []
+
+  if (detail.escortCount >= 2) {
+    const level =
+      detail.requirementLevel === 'required' ? 'required' : 'typically required'
+    parts.push(`2+ escorts ${level}`)
+  } else if (detail.escortCount === 1) {
+    const level =
+      detail.requirementLevel === 'required' ? 'required' : 'recommended / may be required'
+    parts.push(`1 escort ${level}`)
+  }
+
+  if (detail.positions.length > 0) {
+    parts.push(`position: ${detail.positions.join(' + ')}`)
+  }
+
+  if (detail.escortTypes.length > 0) {
+    const label = detail.escortTypes
+      .map((t) => (t === 'law_enforcement' ? 'LE' : 'civilian'))
+      .join(' / ')
+    parts.push(label)
+  }
+
+  if (detail.heightPoleLevel === 'required') {
+    parts.push('height pole required')
+  } else if (detail.heightPoleLevel === 'recommended') {
+    parts.push('height pole recommended')
+  }
+
+  let warning = `${detail.stateCode}: ${parts.join(' · ')}`
+  if (detail.highwayContext) {
+    warning += ` (${detail.highwayContext})`
+  }
+  return warning
+}
+
+function analyzeFromThresholds(
   stateCode: string,
   load: EscortLoadDimensions,
   rule: StatePermitRule | undefined,
-  highwayContext?: string
+  highwayContext: string | undefined,
+  roadClassHint: RoadClassHint
 ): StateEscortDetail | null {
   const width1 = effectiveThreshold(
     rule?.escort_threshold_width_ft,
@@ -132,11 +281,13 @@ function analyzeStateEscort(
 
   const triggers: string[] = []
   let escortCount: 0 | 1 | 2 = 0
-  let heightPoleRecommended = false
+  let heightPoleLevel: HeightPoleLevel = 'none'
+  let requirementLevel: EscortRequirementLevel = 'none'
 
   if (load.width >= width1) {
     triggers.push(`width ${formatDimensionDisplay(load.width)} ≥ ${formatDimensionDisplay(width1)}`)
     escortCount = Math.max(escortCount, 1) as 0 | 1 | 2
+    requirementLevel = 'may_require'
   }
 
   if (load.width >= width2) {
@@ -144,25 +295,31 @@ function analyzeStateEscort(
       `width ${formatDimensionDisplay(load.width)} ≥ ${formatDimensionDisplay(width2)}`
     )
     escortCount = 2
+    requirementLevel = 'required'
   }
 
   if (load.length >= length2) {
     triggers.push(`length ${formatDimensionDisplay(load.length)} ≥ ${formatDimensionDisplay(length2)}`)
     escortCount = 2
+    requirementLevel = 'required'
   }
 
   if (load.height >= heightPole) {
     triggers.push(`height ${formatDimensionDisplay(load.height)} ≥ ${formatDimensionDisplay(heightPole)}`)
-    heightPoleRecommended = true
+    heightPoleLevel = 'recommended'
     escortCount = Math.max(escortCount, 1) as 0 | 1 | 2
+    if (requirementLevel === 'none') requirementLevel = 'may_require'
   }
 
   if (load.height >= heightPoleStrong) {
     triggers.push(
       `height ${formatDimensionDisplay(load.height)} ≥ ${formatDimensionDisplay(heightPoleStrong)}`
     )
-    heightPoleRecommended = true
+    heightPoleLevel = 'required'
     escortCount = Math.max(escortCount, 1) as 0 | 1 | 2
+    if (requirementLevel === 'none' || requirementLevel === 'may_require') {
+      requirementLevel = 'may_require'
+    }
   }
 
   if (weightThreshold != null && weightThreshold > 0 && load.weight > weightThreshold) {
@@ -170,35 +327,166 @@ function analyzeStateEscort(
       `weight ${load.weight.toLocaleString()} lbs > ${weightThreshold.toLocaleString()} lbs`
     )
     escortCount = Math.max(escortCount, 1) as 0 | 1 | 2
+    if (requirementLevel === 'none') requirementLevel = 'may_require'
   }
 
-  if (escortCount === 0 && !heightPoleRecommended) {
+  if (roadClassHint === 'local' && requirementLevel === 'required' && escortCount < 2) {
+    requirementLevel = 'may_require'
+  }
+
+  if (escortCount === 0 && heightPoleLevel === 'none') {
     return null
   }
 
-  const parts: string[] = []
-  if (escortCount === 2) {
-    parts.push('2+ escorts required')
-  } else if (escortCount === 1) {
-    parts.push('1 escort recommended')
-  }
-  if (heightPoleRecommended) {
-    parts.push('height pole recommended')
-  }
+  const positions = defaultPositions(escortCount)
+  const escortTypes: EscortVehicleType[] =
+    escortCount > 0 ? ['civilian'] : []
 
-  let warning = `${stateCode}: ${parts.join(' + ')}`
-  if (highwayContext) {
-    warning += ` (${highwayContext})`
+  const detailBase = {
+    stateCode,
+    requirementLevel,
+    escortCount,
+    heightPoleLevel,
+    positions,
+    escortTypes,
+    highwayContext,
   }
 
   return {
     stateCode,
     escortCount,
-    heightPoleRecommended,
+    heightPoleRecommended: heightPoleLevel !== 'none',
+    heightPoleLevel,
+    requirementLevel,
+    positions,
+    escortTypes,
+    roadClassHint,
     highwayContext,
-    warning,
+    warning: buildWarning(detailBase),
     triggers,
+    notes:
+      roadClassHint === 'local'
+        ? 'City/county segments often differ from state highway rules — confirm with the issuing authority.'
+        : undefined,
   }
+}
+
+function analyzeFromStructuredBands(
+  stateCode: string,
+  load: EscortLoadDimensions,
+  structured: StructuredEscortRules,
+  highwayContext: string | undefined,
+  roadClassHint: RoadClassHint
+): StateEscortDetail | null {
+  const bands = structured.bands || []
+  if (bands.length === 0) return null
+
+  let best: EscortRuleBand | null = null
+  const triggers: string[] = []
+
+  for (const band of bands) {
+    if (!bandMatches(band, load)) continue
+    const { when } = band
+    if (when.minWidthFt != null && load.width >= when.minWidthFt) {
+      triggers.push(
+        `width ${formatDimensionDisplay(load.width)} ≥ ${formatDimensionDisplay(when.minWidthFt)}`
+      )
+    }
+    if (when.minHeightFt != null && load.height >= when.minHeightFt) {
+      triggers.push(
+        `height ${formatDimensionDisplay(load.height)} ≥ ${formatDimensionDisplay(when.minHeightFt)}`
+      )
+    }
+    if (when.minLengthFt != null && load.length >= when.minLengthFt) {
+      triggers.push(
+        `length ${formatDimensionDisplay(load.length)} ≥ ${formatDimensionDisplay(when.minLengthFt)}`
+      )
+    }
+    if (when.minWeightLbs != null && load.weight >= when.minWeightLbs) {
+      triggers.push(
+        `weight ${load.weight.toLocaleString()} lbs ≥ ${when.minWeightLbs.toLocaleString()} lbs`
+      )
+    }
+
+    if (
+      !best ||
+      band.count > best.count ||
+      (band.requirement === 'required' && best.requirement !== 'required')
+    ) {
+      best = band
+    }
+  }
+
+  if (!best) return null
+
+  const escortCount = clampCount(best.count)
+  const heightPoleLevel: HeightPoleLevel = best.heightPole || 'none'
+  const positions =
+    best.positions && best.positions.length > 0
+      ? best.positions
+      : defaultPositions(escortCount)
+  const escortTypes =
+    best.types && best.types.length > 0
+      ? best.types
+      : escortCount > 0
+        ? (['civilian'] as EscortVehicleType[])
+        : []
+
+  let requirementLevel: EscortRequirementLevel = best.requirement
+  if (
+    roadClassHint === 'local' &&
+    best.roadClasses &&
+    best.roadClasses.length > 0 &&
+    !best.roadClasses.includes('local')
+  ) {
+    requirementLevel = 'may_require'
+  }
+
+  const detailBase = {
+    stateCode,
+    requirementLevel,
+    escortCount,
+    heightPoleLevel,
+    positions,
+    escortTypes,
+    highwayContext,
+  }
+
+  return {
+    stateCode,
+    escortCount,
+    heightPoleRecommended: heightPoleLevel !== 'none',
+    heightPoleLevel,
+    requirementLevel,
+    positions,
+    escortTypes,
+    roadClassHint,
+    highwayContext,
+    warning: buildWarning(detailBase),
+    triggers: [...new Set(triggers)],
+    notes: best.notes || structured.defaultNote,
+  }
+}
+
+function analyzeStateEscort(
+  stateCode: string,
+  load: EscortLoadDimensions,
+  rule: StatePermitRule | undefined,
+  highwayContext: string | undefined,
+  roadClassHint: RoadClassHint
+): StateEscortDetail | null {
+  const structured = parseStructuredRules(rule)
+  if (structured?.bands && structured.bands.length > 0) {
+    const fromBands = analyzeFromStructuredBands(
+      stateCode,
+      load,
+      structured,
+      highwayContext,
+      roadClassHint
+    )
+    if (fromBands) return fromBands
+  }
+  return analyzeFromThresholds(stateCode, load, rule, highwayContext, roadClassHint)
 }
 
 /**
@@ -209,17 +497,26 @@ export function analyzeEscortRequirements(input: EscortAnalysisInput): EscortAna
     return EMPTY_RESULT
   }
 
-  // Route-wide highway suffix is misleading on multi-state corridors; omit unless single-state.
-  const highwayCtx =
-    input.routeCorridor.length === 1
-      ? formatHighwayContext(input.highways)
-      : undefined
+  const singleState = input.routeCorridor.length === 1
+  const hwy = formatHighwayContext(input.highways)
+  const highwayCtx = singleState ? hwy.text : undefined
+  const roadClassHint: RoadClassHint = singleState
+    ? hwy.roadClassHint
+    : input.highways && input.highways.length > 0
+      ? formatHighwayContext(input.highways).roadClassHint
+      : 'mixed'
 
   const escortDetails: StateEscortDetail[] = []
 
   for (const stateCode of input.routeCorridor) {
     const rule = input.ruleMap.get(stateCode)
-    const detail = analyzeStateEscort(stateCode, input.load, rule, highwayCtx)
+    const detail = analyzeStateEscort(
+      stateCode,
+      input.load,
+      rule,
+      highwayCtx,
+      singleState ? roadClassHint : 'mixed'
+    )
     if (detail) {
       escortDetails.push(detail)
     }

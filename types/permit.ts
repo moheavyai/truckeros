@@ -24,6 +24,28 @@ export interface StatePermitRule {
   escort_threshold_length_ft?: number | null
   escort_threshold_weight_lbs?: number | null
 
+  // Structured escort bands (migration 045). Optional; analysis falls back to threshold columns.
+  escort_rules?: {
+    bands?: Array<{
+      when: {
+        minWidthFt?: number
+        minHeightFt?: number
+        minLengthFt?: number
+        minWeightLbs?: number
+      }
+      requirement: 'may_require' | 'required'
+      count: number
+      positions?: Array<'lead' | 'chase'>
+      types?: Array<'civilian' | 'law_enforcement'>
+      heightPole?: 'recommended' | 'required'
+      roadClasses?: Array<'interstate' | 'us_highway' | 'state_highway' | 'local' | 'mixed'>
+      notes?: string
+    }>
+    defaultNote?: string
+    source?: string
+    lastVerified?: string
+  } | null
+
   curfew_restrictions?: string | null
   special_notes?: string | null
   source?: string | null
