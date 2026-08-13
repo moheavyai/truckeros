@@ -22,7 +22,22 @@ import {
 import { fetchActorTeamContext } from '@/lib/roster-profile-link'
 import type { User } from '@supabase/supabase-js'
 
-type AuthMode = 'signin' | 'signup' | 'forgot'
+type AuthMode = 'signin' | 'signup' | 'forgot' | 'recovery'
+
+const PASSWORD_HINT = 'Min 8 characters, 1 uppercase, 1 special character'
+
+function validatePassword(password: string): string | null {
+  if (password.length < 8) {
+    return 'Password must be at least 8 characters.'
+  }
+  if (!/[A-Z]/.test(password)) {
+    return 'Password must include at least one uppercase letter.'
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)) {
+    return 'Password must include at least one special character (e.g. !@#$%).'
+  }
+  return null
+}
 
 function readInitialMode(): AuthMode {
   if (typeof window === 'undefined') return 'signin'
@@ -49,15 +64,14 @@ export default function LoginPage() {
   const router = useRouter()
   const redirectingRef = useRef(false)
   const modeInitializedRef = useRef(false)
+  const recoveryActiveRef = useRef(false)
 
-  // Honor ?mode=signup / ?mode=forgot from deep links.
   useEffect(() => {
     if (modeInitializedRef.current) return
     modeInitializedRef.current = true
     setMode(readInitialMode())
   }, [])
 
-  /** Candidate from ?redirect= / storage only (no onboarding check yet). */
   const candidatePostLoginPath = useMemo(() => {
     if (typeof window === 'undefined') return DEFAULT_POST_LOGIN_PATH
     return resolveClientPostLoginPath(window.location.search)
@@ -126,7 +140,7 @@ export default function LoginPage() {
 
   const redirectAuthenticated = useCallback(
     async (user: User) => {
-      if (redirectingRef.current) return
+      if (redirectingRef.current || recoveryActiveRef.current) return
       redirectingRef.current = true
       try {
         clearPostLoginRedirect()
@@ -144,7 +158,30 @@ export default function LoginPage() {
   useEffect(() => {
     const supabase = createClient()
 
+    // Recovery links land with tokens in the URL hash; listen for PASSWORD_RECOVERY.
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        recoveryActiveRef.current = true
+        setMode('recovery')
+        setCheckingSession(false)
+        setAuthError(null)
+        setSuccessMessage(null)
+        setPassword('')
+        setConfirmPassword('')
+        if (session?.user?.email) setEmail(session.user.email)
+        return
+      }
+
+      if (session?.user && !recoveryActiveRef.current) {
+        void redirectAuthenticated(session.user)
+      }
+    })
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (recoveryActiveRef.current) {
+        setCheckingSession(false)
+        return
+      }
       if (session?.user) {
         void redirectAuthenticated(session.user)
       } else {
@@ -152,16 +189,11 @@ export default function LoginPage() {
       }
     })
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        void redirectAuthenticated(session.user)
-      }
-    })
-
     return () => listener.subscription.unsubscribe()
   }, [redirectAuthenticated])
 
   const switchMode = (next: AuthMode) => {
+    if (next !== 'recovery') recoveryActiveRef.current = false
     setMode(next)
     setAuthError(null)
     setSuccessMessage(null)
@@ -209,7 +241,7 @@ export default function LoginPage() {
       const message = err?.message || 'An unexpected error occurred during login.'
       if (message.toLowerCase().includes('fetch')) {
         setAuthError(
-          'Unable to connect to the authentication service. Please verify that .env.local contains your real Supabase Project URL and anon key and restart the dev server.'
+          'Unable to connect to the authentication service. Please try again in a moment.'
         )
       } else {
         setAuthError(message)
@@ -231,12 +263,14 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    if (password.length < 6) {
-      setAuthError('Password must be at least 6 characters.')
+
+    const passwordError = validatePassword(password)
+    if (passwordError) {
+      setAuthError(passwordError)
       setLoading(false)
       return
     }
-    if (confirmPassword && password !== confirmPassword) {
+    if (password !== confirmPassword) {
       setAuthError('Passwords do not match.')
       setLoading(false)
       return
@@ -281,7 +315,7 @@ export default function LoginPage() {
       const message = err?.message || 'An unexpected error occurred during sign up.'
       if (message.toLowerCase().includes('fetch')) {
         setAuthError(
-          'Unable to connect to the authentication service. Please verify that .env.local contains your real Supabase Project URL and anon key and restart the dev server.'
+          'Unable to connect to the authentication service. Please try again in a moment.'
         )
       } else {
         setAuthError(message)
@@ -320,7 +354,7 @@ export default function LoginPage() {
       }
 
       setSuccessMessage(
-        'If an account exists for that email, a reset link is on the way. Check your inbox (and spam), then return here to sign in with your new password.'
+        'If an account exists for that email, a reset link is on the way. Check your inbox (and spam), then use the link to set a new password.'
       )
       setMode('signin')
       setPassword('')
@@ -338,6 +372,52 @@ export default function LoginPage() {
     }
   }
 
+  const handleSetNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setAuthError(null)
+    setSuccessMessage(null)
+
+    const passwordError = validatePassword(password)
+    if (passwordError) {
+      setAuthError(passwordError)
+      setLoading(false)
+      return
+    }
+    if (password !== confirmPassword) {
+      setAuthError('Passwords do not match.')
+      setLoading(false)
+      return
+    }
+
+    const supabase = createClient()
+
+    try {
+      const { data, error } = await supabase.auth.updateUser({ password })
+
+      if (error) {
+        setAuthError(error.message)
+        return
+      }
+
+      recoveryActiveRef.current = false
+      setSuccessMessage('Password updated. Signing you in…')
+
+      if (data.user) {
+        await redirectAuthenticated(data.user)
+      } else {
+        setMode('signin')
+        setPassword('')
+        setConfirmPassword('')
+        setSuccessMessage('Password updated. Please sign in with your new password.')
+      }
+    } catch (err: any) {
+      setAuthError(err?.message || 'Unable to update password. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (checkingSession) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -348,23 +428,27 @@ export default function LoginPage() {
 
   const isSignUp = mode === 'signup'
   const isForgot = mode === 'forgot'
+  const isRecovery = mode === 'recovery'
 
-  const title = isForgot
-    ? 'Reset your password'
-    : isSignUp
-      ? 'Create your account'
-      : 'Welcome back'
+  const title = isRecovery
+    ? 'Set a new password'
+    : isForgot
+      ? 'Reset your password'
+      : isSignUp
+        ? 'Create your account'
+        : 'Welcome back'
 
-  const subtitle = isForgot
-    ? 'Enter your email and we’ll send a reset link.'
-    : isSignUp
-      ? 'Get started with MoHeavy AI — the operating system for truckers.'
-      : 'Sign in to access MoHeavy AI'
+  const subtitle = isRecovery
+    ? 'Choose a strong password for your MoHeavy AI account.'
+    : isForgot
+      ? 'Enter your email and we’ll send a reset link.'
+      : isSignUp
+        ? 'Get started with MoHeavy AI — the operating system for truckers.'
+        : 'Sign in to access MoHeavy AI'
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="w-full max-w-md px-6">
-        {/* Logo */}
         <div className="flex justify-center mb-8">
           <a href="/" className="flex items-center gap-2.5">
             <div className="w-9 h-9 bg-black rounded flex items-center justify-center">
@@ -374,17 +458,13 @@ export default function LoginPage() {
           </a>
         </div>
 
-        {/* Auth Card */}
         <div className="bg-white border rounded-2xl p-8 shadow-sm">
           <h1 className="text-2xl font-semibold tracking-tight mb-1">{title}</h1>
           <p className="text-gray-600 text-sm mb-6">{subtitle}</p>
 
           {isUsingPlaceholderEnv && (
             <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
-              <strong>Supabase not configured yet.</strong> Your <code>.env.local</code> still contains
-              the placeholder values from <code>.env.local.example</code>. Replace{' '}
-              <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> with
-              the real values from your Supabase project, then restart the dev server.
+              <strong>Supabase not configured yet.</strong> Check your environment variables.
             </div>
           )}
 
@@ -400,8 +480,53 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Forgot password form */}
-          {isForgot ? (
+          {/* Recovery: set new password */}
+          {isRecovery && (
+            <form onSubmit={handleSetNewPassword} className="space-y-4">
+              {email && (
+                <p className="text-sm text-gray-600">
+                  Account: <span className="font-medium text-gray-900">{email}</span>
+                </p>
+              )}
+              <input
+                type="password"
+                placeholder={`New password (${PASSWORD_HINT})`}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                className="border p-3 w-full rounded"
+                required
+                minLength={8}
+              />
+              <input
+                type="password"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                className="border p-3 w-full rounded"
+                required
+                minLength={8}
+              />
+              <p className="text-xs text-gray-500">{PASSWORD_HINT}</p>
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-black text-white px-6 py-3 rounded-lg w-full font-semibold hover:bg-gray-900 disabled:bg-gray-400 transition-colors flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <span className="animate-spin">⏳</span> Saving...
+                  </>
+                ) : (
+                  'Save new password'
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* Forgot: request reset email */}
+          {isForgot && (
             <form onSubmit={handleForgotPassword} className="space-y-4">
               <input
                 type="email"
@@ -426,8 +551,10 @@ export default function LoginPage() {
                 )}
               </button>
             </form>
-          ) : (
-            /* Sign in / Sign up form */
+          )}
+
+          {/* Sign in / Sign up */}
+          {!isForgot && !isRecovery && (
             <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-4">
               <input
                 type="email"
@@ -440,23 +567,28 @@ export default function LoginPage() {
               />
               <input
                 type="password"
-                placeholder={isSignUp ? 'Password (min 6 characters)' : 'Password'}
+                placeholder={isSignUp ? `Password (${PASSWORD_HINT})` : 'Password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete={isSignUp ? 'new-password' : 'current-password'}
                 className="border p-3 w-full rounded"
                 required
-                minLength={isSignUp ? 6 : undefined}
+                minLength={isSignUp ? 8 : undefined}
               />
               {isSignUp && (
-                <input
-                  type="password"
-                  placeholder="Confirm password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  autoComplete="new-password"
-                  className="border p-3 w-full rounded"
-                />
+                <>
+                  <input
+                    type="password"
+                    placeholder="Confirm password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    autoComplete="new-password"
+                    className="border p-3 w-full rounded"
+                    required
+                    minLength={8}
+                  />
+                  <p className="text-xs text-gray-500">{PASSWORD_HINT}</p>
+                </>
               )}
 
               <button
@@ -478,9 +610,8 @@ export default function LoginPage() {
             </form>
           )}
 
-          {/* Footer links */}
           <div className="mt-5 pt-5 border-t text-center space-y-2">
-            {isForgot ? (
+            {isRecovery ? null : isForgot ? (
               <button
                 type="button"
                 onClick={() => switchMode('signin')}
