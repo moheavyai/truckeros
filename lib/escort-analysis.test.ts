@@ -33,7 +33,7 @@ describe('hasValidEscortLoadDimensions', () => {
 })
 
 describe('analyzeEscortRequirements', () => {
-  it('12\'7" width load flags escorts in states using baseline width threshold', () => {
+  it('12 width load flags escorts using baseline', () => {
     const widthFt = parseDimensionInput("12'7")!.feetDecimal
 
     const result = analyzeEscortRequirements({
@@ -47,13 +47,13 @@ describe('analyzeEscortRequirements', () => {
     })
 
     expect(result.escortRequiredStates).toEqual(['NE', 'SD'])
-    expect(result.escortWarnings.some((w) => w.startsWith('NE: 1 escort'))).toBe(true)
-    expect(result.escortWarnings.some((w) => w.startsWith('SD: 1 escort'))).toBe(true)
     expect(result.escortDetails.every((d) => d.escortCount === 1)).toBe(true)
+    expect(result.escortDetails.every((d) => d.requirementLevel === 'may_require')).toBe(true)
+    expect(result.escortDetails.every((d) => d.positions.includes('chase'))).toBe(true)
     expect(result.escortWarnings.every((w) => !w.includes('(on '))).toBe(true)
   })
 
-  it('15\'8" height load flags height poles and escorts', () => {
+  it('15 height load flags height poles and escorts', () => {
     const heightFt = parseDimensionInput("15'8")!.feetDecimal
 
     const result = analyzeEscortRequirements({
@@ -64,14 +64,13 @@ describe('analyzeEscortRequirements', () => {
     })
 
     expect(result.escortRequiredStates).toEqual(['NE'])
-    expect(result.escortWarnings[0]).toMatch(/NE:.*height pole recommended/i)
-    expect(result.escortWarnings[0]).toMatch(/1 escort recommended/i)
     expect(result.escortDetails[0].heightPoleRecommended).toBe(true)
+    expect(result.escortDetails[0].heightPoleLevel).toBe('required')
+    expect(result.escortDetails[0].escortCount).toBe(1)
   })
 
-  it('width ≥ 14\'0" or length ≥ 110\' flags 2+ escorts', () => {
+  it('width 14 or length 110 flags 2+ escorts required with lead+chase', () => {
     const wide = parseDimensionInput("14'0")!.feetDecimal
-    const long = 110
 
     const wideResult = analyzeEscortRequirements({
       routeCorridor: ['TX'],
@@ -79,33 +78,32 @@ describe('analyzeEscortRequirements', () => {
       ruleMap: new Map([['TX', baseRule('TX', { escort_threshold_width_ft: 14 })]]),
     })
     expect(wideResult.escortDetails[0].escortCount).toBe(2)
-    expect(wideResult.escortWarnings[0]).toMatch(/2\+ escorts required/)
+    expect(wideResult.escortDetails[0].requirementLevel).toBe('required')
+    expect(wideResult.escortDetails[0].positions).toEqual(['lead', 'chase'])
 
     const longResult = analyzeEscortRequirements({
       routeCorridor: ['WY'],
-      load: { width: 8.5, length: long, height: 13.5, weight: 80000 },
+      load: { width: 8.5, length: 110, height: 13.5, weight: 80000 },
       ruleMap: new Map([['WY', baseRule('WY')]]),
     })
     expect(longResult.escortDetails[0].escortCount).toBe(2)
-    expect(longResult.escortWarnings[0]).toMatch(/2\+ escorts required/)
+    expect(longResult.escortDetails[0].requirementLevel).toBe('required')
   })
 
-  it('respects state-specific escort width threshold when stricter than baseline', () => {
+  it('respects state-specific escort width threshold', () => {
     const widthFt = parseDimensionInput("11'6")!.feetDecimal
 
     const result = analyzeEscortRequirements({
       routeCorridor: ['PA'],
       load: { width: widthFt, length: 74, height: 13.5, weight: 80000 },
-      ruleMap: new Map([
-        ['PA', baseRule('PA', { escort_threshold_width_ft: 11 })],
-      ]),
+      ruleMap: new Map([['PA', baseRule('PA', { escort_threshold_width_ft: 11 })]]),
     })
 
     expect(result.escortRequiredStates).toEqual(['PA'])
     expect(result.escortDetails[0].escortCount).toBe(1)
   })
 
-  it('notes local-road context when single-state corridor has no major highways', () => {
+  it('notes local-road context when single-state has no major highways', () => {
     const widthFt = parseDimensionInput("12'7")!.feetDecimal
 
     const result = analyzeEscortRequirements({
@@ -116,6 +114,8 @@ describe('analyzeEscortRequirements', () => {
     })
 
     expect(result.escortWarnings[0]).toMatch(/local\/non-interstate/)
+    expect(result.escortDetails[0].roadClassHint).toBe('local')
+    expect(result.escortDetails[0].requirementLevel).toBe('may_require')
   })
 
   it('includes highway context only for single-state corridors', () => {
@@ -141,7 +141,7 @@ describe('analyzeEscortRequirements', () => {
     expect(multi.escortWarnings.every((w) => !w.includes('(on '))).toBe(true)
   })
 
-  it('boundary: exactly 12\'0" width triggers 1 escort at baseline', () => {
+  it('boundary: exactly 12 width triggers 1 escort', () => {
     const result = analyzeEscortRequirements({
       routeCorridor: ['NE'],
       load: {
@@ -157,42 +157,38 @@ describe('analyzeEscortRequirements', () => {
     expect(result.escortDetails[0].escortCount).toBe(1)
   })
 
-  it('boundary: exactly 14\'6" height triggers height pole at baseline', () => {
+  it('boundary: 14.5 height triggers height pole recommended', () => {
     const result = analyzeEscortRequirements({
       routeCorridor: ['NE'],
       load: { width: 8.5, length: 74, height: BASELINE_HEIGHT_POLE_FT, weight: 80000 },
       ruleMap: new Map([['NE', baseRule('NE')]]),
     })
 
-    expect(result.escortRequiredStates).toEqual(['NE'])
     expect(result.escortDetails[0].heightPoleRecommended).toBe(true)
+    expect(result.escortDetails[0].heightPoleLevel).toBe('recommended')
   })
 
-  it('boundary: exactly 15\'6" height triggers strong height tier at baseline', () => {
+  it('boundary: 15.5 height triggers height pole required', () => {
     const result = analyzeEscortRequirements({
       routeCorridor: ['NE'],
       load: { width: 8.5, length: 74, height: BASELINE_HEIGHT_POLE_STRONG_FT, weight: 80000 },
       ruleMap: new Map([['NE', baseRule('NE')]]),
     })
 
-    expect(result.escortRequiredStates).toEqual(['NE'])
-    expect(result.escortDetails[0].heightPoleRecommended).toBe(true)
+    expect(result.escortDetails[0].heightPoleLevel).toBe('required')
     expect(result.escortDetails[0].escortCount).toBe(1)
   })
 
-  it('TX 15\'8" height does not false-positive when state escort height threshold is 16\'', () => {
+  it('TX 15.8 height does not false-positive when state threshold is 16', () => {
     const heightFt = parseDimensionInput("15'8")!.feetDecimal
 
     const result = analyzeEscortRequirements({
       routeCorridor: ['TX'],
       load: { width: 8.5, length: 74, height: heightFt, weight: 80000 },
-      ruleMap: new Map([
-        ['TX', baseRule('TX', { escort_threshold_height_ft: 16 })],
-      ]),
+      ruleMap: new Map([['TX', baseRule('TX', { escort_threshold_height_ft: 16 })]]),
     })
 
     expect(result.escortRequiredStates).toEqual([])
-    expect(result.escortWarnings).toEqual([])
   })
 
   it('does not flag escorts when load is within all thresholds', () => {
@@ -207,11 +203,10 @@ describe('analyzeEscortRequirements', () => {
     })
 
     expect(result.escortRequiredStates).toEqual([])
-    expect(result.escortWarnings).toEqual([])
     expect(result.escortDetails).toEqual([])
   })
 
-  it('returns empty result for non-finite load dimensions', () => {
+  it('returns empty for non-finite load dimensions', () => {
     const result = analyzeEscortRequirements({
       routeCorridor: ['NE'],
       load: { width: Infinity, length: 74, height: 13.5, weight: 80000 },
@@ -219,6 +214,39 @@ describe('analyzeEscortRequirements', () => {
     })
 
     expect(result.escortRequiredStates).toEqual([])
-    expect(result.escortWarnings).toEqual([])
+  })
+
+  it('uses structured escort_rules bands when present (LE + required lead)', () => {
+    const widthFt = parseDimensionInput("16'0")!.feetDecimal
+    const rule = baseRule('TX', {
+      escort_rules: {
+        source: 'test',
+        bands: [
+          {
+            when: { minWidthFt: 16 },
+            requirement: 'required',
+            count: 2,
+            positions: ['lead', 'chase'],
+            types: ['civilian', 'law_enforcement'],
+            notes: 'Superload width — LE often required by district.',
+          },
+        ],
+      },
+    })
+
+    const result = analyzeEscortRequirements({
+      routeCorridor: ['TX'],
+      load: { width: widthFt, length: 80, height: 13.5, weight: 90000 },
+      ruleMap: new Map([['TX', rule]]),
+    })
+
+    expect(result.escortDetails).toHaveLength(1)
+    const d = result.escortDetails[0]
+    expect(d.escortCount).toBe(2)
+    expect(d.requirementLevel).toBe('required')
+    expect(d.positions).toEqual(['lead', 'chase'])
+    expect(d.escortTypes).toContain('law_enforcement')
+    expect(d.notes).toMatch(/Superload/)
+    expect(d.warning).toMatch(/LE/)
   })
 })
