@@ -167,9 +167,9 @@ export default function AppHeader({
               className="flex items-center gap-2 sm:gap-2.5 min-w-0 max-w-full"
             >
               <div className="w-8 h-8 bg-black rounded flex items-center justify-center shrink-0">
-                <span className="text-white text-lg font-bold tracking-tighter">T</span>
+                <span className="text-white text-lg font-bold tracking-tighter">M</span>
               </div>
-              <span className="text-lg sm:text-xl font-semibold tracking-tight truncate min-w-0">TruckerOS</span>
+              <span className="text-lg sm:text-xl font-semibold tracking-tight truncate min-w-0">MoHeavy AI</span>
             </a>
           </div>
 
