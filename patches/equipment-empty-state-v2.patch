@@ -1,0 +1,46 @@
+diff --git a/app/equipment/page.tsx b/app/equipment/page.tsx
+index 052b2d7..6aabe75 100644
+--- a/app/equipment/page.tsx
++++ b/app/equipment/page.tsx
+@@ -48,7 +48,7 @@ import {
+   type AxleGroupType,
+ } from '@/lib/axle-groups'
+ 
+-type Tab = 'tractors' | 'trailers' | 'builder' | 'saved'
++type Tab = 'tractors' | 'trailers' | 'rigs'
+ 
+ /** Mobile-first contrast: stronger borders/text on small screens; softer from sm: up (matches permit-test / portal-assist). */
+ const fieldControlClass =
+@@ -95,7 +95,9 @@ export default function EquipmentPage() {
+   const { workspaceMode, effectiveOrganizationId } = useOrganizationContext(ownOrganizationId)
+   const isServiceModeReadOnly = workspaceMode === 'service'
+ 
+-  const [activeTab, setActiveTab] = useState<Tab>('saved')
++  const [activeTab, setActiveTab] = useState<Tab>('rigs')
++  const [rigBuilderOpen, setRigBuilderOpen] = useState(false)
++  const [hasChosenTab, setHasChosenTab] = useState(false)
+ 
+   // Data
+   const [tractors, setTractors] = useState<Tractor[]>([])
+@@ -124,6 +126,21 @@ export default function EquipmentPage() {
+   const [loadedRigId, setLoadedRigId] = useState<string | null>(null)
+   const [settingDefaultRigId, setSettingDefaultRigId] = useState<string | null>(null)
+ 
++  // First visit / empty fleet: land on the next missing step (tractor → trailer → rigs).
++  useEffect(() => {
++    if (loading || loadingAuth || hasChosenTab) return
++    if (tractors.length === 0) {
++      setActiveTab('tractors')
++      return
++    }
++    if (trailers.length === 0) {
++      setActiveTab('trailers')
++      return
++    }
++    setActiveTab('rigs')
++  // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [loading, loadingAuth, hasChosenTab, tractors.length, trailers.length, rigs.length])
++
+   // Derived for builder
+   const currentTractor = tractors.find((t) => t.id === selectedTractorId) || null
+   const currentTrailers = selectedTrailerIds
