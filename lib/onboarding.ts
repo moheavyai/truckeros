@@ -209,7 +209,7 @@ export function getWelcomeHeadline(persona: OnboardingPersona): string {
       return 'Welcome, Master Admin'
     case 'carrier_owner':
       // Match existing bootstrap card copy (lib/member-profile).
-      return 'Welcome to Truckeros'
+      return 'Welcome to MoHeavy AI'
     case 'permit_clerk':
       return 'Welcome, Permit Clerk'
     case 'admin':
@@ -219,7 +219,7 @@ export function getWelcomeHeadline(persona: OnboardingPersona): string {
     case 'viewer':
       return 'Welcome, Viewer'
     default:
-      return 'Welcome to Truckeros'
+      return 'Welcome to MoHeavy AI'
   }
 }
 
@@ -270,7 +270,7 @@ export function getWelcomeSubtitle(
     case 'viewer':
       return 'You have read-only access. Browse Dashboard reports and history for this organization.'
     default:
-      return 'Get started with your TruckerOS workspace.'
+      return 'Get started with your MoHeavy AI workspace.'
   }
 }
 

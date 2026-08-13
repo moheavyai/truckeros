@@ -577,7 +577,7 @@ export function validateBootstrapSelfSave(
 }
 
 export function getOwnerBootstrapSetupCardTitle(): string {
-  return 'Welcome to Truckeros'
+  return 'Welcome to MoHeavy AI'
 }
 
 export function getOwnerBootstrapSetupCardSubtitle(): string {
@@ -589,7 +589,7 @@ export function getOwnerBootstrapOwnerOperatorHint(): string {
 }
 
 export function getOwnerBootstrapSaveButtonLabel(saving: boolean): string {
-  return saving ? 'Setting up...' : 'Complete Setup'
+  return saving ? 'Saving...' : 'Save & continue'
 }
 
 export function shouldShowCarrierInformationCard(

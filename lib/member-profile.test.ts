@@ -1845,11 +1845,11 @@ describe('owner bootstrap setup helpers', () => {
   })
 
   it('exposes welcome copy and save label for bootstrap card', () => {
-    expect(getOwnerBootstrapSetupCardTitle()).toBe('Welcome to Truckeros')
+    expect(getOwnerBootstrapSetupCardTitle()).toBe('Welcome to MoHeavy AI')
     expect(getOwnerBootstrapSetupCardSubtitle()).toContain('account Owner')
     expect(getOwnerBootstrapOwnerOperatorHint()).toContain('Team Roster')
-    expect(getOwnerBootstrapSaveButtonLabel(false)).toBe('Complete Setup')
-    expect(getOwnerBootstrapSaveButtonLabel(true)).toBe('Setting up...')
+    expect(getOwnerBootstrapSaveButtonLabel(false)).toBe('Save & continue')
+    expect(getOwnerBootstrapSaveButtonLabel(true)).toBe('Saving...')
   })
 
   it('validates bootstrap required fields and trims email', () => {
