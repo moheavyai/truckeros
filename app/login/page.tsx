@@ -255,16 +255,16 @@ export default function LoginPage() {
         <div className="flex justify-center mb-8">
           <a href="/" className="flex items-center gap-2.5">
             <div className="w-9 h-9 bg-black rounded flex items-center justify-center">
-              <span className="text-white text-xl font-bold tracking-tighter">T</span>
+              <span className="text-white text-xl font-bold tracking-tighter">M</span>
             </div>
-            <span className="text-2xl font-semibold tracking-tight">TruckerOS</span>
+            <span className="text-2xl font-semibold tracking-tight">MoHeavy AI</span>
           </a>
         </div>
 
         {/* Login Card */}
         <div className="bg-white border rounded-2xl p-8 shadow-sm">
           <h1 className="text-2xl font-semibold tracking-tight mb-1">Welcome back</h1>
-          <p className="text-gray-600 text-sm mb-6">Sign in to access the Permit Agent</p>
+          <p className="text-gray-600 text-sm mb-6">Sign in to access MoHeavy AI</p>
 
           {/* Placeholder config warning (only visible when .env.local still has example values) */}
           {isUsingPlaceholderEnv && (
@@ -321,7 +321,7 @@ export default function LoginPage() {
               disabled={loading}
               className="text-sm text-gray-600 hover:text-black"
             >
-              Don&apos;t have an account? <span className="font-medium text-black">Create one</span>
+              Don't have an account? <span className="font-medium text-black">Create one</span>
             </button>
           </div>
         </div>
