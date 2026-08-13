@@ -1,4 +1,4 @@
-export default function TruckerOSLanding() {
+export default function MoHeavyLanding() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
@@ -6,9 +6,9 @@ export default function TruckerOSLanding() {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-black rounded flex items-center justify-center">
-              <span className="text-white text-lg font-bold tracking-tighter">T</span>
+              <span className="text-white text-lg font-bold tracking-tighter">M</span>
             </div>
-            <span className="text-2xl font-semibold tracking-tight">TruckerOS</span>
+            <span className="text-2xl font-semibold tracking-tight">MoHeavy AI</span>
           </div>
           <a
             href="/login"
@@ -23,11 +23,11 @@ export default function TruckerOSLanding() {
       <main className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
         <div className="max-w-3xl mx-auto">
           <h1 className="text-5xl sm:text-6xl font-semibold tracking-tighter text-gray-900 mb-6">
-            Oversize &amp; Overweight<br />Permits. Simplified.
+            Operating System<br />for Truckers
           </h1>
           <p className="text-xl text-gray-600 mb-10">
-            Fast, data-driven permitting for owner-operators and carriers.
-            Get accurate state requirements in seconds.
+            Intelligent OSOW permits, corridor management, and compliance tools
+            built for owner-operators and small carriers.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -38,7 +38,7 @@ export default function TruckerOSLanding() {
               Log In
             </a>
             <a
-              href="/login"
+              href="/login?mode=signup"
               className="inline-flex h-12 items-center justify-center rounded-lg border border-gray-300 px-8 text-sm font-semibold text-gray-900 hover:bg-gray-50 transition-colors"
             >
               Get Started
@@ -78,7 +78,7 @@ export default function TruckerOSLanding() {
       {/* Footer */}
       <footer className="border-t py-8">
         <div className="max-w-5xl mx-auto px-6 text-center text-sm text-gray-500">
-          TruckerOS Permit Agent — Phase I
+          MoHeavy AI — Operating System for Truckers
         </div>
       </footer>
     </div>
