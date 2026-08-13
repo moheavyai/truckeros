@@ -22,7 +22,7 @@ import {
 import { fetchActorTeamContext } from '@/lib/roster-profile-link'
 import type { User } from '@supabase/supabase-js'
 
-type AuthMode = 'signin' | 'signup'
+type AuthMode = 'signin' | 'signup' | 'forgot'
 
 function readInitialMode(): AuthMode {
   if (typeof window === 'undefined') return 'signin'
@@ -30,6 +30,7 @@ function readInitialMode(): AuthMode {
     const params = new URLSearchParams(window.location.search)
     const mode = (params.get('mode') || '').toLowerCase()
     if (mode === 'signup' || mode === 'create' || mode === 'register') return 'signup'
+    if (mode === 'forgot' || mode === 'reset') return 'forgot'
   } catch {
     // ignore
   }
@@ -49,7 +50,7 @@ export default function LoginPage() {
   const redirectingRef = useRef(false)
   const modeInitializedRef = useRef(false)
 
-  // Honor ?mode=signup from landing "Get Started" (or any deep link).
+  // Honor ?mode=signup / ?mode=forgot from deep links.
   useEffect(() => {
     if (modeInitializedRef.current) return
     modeInitializedRef.current = true
@@ -69,15 +70,9 @@ export default function LoginPage() {
       const safe = resolvePostLoginRedirect(queryRaw, '')
       if (safe && isExplicitPostLoginPath(safe)) return true
     }
-    // Stored signup redirect is already folded into candidatePostLoginPath.
     return isExplicitPostLoginPath(candidatePostLoginPath)
   }, [candidatePostLoginPath])
 
-  /**
-   * After auth: honor invite/explicit redirects; otherwise send incomplete
-   * first-time accounts to Welcome/profile instead of Dashboard.
-   * Onboarding status unknown → fail-closed to profile (not dashboard).
-   */
   const resolveLandingPath = useCallback(
     async (user: User): Promise<string> => {
       if (hasExplicitRedirect) {
@@ -98,7 +93,6 @@ export default function LoginPage() {
 
         if (profileError) {
           console.warn('[login] profile load failed', profileError)
-          // Fail-closed: unknown status → Welcome/profile, not Dashboard bounce.
           return ONBOARDING_PATH
         }
 
@@ -124,7 +118,6 @@ export default function LoginPage() {
         })
       } catch (error) {
         console.warn('[login] onboarding landing resolution failed', error)
-        // Fail-closed to onboarding when status is unknown (Dashboard gate is a secondary recovery).
         return ONBOARDING_PATH
       }
     },
@@ -148,10 +141,6 @@ export default function LoginPage() {
     [resolveLandingPath, router]
   )
 
-  /**
-   * Redirect already-authenticated users away from the login page.
-   * Honors a safe ?redirect= path (e.g. invite accept flow).
-   */
   useEffect(() => {
     const supabase = createClient()
 
@@ -163,7 +152,6 @@ export default function LoginPage() {
       }
     })
 
-    // Also listen for auth changes (e.g. user logs in via another tab)
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         void redirectAuthenticated(session.user)
@@ -177,7 +165,6 @@ export default function LoginPage() {
     setMode(next)
     setAuthError(null)
     setSuccessMessage(null)
-    // Keep email; clear passwords when switching to avoid accidental reuse.
     setPassword('')
     setConfirmPassword('')
   }
@@ -207,8 +194,6 @@ export default function LoginPage() {
         return
       }
 
-      // Explicitly fetch the session to ensure the refresh token is properly stored
-      // before redirecting. This helps avoid "Invalid Refresh Token" errors.
       const {
         data: { session },
       } = await supabase.auth.getSession()
@@ -221,12 +206,10 @@ export default function LoginPage() {
         )
       }
     } catch (err: any) {
-      // This catches network-level failures such as "Failed to fetch" (TypeError)
-      // that occur when Supabase URL/anon key point to a non-existent host (e.g. placeholder values).
       const message = err?.message || 'An unexpected error occurred during login.'
       if (message.toLowerCase().includes('fetch')) {
         setAuthError(
-          'Unable to connect to the authentication service. Please verify that .env.local contains your real Supabase Project URL and anon key (not the placeholders from .env.local.example) and restart the dev server with `npm run dev`.'
+          'Unable to connect to the authentication service. Please verify that .env.local contains your real Supabase Project URL and anon key and restart the dev server.'
         )
       } else {
         setAuthError(message)
@@ -262,8 +245,6 @@ export default function LoginPage() {
     const supabase = createClient()
 
     try {
-      // Keep invite (or other) redirect across email confirmation → login.
-      // Do not persist default dashboard — first login will route incomplete users to Welcome.
       const pathToPersist = hasExplicitRedirect ? candidatePostLoginPath : null
       persistPostLoginRedirect(pathToPersist)
 
@@ -285,15 +266,11 @@ export default function LoginPage() {
         return
       }
 
-      // When email confirmation is disabled in Supabase, signUp returns a session
-      // and the user is already authenticated. Redirect immediately — no stuck page,
-      // no "check your email" message that is wrong for this config.
       if (data.session?.user) {
         await redirectAuthenticated(data.session.user)
         return
       }
 
-      // Confirmation required: show clear next step and leave the form ready for sign-in.
       setSuccessMessage(
         'Account created. Check your email for the confirmation link. After you confirm, return here and sign in.'
       )
@@ -304,7 +281,7 @@ export default function LoginPage() {
       const message = err?.message || 'An unexpected error occurred during sign up.'
       if (message.toLowerCase().includes('fetch')) {
         setAuthError(
-          'Unable to connect to the authentication service. Please verify that .env.local contains your real Supabase Project URL and anon key (not the placeholders from .env.local.example) and restart the dev server with `npm run dev`.'
+          'Unable to connect to the authentication service. Please verify that .env.local contains your real Supabase Project URL and anon key and restart the dev server.'
         )
       } else {
         setAuthError(message)
@@ -314,7 +291,53 @@ export default function LoginPage() {
     }
   }
 
-  // Show branded loading state while we check if the user is already logged in
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setAuthError(null)
+    setSuccessMessage(null)
+
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail) {
+      setAuthError('Enter the email address for your account.')
+      setLoading(false)
+      return
+    }
+
+    const supabase = createClient()
+
+    try {
+      const redirectTo =
+        typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined
+
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+        redirectTo,
+      })
+
+      if (error) {
+        setAuthError(error.message)
+        return
+      }
+
+      setSuccessMessage(
+        'If an account exists for that email, a reset link is on the way. Check your inbox (and spam), then return here to sign in with your new password.'
+      )
+      setMode('signin')
+      setPassword('')
+    } catch (err: any) {
+      const message = err?.message || 'Unable to send reset email. Please try again.'
+      if (message.toLowerCase().includes('fetch')) {
+        setAuthError(
+          'Unable to connect to the authentication service. Please try again in a moment.'
+        )
+      } else {
+        setAuthError(message)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (checkingSession) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -324,6 +347,19 @@ export default function LoginPage() {
   }
 
   const isSignUp = mode === 'signup'
+  const isForgot = mode === 'forgot'
+
+  const title = isForgot
+    ? 'Reset your password'
+    : isSignUp
+      ? 'Create your account'
+      : 'Welcome back'
+
+  const subtitle = isForgot
+    ? 'Enter your email and we’ll send a reset link.'
+    : isSignUp
+      ? 'Get started with MoHeavy AI — the operating system for truckers.'
+      : 'Sign in to access MoHeavy AI'
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -340,16 +376,9 @@ export default function LoginPage() {
 
         {/* Auth Card */}
         <div className="bg-white border rounded-2xl p-8 shadow-sm">
-          <h1 className="text-2xl font-semibold tracking-tight mb-1">
-            {isSignUp ? 'Create your account' : 'Welcome back'}
-          </h1>
-          <p className="text-gray-600 text-sm mb-6">
-            {isSignUp
-              ? 'Get started with MoHeavy AI — the operating system for truckers.'
-              : 'Sign in to access MoHeavy AI'}
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight mb-1">{title}</h1>
+          <p className="text-gray-600 text-sm mb-6">{subtitle}</p>
 
-          {/* Placeholder config warning (only visible when .env.local still has example values) */}
           {isUsingPlaceholderEnv && (
             <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
               <strong>Supabase not configured yet.</strong> Your <code>.env.local</code> still contains
@@ -359,91 +388,142 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Auth errors */}
           {authError && (
             <div className="mb-4">
               <ErrorDisplay message={authError} variant="inline" />
             </div>
           )}
 
-          {/* Success (email confirmation required path) */}
           {successMessage && (
             <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">
               {successMessage}
             </div>
           )}
 
-          {/* Form — same fields, different submit handler + labels by mode */}
-          <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-4">
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              className="border p-3 w-full rounded"
-              required
-            />
-            <input
-              type="password"
-              placeholder={isSignUp ? 'Password (min 6 characters)' : 'Password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete={isSignUp ? 'new-password' : 'current-password'}
-              className="border p-3 w-full rounded"
-              required
-              minLength={isSignUp ? 6 : undefined}
-            />
-            {isSignUp && (
+          {/* Forgot password form */}
+          {isForgot ? (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                className="border p-3 w-full rounded"
+                required
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-black text-white px-6 py-3 rounded-lg w-full font-semibold hover:bg-gray-900 disabled:bg-gray-400 transition-colors flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <span className="animate-spin">⏳</span> Sending link...
+                  </>
+                ) : (
+                  'Send reset link'
+                )}
+              </button>
+            </form>
+          ) : (
+            /* Sign in / Sign up form */
+            <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-4">
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                className="border p-3 w-full rounded"
+                required
+              />
               <input
                 type="password"
-                placeholder="Confirm password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                autoComplete="new-password"
+                placeholder={isSignUp ? 'Password (min 6 characters)' : 'Password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete={isSignUp ? 'new-password' : 'current-password'}
                 className="border p-3 w-full rounded"
+                required
+                minLength={isSignUp ? 6 : undefined}
               />
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="bg-black text-white px-6 py-3 rounded-lg w-full font-semibold hover:bg-gray-900 disabled:bg-gray-400 transition-colors flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <span className="animate-spin">⏳</span>{' '}
-                  {isSignUp ? 'Creating account...' : 'Signing in...'}
-                </>
-              ) : isSignUp ? (
-                'Create account'
-              ) : (
-                'Sign in'
+              {isSignUp && (
+                <input
+                  type="password"
+                  placeholder="Confirm password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  autoComplete="new-password"
+                  className="border p-3 w-full rounded"
+                />
               )}
-            </button>
-          </form>
 
-          {/* Mode switch */}
-          <div className="mt-5 pt-5 border-t text-center">
-            {isSignUp ? (
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-black text-white px-6 py-3 rounded-lg w-full font-semibold hover:bg-gray-900 disabled:bg-gray-400 transition-colors flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <span className="animate-spin">⏳</span>{' '}
+                    {isSignUp ? 'Creating account...' : 'Signing in...'}
+                  </>
+                ) : isSignUp ? (
+                  'Create account'
+                ) : (
+                  'Sign in'
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* Footer links */}
+          <div className="mt-5 pt-5 border-t text-center space-y-2">
+            {isForgot ? (
               <button
                 type="button"
                 onClick={() => switchMode('signin')}
                 disabled={loading}
                 className="text-sm text-gray-600 hover:text-black"
               >
-                Already have an account? <span className="font-medium text-black">Sign in</span>
+                Back to <span className="font-medium text-black">Sign in</span>
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={() => switchMode('signup')}
-                disabled={loading}
-                className="text-sm text-gray-600 hover:text-black"
-              >
-                Don't have an account?{' '}
-                <span className="font-medium text-black">Create one</span>
-              </button>
+              <>
+                {!isSignUp && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => switchMode('forgot')}
+                      disabled={loading}
+                      className="text-sm text-gray-600 hover:text-black"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                )}
+                {isSignUp ? (
+                  <button
+                    type="button"
+                    onClick={() => switchMode('signin')}
+                    disabled={loading}
+                    className="text-sm text-gray-600 hover:text-black"
+                  >
+                    Already have an account? <span className="font-medium text-black">Sign in</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => switchMode('signup')}
+                    disabled={loading}
+                    className="text-sm text-gray-600 hover:text-black"
+                  >
+                    Don't have an account?{' '}
+                    <span className="font-medium text-black">Create one</span>
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -452,8 +532,6 @@ export default function LoginPage() {
   )
 }
 
-// Detect placeholder Supabase config so we can warn the user before they hit network errors.
-// These values come from .env.local at dev server startup (NEXT_PUBLIC_* are inlined for the client).
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
 const isUsingPlaceholderEnv =
