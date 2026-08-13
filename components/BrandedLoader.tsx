@@ -18,7 +18,7 @@ export default function BrandedLoader({
     <div className="flex flex-col items-center justify-center py-12">
       <div className={`${logoSize} bg-black rounded-xl flex items-center justify-center mb-4 shadow-sm`}>
         <span className="text-white font-bold tracking-tighter" style={{ fontSize: size === 'lg' ? '2rem' : '1.5rem' }}>
-          T
+          M
         </span>
       </div>
       <p className={`text-gray-700 font-semibold ${textSize}`}>{message}</p>
