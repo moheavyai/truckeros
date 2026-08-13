@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TruckerOS | Permit Agent",
-  description: "Fast, data-driven oversize and overweight permitting for owner-operators and carriers.",
+  title: "MoHeavy AI | Operating System for Truckers",
+  description: "The operating system for owner-operators and small carriers. Intelligent OSOW permits, corridor management, and compliance tools.",
   icons: {
     icon: "/favicon.ico",
   },
