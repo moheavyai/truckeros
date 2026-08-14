@@ -230,6 +230,11 @@ export type WelcomeCopyOptions = {
   step?: OnboardingStep
   /** When true, permit clerk copy may mention Carriers (service mode). */
   serviceMode?: boolean
+  /**
+   * Owner Operator path: Step 2 prioritizes Equipment (Team still available).
+   * Fleet / multi-user owners keep Team-first language.
+   */
+  preferEquipment?: boolean
 }
 
 export function getWelcomeSubtitle(
@@ -246,6 +251,9 @@ export function getWelcomeSubtitle(
         return 'Set up your platform carrier organization — company details first, then team and equipment.'
       }
       if (step === 'team_or_equipment') {
+        if (options?.preferEquipment) {
+          return 'Company is ready. Add equipment next so route analysis has accurate data — invite your team when you need them.'
+        }
         return 'Company is ready. Invite your team or add equipment, then open the Dashboard.'
       }
       return 'Manage carriers, team access, and permit operations from one place.'
@@ -254,6 +262,9 @@ export function getWelcomeSubtitle(
         return "You're setting up as the account Owner. Add your contact info and company details below — one save creates your organization and profile."
       }
       if (step === 'team_or_equipment') {
+        if (options?.preferEquipment) {
+          return 'Your carrier account is ready. Add your equipment next — invite a teammate anytime.'
+        }
         return 'Your carrier account is ready. Build your team or add equipment next.'
       }
       // Complete / quiet landing
@@ -322,7 +333,10 @@ export function resolveOnboardingStep(options: {
   return 'team_or_equipment'
 }
 
-export function getGuidedOnboardingCopy(step: OnboardingStep): {
+export function getGuidedOnboardingCopy(
+  step: OnboardingStep,
+  options?: { preferEquipment?: boolean }
+): {
   title: string
   body: string
 } {
@@ -333,6 +347,12 @@ export function getGuidedOnboardingCopy(step: OnboardingStep): {
         body: 'Enter your contact and carrier details to create your organization.',
       }
     case 'team_or_equipment':
+      if (options?.preferEquipment) {
+        return {
+          title: 'Step 2 — Equipment first',
+          body: 'Build your first rig so permit analysis has accurate dimensions. Invite teammates whenever you are ready.',
+        }
+      }
       return {
         title: 'Step 2 — Team or equipment',
         body: 'Invite teammates or build your first rig so permit analysis has accurate data.',
@@ -453,23 +473,31 @@ export function getDashboardSetupCtas(options: {
   step: OnboardingStep
   canManageTeam?: boolean
   canManageEquipment?: boolean
+  /** Owner Operator: Equipment first; Team remains available. */
+  preferEquipment?: boolean
 }): { label: string; href: string; description: string }[] {
   if (options.step !== 'team_or_equipment') return []
 
-  const ctas: { label: string; href: string; description: string }[] = []
-  if (options.canManageTeam !== false) {
-    ctas.push({
-      label: 'Build your team',
-      href: '/profile',
-      description: 'Invite admins, drivers, or permit clerks.',
-    })
+  const teamCta = {
+    label: 'Build your team',
+    href: '/profile',
+    description: 'Invite admins, drivers, or permit clerks.',
   }
-  if (options.canManageEquipment !== false) {
-    ctas.push({
-      label: 'Add equipment',
-      href: '/equipment',
-      description: 'Create your first tractor, trailer, or rig.',
-    })
+  const equipmentCta = {
+    label: 'Add equipment',
+    href: '/equipment',
+    description: options.preferEquipment
+      ? 'Create your first tractor, trailer, or rig — recommended next step.'
+      : 'Create your first tractor, trailer, or rig.',
+  }
+
+  const ctas: { label: string; href: string; description: string }[] = []
+  if (options.preferEquipment) {
+    if (options.canManageEquipment !== false) ctas.push(equipmentCta)
+    if (options.canManageTeam !== false) ctas.push(teamCta)
+  } else {
+    if (options.canManageTeam !== false) ctas.push(teamCta)
+    if (options.canManageEquipment !== false) ctas.push(equipmentCta)
   }
   return ctas
 }

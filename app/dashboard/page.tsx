@@ -25,6 +25,7 @@ import {
   shouldShowEquipmentNav,
   type MemberPermissionConfig,
 } from '@/lib/team-permissions'
+import { isOwnerOperatorSelected } from '@/lib/member-profile'
 import type { MemberProfile, UserRole } from '@/types/member-profile'
 
 /** Mobile-first contrast: stronger borders/text on small screens; softer from sm: up (matches permit-test / portal-assist). */
@@ -303,6 +304,7 @@ export default function Dashboard() {
             hasOwnerOrAdminRole(navActor)
           : false,
         canManageEquipment: navActor ? shouldShowEquipmentNav(navActor) : false,
+        preferEquipment: isOwnerOperatorSelected(navActor?.user_roles),
       }),
     [onboardingStep, navActor]
   )

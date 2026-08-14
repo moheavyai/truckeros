@@ -2186,6 +2186,9 @@ export default function ProfilePage() {
     bootstrap: false,
     step: guidedStep,
     serviceMode: workspaceMode === 'service',
+    preferEquipment:
+      homeActingActor.isOwnerOperator ||
+      isOwnerOperatorSelected((effectiveOwnProfile?.user_roles as string[]) || (ownProfile?.user_roles as string[]) || []),
   })
   const showGuidedWelcomeBanner = shouldShowFullWelcomeBanner({
     isProfileBootstrap,
@@ -2203,7 +2206,11 @@ export default function ProfilePage() {
     showLandingView &&
     guidedStep === 'team_or_equipment' &&
     canSeeSetupGuidance(setupActor)
-  const guidedCopy = getGuidedOnboardingCopy(guidedStep)
+  /** Owner Operator path: prioritize Equipment; Team stays available. */
+  const preferEquipmentStep =
+    homeActingActor.isOwnerOperator ||
+    isOwnerOperatorSelected((effectiveOwnProfile?.user_roles as string[]) || (ownProfile?.user_roles as string[]) || [])
+  const guidedCopy = getGuidedOnboardingCopy(guidedStep, { preferEquipment: preferEquipmentStep })
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -2415,23 +2422,47 @@ export default function ProfilePage() {
             </h2>
             <p className="text-sm text-emerald-900/80 mt-1.5">{guidedCopy.body}</p>
             <div className="mt-4 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  requestAnimationFrame(() => {
-                    teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                  })
-                }}
-                className="inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-900 transition"
-              >
-                Build your team
-              </button>
-              <a
-                href="/equipment"
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-5 py-2.5 text-sm font-semibold text-emerald-950 hover:bg-emerald-100 transition"
-              >
-                Add equipment
-              </a>
+              {preferEquipmentStep ? (
+                <>
+                  <a
+                    href="/equipment"
+                    className="inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-900 transition"
+                  >
+                    Add equipment
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      requestAnimationFrame(() => {
+                        teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      })
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-5 py-2.5 text-sm font-semibold text-emerald-950 hover:bg-emerald-100 transition"
+                  >
+                    Build your team
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      requestAnimationFrame(() => {
+                        teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      })
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-900 transition"
+                  >
+                    Build your team
+                  </button>
+                  <a
+                    href="/equipment"
+                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-5 py-2.5 text-sm font-semibold text-emerald-950 hover:bg-emerald-100 transition"
+                  >
+                    Add equipment
+                  </a>
+                </>
+              )}
               <a
                 href="/dashboard"
                 onClick={() => {
