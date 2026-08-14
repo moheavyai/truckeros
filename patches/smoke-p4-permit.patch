@@ -1,0 +1,125 @@
+diff --git a/app/permit-test/page.tsx b/app/permit-test/page.tsx
+index 4600eae..6cba29c 100644
+--- a/app/permit-test/page.tsx
++++ b/app/permit-test/page.tsx
+@@ -544,12 +544,7 @@ export default function PermitTestPage() {
+       .finally(() => setLoadingPrimaryOwner(false))
+   }, [user, workspaceMode, effectiveOrganizationId])
+ 
+-  // Auto-check migration status once user is authenticated
+-  useEffect(() => {
+-    if (!loadingAuth && user) {
+-      checkMigrationStatus()
+-    }
+-  }, [loadingAuth, user])
++  // Schema status is admin/dev only — do not auto-check for carriers.
+ 
+   // NEW: Load the carrier's saved equipment profiles + new smart rigs
+   // Also load decoded tractors/trailers so Rig Selector can show full (tractor+trailer) VehicleDiagram previews.
+@@ -1714,11 +1709,15 @@ export default function PermitTestPage() {
+         } else if (isGeocodeFailure(result)) {
+           setShowManualCoords((prev) => ({ ...prev, [stopKey]: true }))
+           setGeocodeStatus(result.userMessage)
++          setRouteProgress((p) => (p === 'geocoding' || p === 'calculating' ? 'error' : p))
++          setRouteProgressDetail('Fix the address above, then route will continue')
+         }
+       } catch (error: any) {
+         console.error('Geocoding error:', error)
+         setShowManualCoords((prev) => ({ ...prev, [stopKey]: true }))
+         setGeocodeStatus(GEOCODE_BUSY_MESSAGE)
++        setRouteProgress((p) => (p === 'geocoding' || p === 'calculating' ? 'error' : p))
++        setRouteProgressDetail('Fix the address above, then route will continue')
+       } finally {
+         setIsGeocoding((prev) => ({ ...prev, [stopKey]: false }))
+       }
+@@ -1897,6 +1896,7 @@ export default function PermitTestPage() {
+       setLoading(true)
+ 
+       const geocodeResults: Partial<Record<StopKey, GeocodeSuccess>> = {}
++      const failedStops: StopKey[] = []
+       for (const stopKey of stopsToGeocode) {
+         if (runId !== routeAnalysisAbortRef.current) {
+           setLoading(false)
+@@ -1907,8 +1907,13 @@ export default function PermitTestPage() {
+         if (result.ok) {
+           geocodeResults[stopKey] = result
+         } else if (isGeocodeFailure(result)) {
++          failedStops.push(stopKey)
+           setShowManualCoords((prev) => ({ ...prev, [stopKey]: true }))
+           setGeocodeStatus(result.userMessage)
++        } else {
++          failedStops.push(stopKey)
++          setShowManualCoords((prev) => ({ ...prev, [stopKey]: true }))
++          setGeocodeStatus(GEOCODE_BUSY_MESSAGE)
+         }
+       }
+ 
+@@ -1931,6 +1936,21 @@ export default function PermitTestPage() {
+       currentData = nextData
+       setFormData(currentData)
+       setLoading(false)
++
++      if (failedStops.length > 0) {
++        setRouteProgress('error')
++        setRouteProgressDetail('Fix the address above, then route will continue')
++        setLoading(false)
++        const first = failedStops[0]
++        requestAnimationFrame(() => {
++          const el =
++            document.getElementById(first === 'origin' ? 'origin-address-section' : 'drops-section') ||
++            document.querySelector('[data-geocode-manual="true"]')
++          el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
++        })
++        return
++      }
+     }
+ 
+     if (runId !== routeAnalysisAbortRef.current) return
+@@ -2818,9 +2838,9 @@ export default function PermitTestPage() {
+           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+             <a href="/" className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+               <div className="w-8 h-8 bg-black rounded flex items-center justify-center shrink-0">
+-                <span className="text-white text-lg font-bold tracking-tighter">T</span>
++                <span className="text-white text-lg font-bold tracking-tighter">M</span>
+               </div>
+-              <span className="text-lg sm:text-xl font-semibold tracking-tight truncate">TruckerOS</span>
++              <span className="text-lg sm:text-xl font-semibold tracking-tight truncate">MoHeavy AI</span>
+             </a>
+           </div>
+ 
+@@ -3827,6 +3847,7 @@ export default function PermitTestPage() {
+         </div>
+ 
+         {/* Pickup */}
++        <div id="origin-address-section">
+         <LocationStopInput
+           label="5. Pickup"
+           stop={formData.origin}
+@@ -3859,9 +3880,10 @@ export default function PermitTestPage() {
+             </button>
+           }
+         />
++        </div>
+ 
+         {/* Drops */}
+-        <div className="space-y-4">
++        <div id="drops-section" className="space-y-4">
+           <div className="flex flex-wrap items-center justify-between gap-2">
+             <h2 className="text-lg font-semibold text-gray-900">6. Drops (deliveries)</h2>
+             <button
+@@ -4570,6 +4592,7 @@ export default function PermitTestPage() {
+       )}
+ 
+       {/* Database Schema Helper - For adding new columns */}
++      {isDevEnvironment() && (
+       <div className="mt-12 pt-8 border-t">
+         <div className="flex items-center justify-between mb-3">
+           <div className="flex items-center gap-2">
+@@ -4636,6 +4659,7 @@ export default function PermitTestPage() {
+           Covers permit route metadata, equipment license plates, and default rig selection for the Permit Agent.
+         </p>
+       </div>
++      )}
+       </div>{/* max-w-3xl content shell */}
+     </div>
+   )
