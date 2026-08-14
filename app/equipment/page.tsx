@@ -968,7 +968,7 @@ export default function EquipmentPage() {
       alert('Failed to save rig: ' + error.message)
       return
     }
-    setSuccessToast(editingExisting ? `Updated rig "${name}"` : `Saved ""  ready for analysis`)
+    setSuccessToast(editingExisting ? `Updated rig "${name}"` : `Saved "${name}" - ready for analysis`)
     await loadAll()
     setActiveTab('rigs'); setRigBuilderOpen(false)
     clearBuilder()
