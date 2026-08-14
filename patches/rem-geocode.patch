@@ -54,7 +54,7 @@ index c1419a3..215b626 100644
          }
        }
  
-@@ -1931,6 +1936,21 @@ export default function PermitTestPage() {
+@@ -1932,6 +1937,20 @@ export default function PermitTestPage() {
        currentData = nextData
        setFormData(currentData)
        setLoading(false)
@@ -75,7 +75,16 @@ index c1419a3..215b626 100644
      }
  
      if (runId !== routeAnalysisAbortRef.current) return
-@@ -3827,6 +3847,7 @@ export default function PermitTestPage() {
+@@ -2798,7 +2817,7 @@ export default function PermitTestPage() {
+     return (
+       <div className="min-h-screen flex items-center justify-center bg-gray-50">
+         <div className="text-center">
+-          {/* TruckerOS brand mark */}
++          {/* MoHeavy brand mark */}
+           <div className="w-14 h-14 bg-black rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+             <span className="text-white text-3xl font-bold tracking-tighter">M</span>
+           </div>
+@@ -3827,6 +3846,7 @@ export default function PermitTestPage() {
          </div>
  
          {/* Pickup */}
@@ -83,7 +92,7 @@ index c1419a3..215b626 100644
          <LocationStopInput
            label="5. Pickup"
            stop={formData.origin}
-@@ -3859,9 +3880,10 @@ export default function PermitTestPage() {
+@@ -3859,9 +3879,10 @@ export default function PermitTestPage() {
              </button>
            }
          />
@@ -95,7 +104,7 @@ index c1419a3..215b626 100644
            <div className="flex flex-wrap items-center justify-between gap-2">
              <h2 className="text-lg font-semibold text-gray-900">6. Drops (deliveries)</h2>
              <button
-@@ -4444,10 +4466,10 @@ export default function PermitTestPage() {
+@@ -4444,10 +4465,10 @@ export default function PermitTestPage() {
                          </span>
                        </div>
  
@@ -108,7 +117,7 @@ index c1419a3..215b626 100644
                          </span>
                          <span className="font-medium text-blue-600">
                            ${(() => {
-@@ -4484,7 +4506,7 @@ export default function PermitTestPage() {
+@@ -4484,7 +4505,7 @@ export default function PermitTestPage() {
                    )}
  
                    <div className="mt-3 text-xs text-emerald-600 bg-emerald-50 p-2 rounded">
@@ -117,7 +126,7 @@ index c1419a3..215b626 100644
                    </div>
                  </div>
  
-@@ -4570,6 +4592,7 @@ export default function PermitTestPage() {
+@@ -4570,6 +4591,7 @@ export default function PermitTestPage() {
        )}
  
        {/* Database Schema Helper - For adding new columns */}
@@ -125,7 +134,7 @@ index c1419a3..215b626 100644
        <div className="mt-12 pt-8 border-t">
          <div className="flex items-center justify-between mb-3">
            <div className="flex items-center gap-2">
-@@ -4636,6 +4659,7 @@ export default function PermitTestPage() {
+@@ -4636,6 +4658,7 @@ export default function PermitTestPage() {
            Covers permit route metadata, equipment license plates, and default rig selection for the Permit Agent.
          </p>
        </div>
