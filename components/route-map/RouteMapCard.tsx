@@ -68,30 +68,42 @@ function truncateChipLabel(label: string, max = 42): string {
 
 export default function RouteMapCard({ model, actions, className, onMapClick }: RouteMapCardProps) {
   const [mapLoadFailed, setMapLoadFailed] = useState(false)
-  /** Idle empty: no route work and no geometry yet. */
-  const isIdleEmpty =
-    model.status === 'idle' && model.stops.length === 0 && !model.geometry
-  const isError = model.status === 'error'
-  const showCalculating =
+  const [mapStyleLoaded, setMapStyleLoaded] = useState(false)
+
+  const isCalculating =
     model.status === 'geocoding' || model.status === 'calculating'
-  const showMap =
-    !mapLoadFailed &&
-    model.status === 'ready' &&
-    (model.stops.length > 0 || !!model.geometry)
+  const showCalculating = isCalculating && !mapLoadFailed
+  const isError = model.status === 'error'
+  const isIdleEmpty = model.status === 'idle' && model.stops.length === 0
+  const showLineLegend =
+    model.linePositions.length >= 2 && model.status === 'ready' && !mapLoadFailed
 
   const legendRoles = ROLE_ORDER.filter((role) =>
     model.stops.some((s) => s.role === role)
   )
-  const showLineLegend = !!model.geometry && model.geometry.coordinates.length >= 2
+
+  const liveStatus =
+    mapLoadFailed
+      ? 'Map failed to load'
+      : isError
+        ? model.message || 'Could not build route'
+        : showCalculating
+          ? progressBadgeLabel(model.message)
+          : model.status === 'ready'
+            ? 'Route ready'
+            : isIdleEmpty
+              ? model.message || 'Enter origin and destination to preview the route map'
+              : ''
 
   return (
     <section
-      className={className ?? ROUTE_MAP_CARD_DEFAULT_CLASS}
-      aria-label="Route map"
+      className={className || ROUTE_MAP_CARD_DEFAULT_CLASS}
+      aria-labelledby="route-map-card-title"
+      aria-busy={showCalculating || (!mapStyleLoaded && !mapLoadFailed) || undefined}
       data-testid="route-map-card"
     >
-      <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-2">
-        <h2 className="text-sm font-semibold text-gray-900 tracking-tight">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100">
+        <h2 id="route-map-card-title" className="text-base font-semibold text-gray-900">
           Route
         </h2>
         {showCalculating && (
@@ -105,40 +117,57 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
           </span>
         )}
         {model.status === 'ready' && !mapLoadFailed && (
-          <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
+          <span className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
             Ready
           </span>
         )}
-        {actions}
+        {(isError || mapLoadFailed) && (
+          <span className="text-xs font-medium text-red-700 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
+            Error
+          </span>
+        )}
+        {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
       </div>
 
-      <div className="relative px-3 pb-3">
-        {showMap ? (
+      <div className="sr-only" aria-live="polite" aria-atomic="true" data-testid="route-map-live">
+        {liveStatus}
+      </div>
+
+      <div className="relative px-3 pb-3 pt-3">
+        {!mapLoadFailed ? (
           <div className="rounded-xl overflow-hidden border border-gray-200">
             <RouteMap
               model={model}
               onMapClick={onMapClick}
               onLoadError={() => setMapLoadFailed(true)}
+              onStyleLoaded={() => setMapStyleLoaded(true)}
             />
           </div>
-        ) : isError || mapLoadFailed ? (
+        ) : (
           <div
             className="w-full min-h-[200px] rounded-xl bg-red-50 border border-red-100 flex flex-col items-center justify-center px-4 py-8"
             role="alert"
           >
-            <p className="text-sm font-medium text-red-800 text-center">
-              {mapLoadFailed
-                ? 'Map failed to load'
-                : model.message || 'Could not build route'}
-            </p>
+            <p className="text-sm font-medium text-red-800 text-center">Map failed to load</p>
             <p className="text-xs text-red-700/80 mt-1 text-center max-w-sm">
-              Check addresses or try again. Manual coordinates are available above when geocoding fails.
+              Check your connection or try again. Manual coordinates are available above when geocoding
+              fails.
             </p>
           </div>
-        ) : (
-          <div className="w-full min-h-[200px] rounded-xl bg-slate-50 border border-dashed border-gray-200 flex flex-col items-center justify-center px-4 py-8">
-            <p className="text-sm text-gray-600 mb-1 max-w-[min(100%,28rem)] text-center">
+        )}
+
+        {isIdleEmpty && !mapLoadFailed && mapStyleLoaded && (
+          <div className="pointer-events-none absolute inset-3 flex items-center justify-center rounded-xl bg-white/70">
+            <p className="text-sm text-gray-600 mb-1 max-w-[min(100%,28rem)] text-center px-4">
               {model.message || 'Enter origin and destination to preview the route map'}
+            </p>
+          </div>
+        )}
+
+        {isError && !mapLoadFailed && (
+          <div className="pointer-events-none absolute inset-3 flex items-center justify-center rounded-xl bg-red-50/80">
+            <p className="text-sm font-medium text-red-800 text-center px-4">
+              {model.message || 'Could not build route'}
             </p>
           </div>
         )}
