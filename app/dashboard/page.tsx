@@ -303,6 +303,7 @@ export default function Dashboard() {
             hasOwnerOrAdminRole(navActor)
           : false,
         canManageEquipment: navActor ? shouldShowEquipmentNav(navActor) : false,
+        preferEquipment: navActor?.isOwnerOperator === true,
       }),
     [onboardingStep, navActor]
   )
