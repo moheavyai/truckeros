@@ -1,0 +1,89 @@
+diff --git a/app/equipment/page.tsx b/app/equipment/page.tsx
+index 6aabe75..67d08e4 100644
+--- a/app/equipment/page.tsx
++++ b/app/equipment/page.tsx
+@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
+ import { createClient } from '@/lib/supabase/client'
+ import { useRouter } from 'next/navigation'
+ import AppHeader from '@/components/AppHeader'
++import SuccessToast from '@/components/SuccessToast'
+ import ActiveCarrierBanner from '@/components/ActiveCarrierBanner'
+ import { useOrganizationContext } from '@/lib/organization-context'
+ import {
+@@ -98,6 +99,7 @@ export default function EquipmentPage() {
+   const [activeTab, setActiveTab] = useState<Tab>('rigs')
+   const [rigBuilderOpen, setRigBuilderOpen] = useState(false)
+   const [hasChosenTab, setHasChosenTab] = useState(false)
++  const [successToast, setSuccessToast] = useState<string | null>(null)
+ 
+   // Data
+   const [tractors, setTractors] = useState<Tractor[]>([])
+@@ -966,7 +968,7 @@ export default function EquipmentPage() {
+       alert('Failed to save rig: ' + error.message)
+       return
+     }
+-    alert(editingExisting ? `Updated rig "${name}"` : `Saved rig "${name}"`)
++    setSuccessToast(editingExisting ? `Updated rig "${name}"` : `Saved "${name}" — ready for analysis`)
+     await loadAll()
+     setActiveTab('rigs'); setRigBuilderOpen(false)
+     clearBuilder()
+@@ -1042,7 +1044,7 @@ export default function EquipmentPage() {
+       <div className="min-h-screen flex items-center justify-center bg-gray-50">
+         <div className="text-center">
+           <div className="w-14 h-14 bg-black rounded-xl flex items-center justify-center mx-auto mb-4">
+-            <span className="text-white text-3xl font-bold tracking-tighter">T</span>
++            <span className="text-white text-3xl font-bold tracking-tighter">M</span>
+           </div>
+           <p className="text-gray-700">Loading equipment manager…</p>
+         </div>
+@@ -1052,6 +1054,7 @@ export default function EquipmentPage() {
+ 
+   return (
+     <div className="min-h-screen bg-gray-50">
++      <SuccessToast message={successToast} onDismiss={() => setSuccessToast(null)} />
+       <AppHeader user={user} activePage="equipment" ownOrganizationId={ownOrganizationId} />
+ 
+       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 min-w-0">
+@@ -1596,6 +1599,27 @@ export default function EquipmentPage() {
+                   />
+                   <div className="md:col-span-2">
+                     <label className={fieldLabelTinyClass} htmlFor="trailer-type-input">Trailer Type</label>
++                    <div className="mt-1 flex flex-wrap gap-1.5 mb-2">
++                      {trailerTypeOptions.map((opt) => {
++                        const selected =
++                          formatTrailerTypeLabel(editingTrailer.trailer_type).toLowerCase() ===
++                          opt.toLowerCase()
++                        return (
++                          <button
++                            key={opt}
++                            type="button"
++                            onClick={() => setEditingTrailer({ ...editingTrailer, trailer_type: opt })}
++                            className={`min-h-[36px] px-3 py-1.5 rounded-full text-xs font-medium border touch-manipulation ${
++                              selected
++                                ? 'bg-emerald-700 text-white border-emerald-700'
++                                : 'bg-white text-gray-800 border-gray-400 sm:border-gray-300 hover:bg-gray-50'
++                            }`}
++                          >
++                            {opt}
++                          </button>
++                        )
++                      })}
++                    </div>
+                     <input
+                       id="trailer-type-input"
+                       list="trailer-type-options"
+@@ -1604,13 +1628,12 @@ export default function EquipmentPage() {
+                         setEditingTrailer({ ...editingTrailer, trailer_type: e.target.value })
+                       }
+                       onBlur={() => {
+-                        // Format only on blur — custom list persists on Save (avoids abandoned drafts clutter).
+                         const formatted = formatTrailerTypeLabel(editingTrailer.trailer_type)
+                         if (formatted && formatted !== editingTrailer.trailer_type) {
+                           setEditingTrailer((prev) => (prev ? { ...prev, trailer_type: formatted } : prev))
+                         }
+                       }
+-                      placeholder="Flatbed, RGN, Jeep, Flip…"
++                      placeholder="Or type a custom type…"
+                       className={inputMtClass}
+                     />
+                     <datalist id="trailer-type-options">
