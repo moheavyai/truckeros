@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import VehicleDiagram from '@/components/VehicleDiagram'
+import EscortRequirementsCard from '@/components/EscortRequirementsCard'
 import type { RigConfiguration, Tractor, Trailer } from '@/types/equipment'
 import {
   computeRigDimensions,
