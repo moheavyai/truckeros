@@ -4163,7 +4163,14 @@ export default function PermitTestPage() {
                       <div className="relative flex justify-between items-center">
                         {primary.routeCorridor.map((state: string, index: number) => {
                           const requires = stateRequiresPermit(primary, state)
-                          const needsEscort = primary.escortRequiredStates?.includes(state)
+                          const escortDetail = primary.escortDetails?.find(
+                            (d: { stateCode?: string }) => d.stateCode === state
+                          )
+                          const needsEscort =
+                            primary.escortRequiredStates?.includes(state) ||
+                            escortDetail?.requirementLevel === 'required' ||
+                            escortDetail?.requirementLevel === 'may_require'
+                          const escortHard = escortDetail?.requirementLevel === 'required'
                           const isFirst = index === 0
                           const isLast = index === primary.routeCorridor.length - 1
                           return (
@@ -4176,7 +4183,9 @@ export default function PermitTestPage() {
                                   {requires ? 'PERMIT' : 'OK'}
                                 </span>
                                 {needsEscort && (
-                                  <div className="text-[9px] font-semibold text-orange-600">ESCORT</div>
+                                  <div className={`text-[9px] font-semibold ${escortHard ? 'text-red-700' : 'text-orange-600'}`}>
+                                    {escortHard ? 'ESCORT REQ' : 'ESCORT?'}
+                                  </div>
                                 )}
                               </div>
                               {!isFirst && !isLast && (
@@ -4339,27 +4348,15 @@ export default function PermitTestPage() {
                   <div className="p-4 border rounded-lg bg-white">
                     <h3 className="font-semibold mb-3 text-gray-700">Route Restrictions &amp; Requirements</h3>
 
-                    {/* Escort Summary */}
-                    {(primary.escortRequiredStates?.length > 0 || primary.escortWarnings?.length > 0) && (
-                      <div className="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-orange-800">Escort(s) Likely Required</span>
-                          <span className="text-xs px-2 py-0.5 bg-orange-200 text-orange-700 rounded">
-                            {(primary.escortRequiredStates?.length || primary.escortWarnings?.length || 0)} state{(primary.escortRequiredStates?.length || primary.escortWarnings?.length || 0) > 1 ? 's' : ''}
-                          </span>
-                        </div>
-                        {primary.escortWarnings?.length > 0 ? (
-                          <ul className="text-sm text-orange-700 space-y-1 list-disc list-inside">
-                            {primary.escortWarnings.map((warning: string, i: number) => (
-                              <li key={i}>{warning}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="text-sm text-orange-700">
-                            {primary.escortRequiredStates.join(' → ')}
-                          </div>
-                        )}
-                      </div>
+                    {/* Escort Summary — structured required vs may-require */}
+                    {(primary.escortDetails?.length > 0 ||
+                      primary.escortRequiredStates?.length > 0 ||
+                      primary.escortWarnings?.length > 0) && (
+                      <EscortRequirementsCard
+                        details={primary.escortDetails}
+                        fallbackWarnings={primary.escortWarnings}
+                        fallbackStates={primary.escortRequiredStates}
+                      />
                     )}
 
                     {/* Curfew Restrictions */}
