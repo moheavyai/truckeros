@@ -68,32 +68,30 @@ function truncateChipLabel(label: string, max = 42): string {
 
 export default function RouteMapCard({ model, actions, className, onMapClick }: RouteMapCardProps) {
   const [mapLoadFailed, setMapLoadFailed] = useState(false)
+  /** Map whenReady — suppress idle empty hint while map still shows "Loading map…". */
   const [mapStyleLoaded, setMapStyleLoaded] = useState(false)
-
-  const isCalculating =
-    model.status === 'geocoding' || model.status === 'calculating'
-  const showCalculating = isCalculating && !mapLoadFailed
+  const isCalculating = model.status === 'calculating'
   const isError = model.status === 'error'
+  /** Canvas dead → suppress calculating chrome; map failure is primary. */
+  const showCalculating = isCalculating && !mapLoadFailed
   const isIdleEmpty = model.status === 'idle' && model.stops.length === 0
   const showLineLegend =
     model.linePositions.length >= 2 && model.status === 'ready' && !mapLoadFailed
 
-  const legendRoles = ROLE_ORDER.filter((role) =>
-    model.stops.some((s) => s.role === role)
-  )
+  const rolesPresent = new Set(model.stops.map((s) => s.role))
+  const legendRoles = ROLE_ORDER.filter((r) => rolesPresent.has(r))
 
-  const liveStatus =
-    mapLoadFailed
-      ? 'Map failed to load'
-      : isError
-        ? model.message || 'Could not build route'
-        : showCalculating
-          ? progressBadgeLabel(model.message)
-          : model.status === 'ready'
-            ? 'Route ready'
-            : isIdleEmpty
-              ? model.message || 'Enter origin and destination to preview the route map'
-              : ''
+  const liveStatus = mapLoadFailed
+    ? 'Map failed to load'
+    : isError
+      ? model.message || 'Route calculation failed'
+      : isCalculating
+        ? model.message || 'Calculating best route…'
+        : model.status === 'ready'
+          ? 'Route ready'
+          : isIdleEmpty
+            ? model.message || 'Enter origin and destination to preview the route map'
+            : ''
 
   return (
     <section
@@ -133,41 +131,45 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
         {liveStatus}
       </div>
 
-      <div className="relative px-3 pb-3 pt-3">
-        {!mapLoadFailed ? (
-          <div className="rounded-xl overflow-hidden border border-gray-200">
-            <RouteMap
-              model={model}
-              onMapClick={onMapClick}
-              onLoadError={() => setMapLoadFailed(true)}
-              onStyleLoaded={() => setMapStyleLoaded(true)}
-            />
-          </div>
-        ) : (
+      {/* Slim indeterminate progress (motion-safe translating bar) */}
+      {showCalculating && (
+        <div
+          className="h-1 w-full bg-blue-100 overflow-hidden relative"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={model.message || 'Calculating route'}
+        >
           <div
-            className="w-full min-h-[200px] rounded-xl bg-red-50 border border-red-100 flex flex-col items-center justify-center px-4 py-8"
-            role="alert"
-          >
-            <p className="text-sm font-medium text-red-800 text-center">Map failed to load</p>
-            <p className="text-xs text-red-700/80 mt-1 text-center max-w-sm">
-              Check your connection or try again. Manual coordinates are available above when geocoding
-              fails.
-            </p>
-          </div>
-        )}
+            className="absolute inset-y-0 w-1/3 bg-blue-500 route-map-indeterminate-bar"
+            aria-hidden
+          />
+        </div>
+      )}
 
+      <div className="relative">
+        <RouteMap
+          model={model}
+          onMapClick={onMapClick}
+          onLoadError={(msg) => setMapLoadFailed(!!msg)}
+          onStyleLoaded={setMapStyleLoaded}
+        />
+
+        {/* Hide idle hint while tiles load or when map canvas itself failed */}
         {isIdleEmpty && !mapLoadFailed && mapStyleLoaded && (
-          <div className="pointer-events-none absolute inset-3 flex items-center justify-center rounded-xl bg-white/70">
-            <p className="text-sm text-gray-600 mb-1 max-w-[min(100%,28rem)] text-center px-4">
+          <div className="absolute inset-0 flex items-end justify-center pointer-events-none px-4 pt-4 pb-10">
+            <p className="text-sm text-gray-600 mb-1 max-w-[min(100%,28rem)] text-center bg-white/80 rounded-lg px-3 py-2 shadow-sm">
               {model.message || 'Enter origin and destination to preview the route map'}
             </p>
           </div>
         )}
 
-        {isError && !mapLoadFailed && (
-          <div className="pointer-events-none absolute inset-3 flex items-center justify-center rounded-xl bg-red-50/80">
-            <p className="text-sm font-medium text-red-800 text-center px-4">
-              {model.message || 'Could not build route'}
+        {(isError || mapLoadFailed) && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-4">
+            <p className="text-sm font-medium text-red-800 text-center bg-red-50/90 rounded-lg px-3 py-2 border border-red-100 max-w-sm">
+              {mapLoadFailed
+                ? 'Map failed to load'
+                : model.message || 'Could not build route'}
             </p>
           </div>
         )}
