@@ -1691,7 +1691,12 @@ export default function ProfilePage() {
         await loadAdminPendingChangeRequests(accessToken)
       }
 
-      if (!wasProfileBootstrap) {
+      if (wasProfileBootstrap) {
+        // After bootstrap Save & continue, show Step 2 guidance at top (not mid-page).
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        })
+      } else {
         requestAnimationFrame(() => {
           teamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         })
