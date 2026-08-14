@@ -2800,7 +2800,7 @@ export default function PermitTestPage() {
         <div className="text-center">
           {/* TruckerOS brand mark */}
           <div className="w-14 h-14 bg-black rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-            <span className="text-white text-3xl font-bold tracking-tighter">T</span>
+            <span className="text-white text-3xl font-bold tracking-tighter">M</span>
           </div>
           <p className="text-gray-700 font-semibold text-lg">Checking authentication...</p>
           <p className="text-gray-600 sm:text-gray-500 text-sm mt-1">Please wait while we verify your session</p>
@@ -2818,9 +2818,9 @@ export default function PermitTestPage() {
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <a href="/" className="flex items-center gap-2 sm:gap-2.5 min-w-0">
               <div className="w-8 h-8 bg-black rounded flex items-center justify-center shrink-0">
-                <span className="text-white text-lg font-bold tracking-tighter">T</span>
+                <span className="text-white text-lg font-bold tracking-tighter">M</span>
               </div>
-              <span className="text-lg sm:text-xl font-semibold tracking-tight truncate">TruckerOS</span>
+              <span className="text-lg sm:text-xl font-semibold tracking-tight truncate">MoHeavy AI</span>
             </a>
           </div>
 
