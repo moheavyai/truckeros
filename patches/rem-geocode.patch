@@ -1,0 +1,144 @@
+diff --git a/app/permit-test/page.tsx b/app/permit-test/page.tsx
+index c1419a3..215b626 100644
+--- a/app/permit-test/page.tsx
++++ b/app/permit-test/page.tsx
+@@ -544,12 +544,7 @@ export default function PermitTestPage() {
+       .finally(() => setLoadingPrimaryOwner(false))
+   }, [user, workspaceMode, effectiveOrganizationId])
+ 
+-  // Auto-check migration status once user is authenticated
+-  useEffect(() => {
+-    if (!loadingAuth && user) {
+-      checkMigrationStatus()
+-    }
+-  }, [loadingAuth, user])
++  // Schema status is admin/dev only — do not auto-check for carriers.
+ 
+   // NEW: Load the carrier's saved equipment profiles + new smart rigs
+   // Also load decoded tractors/trailers so Rig Selector can show full (tractor+trailer) VehicleDiagram previews.
+@@ -1714,11 +1709,15 @@ export default function PermitTestPage() {
+         } else if (isGeocodeFailure(result)) {
+           setShowManualCoords((prev) => ({ ...prev, [stopKey]: true }))
+           setGeocodeStatus(result.userMessage)
++          setRouteProgress((p) => (p === 'geocoding' || p === 'calculating' ? 'error' : p))
++          setRouteProgressDetail('Fix the address above, then route will continue')
+         }
+       } catch (error: any) {
+         console.error('Geocoding error:', error)
+         setShowManualCoords((prev) => ({ ...prev, [stopKey]: true }))
+         setGeocodeStatus(GEOCODE_BUSY_MESSAGE)
++        setRouteProgress((p) => (p === 'geocoding' || p === 'calculating' ? 'error' : p))
++        setRouteProgressDetail('Fix the address above, then route will continue')
+       } finally {
+         setIsGeocoding((prev) => ({ ...prev, [stopKey]: false }))
+       }
+@@ -1897,6 +1896,7 @@ export default function PermitTestPage() {
+       setLoading(true)
+ 
+       const geocodeResults: Partial<Record<StopKey, GeocodeSuccess>> = {}
++      const failedStops: StopKey[] = []
+       for (const stopKey of stopsToGeocode) {
+         if (runId !== routeAnalysisAbortRef.current) {
+           setLoading(false)
+@@ -1907,8 +1907,13 @@ export default function PermitTestPage() {
+         if (result.ok) {
+           geocodeResults[stopKey] = result
+         } else if (isGeocodeFailure(result)) {
++          failedStops.push(stopKey)
+           setShowManualCoords((prev) => ({ ...prev, [stopKey]: true }))
+           setGeocodeStatus(result.userMessage)
++        } else {
++          failedStops.push(stopKey)
++          setShowManualCoords((prev) => ({ ...prev, [stopKey]: true }))
++          setGeocodeStatus(GEOCODE_BUSY_MESSAGE)
+         }
+       }
+ 
+@@ -1932,6 +1937,20 @@ export default function PermitTestPage() {
+       currentData = nextData
+       setFormData(currentData)
+       setLoading(false)
++
++      if (failedStops.length > 0) {
++        setRouteProgress('error')
++        setRouteProgressDetail('Fix the address above, then route will continue')
++        setLoading(false)
++        const first = failedStops[0]
++        requestAnimationFrame(() => {
++          const el =
++            document.getElementById(first === 'origin' ? 'origin-address-section' : 'drops-section') ||
++            document.querySelector('[data-geocode-manual="true"]')
++          el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
++        })
++        return
++      }
+     }
+ 
+     if (runId !== routeAnalysisAbortRef.current) return
+@@ -2798,7 +2817,7 @@ export default function PermitTestPage() {
+     return (
+       <div className="min-h-screen flex items-center justify-center bg-gray-50">
+         <div className="text-center">
+-          {/* TruckerOS brand mark */}
++          {/* MoHeavy brand mark */}
+           <div className="w-14 h-14 bg-black rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+             <span className="text-white text-3xl font-bold tracking-tighter">M</span>
+           </div>
+@@ -3827,6 +3846,7 @@ export default function PermitTestPage() {
+         </div>
+ 
+         {/* Pickup */}
++        <div id="origin-address-section">
+         <LocationStopInput
+           label="5. Pickup"
+           stop={formData.origin}
+@@ -3859,9 +3879,10 @@ export default function PermitTestPage() {
+             </button>
+           }
+         />
++        </div>
+ 
+         {/* Drops */}
+-        <div className="space-y-4">
++        <div id="drops-section" className="space-y-4">
+           <div className="flex flex-wrap items-center justify-between gap-2">
+             <h2 className="text-lg font-semibold text-gray-900">6. Drops (deliveries)</h2>
+             <button
+@@ -4444,10 +4465,10 @@ export default function PermitTestPage() {
+                         </span>
+                       </div>
+ 
+-                      {/* TruckerOS Platform Fee */}
++                      {/* MoHeavy Platform Fee */}
+                       <div className="flex justify-between items-baseline mb-3">
+                         <span className="text-sm text-gray-600">
+-                          TruckerOS Platform Fee <span className="text-xs text-gray-600 sm:text-gray-500">({selectedTier})</span>
++                          MoHeavy Platform Fee <span className="text-xs text-gray-600 sm:text-gray-500">({selectedTier})</span>
+                         </span>
+                         <span className="font-medium text-blue-600">
+                           ${(() => {
+@@ -4484,7 +4505,7 @@ export default function PermitTestPage() {
+                   )}
+ 
+                   <div className="mt-3 text-xs text-emerald-600 bg-emerald-50 p-2 rounded">
+-                    ✓ State-specific permit pricing + TruckerOS platform fee
++                    ✓ State-specific permit pricing + MoHeavy platform fee
+                   </div>
+                 </div>
+ 
+@@ -4570,6 +4591,7 @@ export default function PermitTestPage() {
+       )}
+ 
+       {/* Database Schema Helper - For adding new columns */}
++      {isDevEnvironment() && (
+       <div className="mt-12 pt-8 border-t">
+         <div className="flex items-center justify-between mb-3">
+           <div className="flex items-center gap-2">
+@@ -4636,6 +4658,7 @@ export default function PermitTestPage() {
+           Covers permit route metadata, equipment license plates, and default rig selection for the Permit Agent.
+         </p>
+       </div>
++      )}
+       </div>{/* max-w-3xl content shell */}
+     </div>
+   )

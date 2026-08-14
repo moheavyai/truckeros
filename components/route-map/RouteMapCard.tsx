@@ -105,12 +105,13 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
           Route
         </h2>
         {showCalculating && (
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-800 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
-            <span
-              className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full motion-safe:animate-spin"
-              aria-hidden
-            />
-            {progressBadgeLabel(model.message)}
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-800 bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-full">
+            <span>{progressBadgeLabel(model.message).replace('…', '')}</span>
+            <span className="inline-flex gap-0.5" aria-hidden>
+              <span className="h-1 w-1 rounded-full bg-blue-600 motion-safe:animate-pulse" />
+              <span className="h-1 w-1 rounded-full bg-blue-600 motion-safe:animate-pulse [animation-delay:150ms]" />
+              <span className="h-1 w-1 rounded-full bg-blue-600 motion-safe:animate-pulse [animation-delay:300ms]" />
+            </span>
           </span>
         )}
         {model.status === 'ready' && !mapLoadFailed && (
@@ -157,9 +158,18 @@ export default function RouteMapCard({ model, actions, className, onMapClick }: 
         {/* Hide idle hint while tiles load or when map canvas itself failed */}
         {isIdleEmpty && !mapLoadFailed && mapStyleLoaded && (
           <div className="absolute inset-0 flex items-end justify-center pointer-events-none px-4 pt-4 pb-10">
-            {/* pb-10 leaves room for OSM attribution (bottom-right) on narrow screens */}
-            <p className="text-sm text-gray-600 bg-white/90 border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm mb-1 max-w-[min(100%,28rem)] text-center">
+            <p className="text-sm text-gray-600 mb-1 max-w-[min(100%,28rem)] text-center bg-white/80 rounded-lg px-3 py-2 shadow-sm">
               {model.message || 'Enter origin and destination to preview the route map'}
+            </p>
+          </div>
+        )}
+
+        {(isError || mapLoadFailed) && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-4">
+            <p className="text-sm font-medium text-red-800 text-center bg-red-50/90 rounded-lg px-3 py-2 border border-red-100 max-w-sm">
+              {mapLoadFailed
+                ? 'Map failed to load'
+                : model.message || 'Could not build route'}
             </p>
           </div>
         )}
