@@ -1599,6 +1599,27 @@ export default function EquipmentPage() {
                   />
                   <div className="md:col-span-2">
                     <label className={fieldLabelTinyClass} htmlFor="trailer-type-input">Trailer Type</label>
+                    <div className="mt-1 flex flex-wrap gap-1.5 mb-2">
+                      {trailerTypeOptions.map((opt) => {
+                        const selected =
+                          formatTrailerTypeLabel(editingTrailer.trailer_type).toLowerCase() ===
+                          opt.toLowerCase()
+                        return (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => setEditingTrailer({ ...editingTrailer, trailer_type: opt })}
+                            className={`min-h-[36px] px-3 py-1.5 rounded-full text-xs font-medium border touch-manipulation ${
+                              selected
+                                ? 'bg-emerald-700 text-white border-emerald-700'
+                                : 'bg-white text-gray-800 border-gray-400 sm:border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            {opt}
+                          </button>
+                        )
+                      })}
+                    </div>
                     <input
                       id="trailer-type-input"
                       list="trailer-type-options"
@@ -1607,13 +1628,12 @@ export default function EquipmentPage() {
                         setEditingTrailer({ ...editingTrailer, trailer_type: e.target.value })
                       }
                       onBlur={() => {
-                        // Format only on blur — custom list persists on Save (avoids abandoned drafts clutter).
                         const formatted = formatTrailerTypeLabel(editingTrailer.trailer_type)
                         if (formatted && formatted !== editingTrailer.trailer_type) {
                           setEditingTrailer((prev) => (prev ? { ...prev, trailer_type: formatted } : prev))
                         }
                       }}
-                      placeholder="Flatbed, RGN, Jeep, Flip…"
+                      placeholder="Or type a custom type…"
                       className={inputMtClass}
                     />
                     <datalist id="trailer-type-options">
