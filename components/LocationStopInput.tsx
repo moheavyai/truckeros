@@ -96,6 +96,7 @@ export default function LocationStopInput({
       )}
 
       {showManualCoords && (
+        <div data-geocode-manual="true">
         <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
           <p className="text-xs font-medium text-amber-900 mb-1">Geocoding failed — enter coordinates manually</p>
           <p className="text-xs text-amber-800 mb-2">
@@ -126,6 +127,7 @@ export default function LocationStopInput({
           >
             Hide manual coordinates
           </button>
+        </div>
         </div>
       )}
 
