@@ -317,9 +317,8 @@ function analyzeFromThresholds(
     )
     heightPoleLevel = 'required'
     escortCount = Math.max(escortCount, 1) as 0 | 1 | 2
-    if (requirementLevel === 'none' || requirementLevel === 'may_require') {
-      requirementLevel = 'may_require'
-    }
+    // Tall loads (≥ ~15'6") typically need hard escort + height pole, not soft "may".
+    requirementLevel = 'required'
   }
 
   if (weightThreshold != null && weightThreshold > 0 && load.weight > weightThreshold) {
@@ -381,11 +380,18 @@ function analyzeFromStructuredBands(
   const bands = structured.bands || []
   if (bands.length === 0) return null
 
-  let best: EscortRuleBand | null = null
   const triggers: string[] = []
+  let escortCount: 0 | 1 | 2 = 0
+  let requirementLevel: EscortRequirementLevel = 'none'
+  let heightPoleLevel: HeightPoleLevel = 'none'
+  const positionsSet = new Set<EscortPosition>()
+  const typesSet = new Set<EscortVehicleType>()
+  const notes: string[] = []
+  let matched = false
 
   for (const band of bands) {
     if (!bandMatches(band, load)) continue
+    matched = true
     const { when } = band
     if (when.minWidthFt != null && load.width >= when.minWidthFt) {
       triggers.push(
@@ -408,39 +414,49 @@ function analyzeFromStructuredBands(
       )
     }
 
-    if (
-      !best ||
-      band.count > best.count ||
-      (band.requirement === 'required' && best.requirement !== 'required')
-    ) {
-      best = band
+    escortCount = clampCount(Math.max(escortCount, band.count || 0))
+    if (band.requirement === 'required') {
+      requirementLevel = 'required'
+    } else if (requirementLevel === 'none') {
+      requirementLevel = 'may_require'
     }
+
+    if (band.heightPole === 'required') {
+      heightPoleLevel = 'required'
+    } else if (band.heightPole === 'recommended' && heightPoleLevel === 'none') {
+      heightPoleLevel = 'recommended'
+    }
+
+    for (const pos of band.positions || []) positionsSet.add(pos)
+    for (const typ of band.types || []) typesSet.add(typ)
+    if (band.notes) notes.push(band.notes)
   }
 
-  if (!best) return null
+  if (!matched) return null
 
-  const escortCount = clampCount(best.count)
-  const heightPoleLevel: HeightPoleLevel = best.heightPole || 'none'
-  const positions =
-    best.positions && best.positions.length > 0
-      ? best.positions
-      : defaultPositions(escortCount)
-  const escortTypes =
-    best.types && best.types.length > 0
-      ? best.types
-      : escortCount > 0
-        ? (['civilian'] as EscortVehicleType[])
-        : []
+  // Tall + height-pole-required bands elevate to hard required.
+  if (heightPoleLevel === 'required' && requirementLevel === 'may_require') {
+    requirementLevel = 'required'
+  }
 
-  let requirementLevel: EscortRequirementLevel = best.requirement
   if (
     roadClassHint === 'local' &&
-    best.roadClasses &&
-    best.roadClasses.length > 0 &&
-    !best.roadClasses.includes('local')
+    requirementLevel === 'required' &&
+    escortCount < 2
   ) {
     requirementLevel = 'may_require'
   }
+
+  const positions =
+    positionsSet.size > 0
+      ? (Array.from(positionsSet) as EscortPosition[])
+      : defaultPositions(escortCount)
+  const escortTypes =
+    typesSet.size > 0
+      ? (Array.from(typesSet) as EscortVehicleType[])
+      : escortCount > 0
+        ? (['civilian'] as EscortVehicleType[])
+        : []
 
   const detailBase = {
     stateCode,
@@ -464,7 +480,7 @@ function analyzeFromStructuredBands(
     highwayContext,
     warning: buildWarning(detailBase),
     triggers: [...new Set(triggers)],
-    notes: best.notes || structured.defaultNote,
+    notes: notes[0] || structured.defaultNote,
   }
 }
 

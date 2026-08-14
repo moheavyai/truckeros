@@ -11,6 +11,7 @@ import {
   effectiveEnvelopeLengthThreshold,
   needsLengthPermit,
 } from '@/lib/permit-length'
+import { formatDimensionDisplay } from '@/lib/parse-dimension'
 import {
   analyzeEscortRequirements,
   type StateEscortDetail,
@@ -593,12 +594,20 @@ async function analyzeCorridor(
 
         // Build a specific, useful reason
         const exceeded: string[] = []
-        if (load.width  > permitWidth)  exceeded.push(`width ${load.width} > ${permitWidth}`)
-        if (load.height > permitHeight) exceeded.push(`height ${load.height} > ${permitHeight}`)
-        if (needsLength) {
-          exceeded.push(`envelope length ${load.length} > ${permitLengthThreshold}`)
+        if (load.width  > permitWidth) {
+          exceeded.push(`width ${formatDimensionDisplay(load.width)} > ${formatDimensionDisplay(permitWidth)}`)
         }
-        if (load.weight > permitWeight) exceeded.push(`weight ${load.weight} > ${permitWeight}`)
+        if (load.height > permitHeight) {
+          exceeded.push(`height ${formatDimensionDisplay(load.height)} > ${formatDimensionDisplay(permitHeight)}`)
+        }
+        if (needsLength) {
+          exceeded.push(
+            `envelope length ${formatDimensionDisplay(load.length)} > ${formatDimensionDisplay(permitLengthThreshold)}`
+          )
+        }
+        if (load.weight > permitWeight) {
+          exceeded.push(`weight ${load.weight.toLocaleString()} lbs > ${permitWeight.toLocaleString()} lbs`)
+        }
 
         reasons.push(`${state}: Permit required — exceeds ${exceeded.join(', ')}`)
       }
@@ -653,16 +662,27 @@ async function analyzeCorridor(
     // For any height/weight/width/bridge/tunnel restriction on a highway in this corridor,
     // if the load actually exceeds the posted value, we force a permit requirement
     // and generate a much more precise reason than the generic state threshold.
+    const corridorStateSet = new Set(routeCorridor.map((s) => s.toUpperCase()))
     for (const r of dotRestrictionsRaw) {
-      if (exceedsCorridorRestriction(load, r)) {
-        permitRequiredStates.add(r.state)
+      // Defense in depth: never flag a state outside this route corridor.
+      if (!corridorStateSet.has(r.state.toUpperCase())) continue
+      if (!exceedsCorridorRestriction(load, r)) continue
 
-        const restrictionDesc = `${r.highway}${r.mileMarker ? ' ' + r.mileMarker : ''} (${r.value}${r.unit || ''})`
+      permitRequiredStates.add(r.state)
 
-        reasons.push(
-          `${r.state}: Permit required — load exceeds specific DOT-posted restriction on ${restrictionDesc}. ${r.description.slice(0, 120)}${r.description.length > 120 ? '...' : ''}`
-        )
-      }
+      const valueLabel =
+        r.unit === 'ft' && typeof r.value === 'number'
+          ? formatDimensionDisplay(r.value)
+          : r.unit === 'lbs' && typeof r.value === 'number'
+            ? `${r.value.toLocaleString()} lbs`
+            : `${r.value ?? ''}${r.unit || ''}`
+      const restrictionDesc = `${r.highway}${r.mileMarker ? ` ${r.mileMarker}` : ''} (${valueLabel})`
+      const shortDesc =
+        r.description.length > 90 ? `${r.description.slice(0, 90).trim()}…` : r.description
+
+      reasons.push(
+        `${r.state}: Exceeds posted limit on ${restrictionDesc}. ${shortDesc}`
+      )
     }
 
     if (dotRestrictionsRaw.length > 0) {
