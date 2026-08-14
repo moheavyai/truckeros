@@ -1419,18 +1419,12 @@ export function getRestrictionsForCorridor(
   highways: string[] = []
 ): CorridorRestriction[] {
   const stateSet = new Set(states.map(s => s.toUpperCase()))
-  const hwySet = new Set(highways.map(h => h.toUpperCase()))
-
+  // State membership (or explicit impactsCorridor) is required.
+  // Never expand to every state that shares a highway name (I-40, I-70, …).
+  void highways // kept for API compatibility; state gate is the primary filter
   return PRIORITY_RESTRICTIONS.filter(r => {
     if (stateSet.has(r.state.toUpperCase())) return true
     if (r.impactsCorridor?.some(imp => stateSet.has(imp.toUpperCase()))) return true
-
-    const rHwy = r.highway.toUpperCase()
-    for (const h of hwySet) {
-      if (h.includes(rHwy) || rHwy.includes(h.replace('I-', '').replace('US ', ''))) {
-        return true
-      }
-    }
     return false
   })
 }
