@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import AppHeader from '@/components/AppHeader'
-import SuccessToast from '@/components/SuccessToast'
 import ActiveCarrierBanner from '@/components/ActiveCarrierBanner'
 import { useOrganizationContext } from '@/lib/organization-context'
 import {
@@ -99,7 +98,6 @@ export default function EquipmentPage() {
   const [activeTab, setActiveTab] = useState<Tab>('rigs')
   const [rigBuilderOpen, setRigBuilderOpen] = useState(false)
   const [hasChosenTab, setHasChosenTab] = useState(false)
-  const [successToast, setSuccessToast] = useState<string | null>(null)
 
   // Data
   const [tractors, setTractors] = useState<Tractor[]>([])
@@ -968,7 +966,7 @@ export default function EquipmentPage() {
       alert('Failed to save rig: ' + error.message)
       return
     }
-    setSuccessToast(editingExisting ? `Updated rig "${name}"` : `Saved "${name}" - ready for analysis`)
+    alert(editingExisting ? `Updated rig "${name}"` : `Saved rig "${name}"`)
     await loadAll()
     setActiveTab('rigs'); setRigBuilderOpen(false)
     clearBuilder()
@@ -1044,7 +1042,7 @@ export default function EquipmentPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="w-14 h-14 bg-black rounded-xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-white text-3xl font-bold tracking-tighter">M</span>
+            <span className="text-white text-3xl font-bold tracking-tighter">T</span>
           </div>
           <p className="text-gray-700">Loading equipment manager…</p>
         </div>
@@ -1054,7 +1052,6 @@ export default function EquipmentPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <SuccessToast message={successToast} onDismiss={() => setSuccessToast(null)} />
       <AppHeader user={user} activePage="equipment" ownOrganizationId={ownOrganizationId} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 min-w-0">

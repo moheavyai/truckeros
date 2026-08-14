@@ -334,7 +334,7 @@ export default function Dashboard() {
         <div className="text-center">
           {/* TruckerOS brand mark */}
           <div className="w-14 h-14 bg-black rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-            <span className="text-white text-3xl font-bold tracking-tighter">T</span>
+            <span className="text-white text-3xl font-bold tracking-tighter">M</span>
           </div>
           <p className="text-gray-700 font-semibold text-lg">Checking authentication...</p>
           <p className={`${mutedTextClass} text-sm mt-1`}>Please wait while we verify your session</p>
