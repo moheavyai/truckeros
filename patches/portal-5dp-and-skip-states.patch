@@ -1,0 +1,116 @@
+diff --git a/lib/build-corridor.test.ts b/lib/build-corridor.test.ts
+index 1699579..8f6b158 100644
+--- a/lib/build-corridor.test.ts
++++ b/lib/build-corridor.test.ts
+@@ -7,6 +7,7 @@ import {
+   extractAvoidHighwaysFromNotEnforcedMarker,
+   extractBorderCrossingsFromSteps,
+   fillCorridorGapsFromGeometry,
++  skipNonTraversedStates,
+   formatRoutePreferenceAsSpecialInstructions,
+   hasParseableRoutePreference,
+   hasPlausibleTransitions,
+@@ -867,6 +868,36 @@ describe('fillCorridorGapsFromGeometry / long-haul insert', () => {
+   })
+ })
+ 
++
++describe('skipNonTraversedStates', () => {
++  it('drops middle states absent from geometry while keeping bookends', () => {
++    // Corridor has spurious OK from highway heuristic; geometry only walks MO→IA→NE
++    const steps = [
++      {
++        ref: 'I 29',
++        maneuver: { location: [-94.5, 39.1] },
++        geometry: {
++          coordinates: [
++            [-94.5, 39.1], // MO
++            [-95.0, 40.5], // IA
++            [-96.0, 41.2], // NE
++          ],
++        },
++      },
++    ]
++    const cleaned = skipNonTraversedStates(['MO', 'OK', 'IA', 'NE'], steps)
++    expect(cleaned[0]).toBe('MO')
++    expect(cleaned[cleaned.length - 1]).toBe('NE')
++    expect(cleaned).not.toContain('OK')
++    expect(cleaned).toContain('IA')
++  })
++
++  it('no-ops when corridor is already short or geometry empty', () => {
++    expect(skipNonTraversedStates(['FL', 'GA'], [])).toEqual(['FL', 'GA'])
++    expect(skipNonTraversedStates(['FL'], [{ ref: 'I 75' }])).toEqual(['FL'])
++  })
++})
++
+ describe('same-state corridor resilience', () => {
+   it('buildCorridorFromSteps with identical origin/dest still yields the single state', () => {
+     const steps = [
+diff --git a/lib/build-corridor.ts b/lib/build-corridor.ts
+index 0da3d60..c7c9ad7 100644
+--- a/lib/build-corridor.ts
++++ b/lib/build-corridor.ts
+@@ -693,6 +693,32 @@ export function fillCorridorGapsFromGeometry(corridor: string[], steps: any[]):
+   }
+   return corridor
+ }
++/**
++ * Drop middle corridor states that never appear in dense geometry.
++ * Keeps origin/dest bookends. Heuristic inserts (I-35→OK, etc.) that the
++ * route never actually traversed get removed so portal state count stays honest.
++ */
++export function skipNonTraversedStates(corridor: string[], steps: any[]): string[] {
++  if (!corridor || corridor.length < 3 || !steps || steps.length === 0) return corridor
++  const geo = orderedStatesFromGeometry(steps)
++  if (geo.length === 0) return corridor
++  const geoSet = new Set(geo)
++
++  const origin = corridor[0]
++  const dest = corridor[corridor.length - 1]
++  const mid = corridor.slice(1, -1).filter((s) => geoSet.has(s))
++  const next = [origin, ...mid, dest].filter((s, i, arr) => i === 0 || s !== arr[i - 1])
++
++  if (next.length >= corridor.length) return corridor
++  if (next.length < 2) return corridor
++
++  // Accept when cleaned is plausible, or sparse was already broken
++  if (hasPlausibleTransitions(next) || !hasPlausibleTransitions(corridor)) {
++    return next
++  }
++  return corridor
++}
++
+ 
+ function normalizeHighwayFromRef(raw: string): string | null {
+   let h = raw
+@@ -977,6 +1003,15 @@ export function buildCorridorFromSteps(
+     }
+   }
+ 
++  // Skip: drop heuristic-only middle states the geometry never traversed.
++  {
++    const cleaned = skipNonTraversedStates(corridor, steps || [])
++    if (cleaned.length < corridor.length) {
++      corridor.length = 0
++      corridor.push(...cleaned)
++    }
++  }
++
+   if (originState && destState) {
+     let o = originState.toUpperCase()
+     let d = destState.toUpperCase()
+diff --git a/lib/portal-assistant.ts b/lib/portal-assistant.ts
+index f135fd4..61ef1f0 100644
+--- a/lib/portal-assistant.ts
++++ b/lib/portal-assistant.ts
+@@ -1703,7 +1703,8 @@ export interface StateBorderFields {
+  */
+ export function formatBorderPoint(point?: PortalBorderPoint | null): string {
+   if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lon)) return ''
+-  const coords = `${point.lat},${point.lon}`
++  // Fixed precision for clean portal paste (avoids long float noise)
++  const coords = `${Number(point.lat).toFixed(5)},${Number(point.lon).toFixed(5)}`
+   return point.highway ? `${coords} (${point.highway})` : coords
+ }
+ 
