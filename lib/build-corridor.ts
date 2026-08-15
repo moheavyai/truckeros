@@ -470,12 +470,55 @@ function isHighwayCompassSuffix(part: string, code: string): boolean {
 }
 
 /** Approximate lat/lon bounds for geometry fallback when refs lack state codes. */
+/** Approximate axis-aligned state boxes for geometry border snap (not legal survey). */
 const STATE_LAT_LON_BOUNDS: Record<string, [number, number, number, number]> = {
-  OK: [33.6, 37.0, -103.0, -94.4], KS: [37.0, 40.0, -102.1, -94.6],
-  NE: [40.0, 43.0, -104.1, -95.3], SD: [42.5, 45.95, -104.1, -96.4],
-  CO: [37.0, 41.0, -109.1, -102.0],
-  WY: [41.0, 45.0, -111.1, -104.06], MT: [44.4, 49.0, -116.1, -104.0],
-  MO: [36.0, 40.6, -95.8, -89.1], IA: [40.4, 43.5, -96.15, -90.1],
+  AL: [30.2, 35.01, -88.52, -84.89],
+  AR: [33.0, 36.5, -94.62, -89.64],
+  AZ: [31.3, 37.0, -114.82, -109.04],
+  CA: [32.5, 42.01, -124.48, -114.13],
+  CO: [36.99, 41.0, -109.06, -102.04],
+  CT: [40.98, 42.05, -73.73, -71.79],
+  DE: [38.45, 39.84, -75.79, -75.05],
+  FL: [24.4, 31.0, -87.63, -80.03],
+  GA: [30.36, 35.0, -85.61, -80.84],
+  IA: [40.38, 43.5, -96.64, -90.14],
+  ID: [41.99, 49.0, -117.24, -111.04],
+  IL: [36.97, 42.51, -91.51, -87.02],
+  IN: [37.77, 41.76, -88.1, -84.78],
+  KS: [36.99, 40.0, -102.05, -94.59],
+  KY: [36.5, 39.15, -89.57, -81.96],
+  LA: [28.93, 33.02, -94.04, -88.82],
+  MA: [41.24, 42.89, -73.51, -69.93],
+  MD: [37.91, 39.72, -79.49, -75.05],
+  ME: [43.06, 47.46, -71.08, -66.95],
+  MI: [41.7, 48.3, -90.42, -82.41],
+  MN: [43.5, 49.38, -97.24, -89.49],
+  MO: [35.99, 40.61, -95.77, -89.1],
+  MS: [30.17, 35.0, -91.66, -88.1],
+  MT: [44.36, 49.0, -116.05, -104.04],
+  NC: [33.84, 36.59, -84.32, -75.46],
+  ND: [45.94, 49.0, -104.05, -96.55],
+  NE: [39.99, 43.0, -104.05, -95.31],
+  NH: [42.7, 45.31, -72.56, -70.7],
+  NJ: [38.93, 41.36, -75.56, -73.89],
+  NM: [31.33, 37.0, -109.05, -103.0],
+  NV: [35.0, 42.0, -120.01, -114.04],
+  NY: [40.5, 45.01, -79.76, -71.86],
+  OH: [38.4, 41.98, -84.82, -80.52],
+  OK: [33.62, 37.0, -103.0, -94.43],
+  OR: [41.99, 46.29, -124.57, -116.46],
+  PA: [39.72, 42.27, -80.52, -74.69],
+  SC: [32.03, 35.22, -83.35, -78.54],
+  SD: [42.48, 45.95, -104.06, -96.45],
+  TN: [34.98, 36.68, -90.31, -81.65],
+  TX: [25.84, 36.5, -106.65, -93.51],
+  UT: [36.99, 42.0, -114.05, -109.04],
+  VA: [36.54, 39.47, -83.68, -75.24],
+  VT: [42.73, 45.02, -73.44, -71.47],
+  WA: [45.54, 49.0, -124.79, -116.92],
+  WI: [42.49, 47.08, -92.89, -86.81],
+  WV: [37.2, 40.64, -82.64, -77.72],
+  WY: [40.99, 45.01, -111.06, -104.05],
 }
 
 function stateFromCoordinates(lat: number, lon: number): string | null {
@@ -498,7 +541,7 @@ function stateFromCoordinates(lat: number, lon: number): string | null {
   return best
 }
 
-function stepCoordinateSamples(step: any): Array<[number, number]> {
+function stepCoordinateSamples(step: any, dense = false): Array<[number, number]> {
   const points: Array<[number, number]> = []
   const man = step?.maneuver?.location
   if (Array.isArray(man) && man.length >= 2) {
@@ -507,15 +550,75 @@ function stepCoordinateSamples(step: any): Array<[number, number]> {
   }
   const coords = step?.geometry?.coordinates
   if (Array.isArray(coords) && coords.length > 0) {
-    for (const idx of [0, Math.floor(coords.length / 2), coords.length - 1]) {
-      const c = coords[idx]
-      if (Array.isArray(c) && c.length >= 2) {
-        const lon = Number(c[0]), lat = Number(c[1])
-        if (Number.isFinite(lat) && Number.isFinite(lon)) points.push([lat, lon])
+    if (dense) {
+      // Cap density for long steps — enough to catch state edges without O(n^2) cost
+      const n = coords.length
+      const stride = n > 40 ? Math.ceil(n / 40) : 1
+      for (let i = 0; i < n; i += stride) {
+        const c = coords[i]
+        if (Array.isArray(c) && c.length >= 2) {
+          const lon = Number(c[0]), lat = Number(c[1])
+          if (Number.isFinite(lat) && Number.isFinite(lon)) points.push([lat, lon])
+        }
+      }
+      const last = coords[n - 1]
+      if (Array.isArray(last) && last.length >= 2) {
+        const lon = Number(last[0]), lat = Number(last[1])
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+          const prev = points[points.length - 1]
+          if (!prev || prev[0] !== lat || prev[1] !== lon) points.push([lat, lon])
+        }
+      }
+    } else {
+      for (const idx of [0, Math.floor(coords.length / 2), coords.length - 1]) {
+        const c = coords[idx]
+        if (Array.isArray(c) && c.length >= 2) {
+          const lon = Number(c[0]), lat = Number(c[1])
+          if (Number.isFinite(lat) && Number.isFinite(lon)) points.push([lat, lon])
+        }
       }
     }
   }
   return points
+}
+
+/**
+ * Walk a trail of coordinates and find where axis-aligned state bounds flip
+ * from fromState → toState. Returns midpoint of the edge pair, or null.
+ */
+function findBoundCrossing(
+  fromState: string,
+  toState: string,
+  trail: Array<[number, number]>,
+  highway?: string
+): BorderPoint | null {
+  if (!trail || trail.length < 2) return null
+  const from = fromState.toUpperCase()
+  const to = toState.toUpperCase()
+  for (let i = 1; i < trail.length; i++) {
+    const [lat0, lon0] = trail[i - 1]
+    const [lat1, lon1] = trail[i]
+    const s0 = stateFromCoordinates(lat0, lon0)
+    const s1 = stateFromCoordinates(lat1, lon1)
+    if (s0 === from && s1 === to) {
+      return {
+        lat: (lat0 + lat1) / 2,
+        lon: (lon0 + lon1) / 2,
+        highway,
+      }
+    }
+  }
+  // First point on trail that is already in toState after a non-to point
+  for (let i = 1; i < trail.length; i++) {
+    const [lat0, lon0] = trail[i - 1]
+    const [lat1, lon1] = trail[i]
+    const s0 = stateFromCoordinates(lat0, lon0)
+    const s1 = stateFromCoordinates(lat1, lon1)
+    if (s1 === to && s0 && s0 !== to) {
+      return { lat: (lat0 + lat1) / 2, lon: (lon0 + lon1) / 2, highway }
+    }
+  }
+  return null
 }
 
 function stateFromStepGeometry(step: any): string | null {
@@ -582,6 +685,14 @@ function getPrimaryStateForStep(step: any): string | null {
   }
   return candidates.length > 0 ? candidates[candidates.length - 1] : null
 }
+
+/**
+ * Extract structured state-border crossings from the same OSRM steps used for routeCorridor.
+ * One BorderCrossing per actual state change. Entry = first geometry of the entering step;
+ * exit is refined to the last geometry of the segment still attributed to the new state
+ * (or the next transition if the state is only a single step).
+ * Single-state or empty steps -> []. Keeps portal forms aligned with the chosen geometry.
+ */
 /**
  * Snap a state-border point for portal prefill.
  *
@@ -593,8 +704,16 @@ function getPrimaryStateForStep(step: any): string | null {
 function snapBorderPoint(
   lastInPrev: BorderPoint | null,
   firstInCurr: BorderPoint | null,
-  highway?: string
+  highway?: string,
+  fromState?: string,
+  toState?: string,
+  trail?: Array<[number, number]>
 ): BorderPoint | null {
+  // Prefer real bound crossing when we have a geometry trail + state boxes
+  if (fromState && toState && trail && trail.length >= 2) {
+    const bound = findBoundCrossing(fromState, toState, trail, highway)
+    if (bound) return bound
+  }
   if (lastInPrev && firstInCurr) {
     return {
       lat: (lastInPrev.lat + firstInCurr.lat) / 2,
@@ -610,20 +729,14 @@ function snapBorderPoint(
   }
   return null
 }
-/**
- * Extract structured state-border crossings from the same OSRM steps used for routeCorridor.
- * One BorderCrossing per actual state change.
- * Entry snaps to the state edge (last prev-state geometry + first new-state midpoint when both exist)
- * instead of the first mid-state sample after a late label flip.
- * Exit is the last geometry still attributed to the state being left.
- * Single-state or empty steps -> []. Keeps portal forms aligned with the chosen geometry.
- */
+
 export function extractBorderCrossingsFromSteps(steps: any[]): BorderCrossing[] {
   if (!steps || steps.length === 0) return []
 
   const crossings: BorderCrossing[] = []
   let prevState: string | null = null
-  /** Last geometry still attributed to prevState — used to snap borders near the edge. */
+  /** Rolling trail of recent geometry (for bound-crossing search). */
+  let trail: Array<[number, number]> = []
   let lastInPrevState: BorderPoint | null = null
   let open: {
     fromState: string
@@ -632,12 +745,19 @@ export function extractBorderCrossingsFromSteps(steps: any[]): BorderCrossing[] 
     lastPoint: BorderPoint
   } | null = null
 
+  const pushTrail = (pts: Array<[number, number]>) => {
+    for (const p of pts) trail.push(p)
+    // Keep a window large enough to span a late state-label flip
+    if (trail.length > 80) trail = trail.slice(-80)
+  }
+
   for (const step of steps) {
     const curr = getPrimaryStateForStep(step)
     if (!curr) continue
 
     const highway = getPrimaryHighwayForStep(step) || undefined
-    const samples = stepCoordinateSamples(step)
+    const dense = stepCoordinateSamples(step, true)
+    const samples = dense.length > 0 ? dense : stepCoordinateSamples(step, false)
     const first = samples[0]
     const last = samples[samples.length - 1] || first
     const firstPt: BorderPoint | null = first
@@ -648,17 +768,28 @@ export function extractBorderCrossingsFromSteps(steps: any[]): BorderCrossing[] 
       : firstPt
 
     if (prevState !== null && curr !== prevState) {
+      // Trail includes prior state geometry; append this step before searching
+      const searchTrail = trail.concat(samples)
       if (open) {
+        // Exit of the segment we are leaving: prefer bound crossing into curr
+        const exitBound = findBoundCrossing(open.toState, curr, searchTrail, highway)
         crossings.push({
           fromState: open.fromState,
           toState: open.toState,
           entry: open.entry,
-          exit: lastInPrevState || open.lastPoint,
+          exit: exitBound || lastInPrevState || open.lastPoint,
         })
         open = null
       }
 
-      const entry = snapBorderPoint(lastInPrevState, firstPt, highway)
+      const entry = snapBorderPoint(
+        lastInPrevState,
+        firstPt,
+        highway,
+        prevState,
+        curr,
+        searchTrail
+      )
       if (entry) {
         open = {
           fromState: prevState,
@@ -667,8 +798,10 @@ export function extractBorderCrossingsFromSteps(steps: any[]): BorderCrossing[] 
           lastPoint: lastPt || entry,
         }
       }
+      trail = samples.slice()
       lastInPrevState = lastPt
     } else {
+      pushTrail(samples)
       if (open && lastPt) {
         open.lastPoint = {
           lat: lastPt.lat,
@@ -676,9 +809,7 @@ export function extractBorderCrossingsFromSteps(steps: any[]): BorderCrossing[] 
           highway: highway || open.lastPoint.highway,
         }
       }
-      if (lastPt) {
-        lastInPrevState = lastPt
-      }
+      if (lastPt) lastInPrevState = lastPt
     }
 
     prevState = curr
@@ -696,10 +827,6 @@ export function extractBorderCrossingsFromSteps(steps: any[]): BorderCrossing[] 
   return crossings
 }
 
-/**
- * Walk every OSRM step and build ordered state corridor from geometry attribution.
- * Ports or-tools build_corridor_from_steps for accurate traversal (captures TN on I-24, MO on I-44, etc.).
- */
 export function buildCorridorFromSteps(
   steps: any[],
   originState?: string,
