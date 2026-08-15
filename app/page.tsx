@@ -2,13 +2,13 @@ export default function MoHeavyLanding() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <header className="border-b">
+      <header className="border-b border-gray-200">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-black rounded flex items-center justify-center">
               <span className="text-white text-lg font-bold tracking-tighter">M</span>
             </div>
-            <span className="text-2xl font-semibold tracking-tight">MoHeavy AI</span>
+            <span className="text-2xl font-semibold tracking-tight text-gray-900">MoHeavy AI</span>
           </div>
           <a
             href="/login"
@@ -52,21 +52,21 @@ export default function MoHeavyLanding() {
         <div className="max-w-5xl mx-auto px-6">
           <div className="grid md:grid-cols-3 gap-8 text-center">
             <div>
-              <h3 className="font-semibold mb-2">Real Route Intelligence</h3>
+              <h3 className="font-semibold mb-2 text-gray-900">Real Route Intelligence</h3>
               <p className="text-gray-600 text-sm">
                 We analyze your actual route using live data — not blanket rules.
               </p>
             </div>
             <div>
               <div className="text-2xl mb-3">📋</div>
-              <h3 className="font-semibold mb-2">State-Specific Rules</h3>
+              <h3 className="font-semibold mb-2 text-gray-900">State-Specific Rules</h3>
               <p className="text-gray-600 text-sm">
                 Accurate permit thresholds per state, not one-size-fits-all.
               </p>
             </div>
             <div>
               <div className="text-2xl mb-3">✅</div>
-              <h3 className="font-semibold mb-2">Human Approval Gate</h3>
+              <h3 className="font-semibold mb-2 text-gray-900">Human Approval Gate</h3>
               <p className="text-gray-600 text-sm">
                 Review and approve every permit before anything is submitted.
               </p>
@@ -76,7 +76,7 @@ export default function MoHeavyLanding() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t py-8">
+      <footer className="border-t border-gray-200 py-8">
         <div className="max-w-5xl mx-auto px-6 text-center text-sm text-gray-500">
           MoHeavy AI — Operating System for Truckers
         </div>
