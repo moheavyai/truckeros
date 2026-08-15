@@ -3033,7 +3033,11 @@ export default function PermitTestPage() {
           <div>
   <h2 className="text-lg font-semibold text-gray-900">
     {selectedDriverKey
-      ? `1. Driver — ${formatDriverSummaryLine(pickPermitCarrierDriverFields(formData))}`
+      ? (() => {
+          const fields = pickPermitCarrierDriverFields(formData)
+          const id = (fields.driverId || '').trim()
+          return id ? `1. Driver #${id}` : `1. Driver — ${formatDriverSummaryLine(fields)}`
+        })()
       : '1. Driver'}
   </h2>
   <p className={`${fieldHintClass} mt-0.5`}>
