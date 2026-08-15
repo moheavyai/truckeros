@@ -6,8 +6,6 @@ import { useRouter } from 'next/navigation'
 import AppHeader from '@/components/AppHeader'
 import BrandedLoader from '@/components/BrandedLoader'
 
-import { getRestrictionsForCorridor } from '@/lib/dot-corridor-restrictions'
-import { formatHighwayForDisplay } from '@/lib/format-highway-display'
 import { formatLoadDisplay } from '@/lib/parse-dimension'
 
 interface PermitRequest {
@@ -55,7 +53,6 @@ export default function HistoryPage() {
   const [requests, setRequests] = useState<PermitRequest[]>([])
   const [submissions, setSubmissions] = useState<PortalSubmission[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedRequest, setSelectedRequest] = useState<PermitRequest | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const router = useRouter()
@@ -150,9 +147,6 @@ export default function HistoryPage() {
 
       setRequests((prev) => prev.filter((r) => r.id !== id))
       setSubmissions((prev) => prev.filter((s) => s.permit_request_id !== id))
-      if (selectedRequest?.id === id) {
-        setSelectedRequest(null)
-      }
     } catch (err: any) {
       setDeleteError(err?.message || 'Failed to delete analysis.')
     } finally {
@@ -188,9 +182,6 @@ export default function HistoryPage() {
       const idSet = new Set(ids)
       setRequests((prev) => prev.filter((r) => !idSet.has(r.id)))
       setSubmissions((prev) => prev.filter((s) => !idSet.has(s.permit_request_id)))
-      if (selectedRequest && idSet.has(selectedRequest.id)) {
-        setSelectedRequest(null)
-      }
     } catch (err: any) {
       setDeleteError(err?.message || 'Failed to delete analyses.')
     } finally {
@@ -246,15 +237,6 @@ export default function HistoryPage() {
     }
     return cls
   }
-
-  const selectedLoad = selectedRequest
-    ? formatLoadDisplay({
-        weightLbs: selectedRequest.weight,
-        lengthFt: selectedRequest.length,
-        widthFt: selectedRequest.width,
-        heightFt: selectedRequest.height,
-      })
-    : null
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -354,15 +336,14 @@ export default function HistoryPage() {
                         </span>
                       </div>
 
-                      {/* Stacked actions — full width, always visible */}
+                      {/* Stacked actions — Portal Assist primary; no intermediate View step */}
                       <div className="flex flex-col gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedRequest(req)}
-                          className="w-full min-h-[44px] text-sm font-semibold border border-gray-300 hover:bg-gray-50 rounded-xl text-gray-800 transition touch-manipulation"
+                        <a
+                          href={`/portal-assist?requestId=${req.id}`}
+                          className="w-full min-h-[44px] inline-flex items-center justify-center text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 rounded-xl transition touch-manipulation"
                         >
-                          View
-                        </button>
+                          Portal Assist
+                        </a>
                         <button
                           type="button"
                           onClick={() => handleDeleteOne(req.id)}
@@ -371,6 +352,12 @@ export default function HistoryPage() {
                         >
                           {deleting ? 'Deleting...' : 'Delete'}
                         </button>
+                        <a
+                          href="/permit-test"
+                          className="w-full min-h-[44px] inline-flex items-center justify-center text-sm font-medium border border-gray-300 text-gray-800 hover:bg-gray-50 rounded-xl transition touch-manipulation"
+                        >
+                          Re-run Analysis
+                        </a>
                       </div>
                     </article>
                   )
@@ -436,14 +423,13 @@ export default function HistoryPage() {
                             {req.estimated_cost ? `$${req.estimated_cost}` : '—'}
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <div className="inline-flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedRequest(req)}
-                                className="text-sm px-3 py-1.5 border border-gray-300 hover:bg-gray-100 rounded-lg text-gray-700 transition"
+                            <div className="inline-flex flex-wrap items-center justify-end gap-2">
+                              <a
+                                href={`/portal-assist?requestId=${req.id}`}
+                                className="text-sm px-3 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg font-medium transition"
                               >
-                                View
-                              </button>
+                                Portal Assist
+                              </a>
                               <button
                                 type="button"
                                 onClick={() => handleDeleteOne(req.id)}
@@ -452,6 +438,12 @@ export default function HistoryPage() {
                               >
                                 {deleting ? 'Deleting...' : 'Delete'}
                               </button>
+                              <a
+                                href="/permit-test"
+                                className="text-sm px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                              >
+                                Re-run
+                              </a>
                             </div>
                           </td>
                         </tr>
@@ -469,236 +461,6 @@ export default function HistoryPage() {
         </p>
       </main>
 
-      {/* Details Modal */}
-      {selectedRequest && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto shadow-xl">
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-              <h3 className="font-semibold text-lg">Analysis Details</h3>
-              <button
-                onClick={() => setSelectedRequest(null)}
-                className="text-gray-500 hover:text-gray-900 text-2xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6 text-sm">
-              {/* Route Summary */}
-              <div>
-                <div className="text-gray-500 text-xs mb-1">ROUTE</div>
-                <div className="font-semibold text-lg">
-                  {selectedRequest.origin_city}, {selectedRequest.origin_state} → {selectedRequest.destination_city}, {selectedRequest.destination_state}
-                </div>
-                <div className="text-gray-500 mt-1">
-                  {formatDate(selectedRequest.created_at)}
-                </div>
-              </div>
-
-              {/* Load Details */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-gray-500 text-xs mb-1">LOAD DIMENSIONS</div>
-                  {selectedLoad && (
-                    <dl className="space-y-1 font-mono tabular-nums">
-                      <div className="flex gap-3">
-                        <dt className="text-gray-500 w-14 shrink-0">Weight</dt>
-                        <dd className="font-medium text-gray-900">{selectedLoad.weight}</dd>
-                      </div>
-                      <div className="flex gap-3">
-                        <dt className="text-gray-500 w-14 shrink-0">Length</dt>
-                        <dd className="font-medium text-gray-900">{selectedLoad.length}</dd>
-                      </div>
-                      <div className="flex gap-3">
-                        <dt className="text-gray-500 w-14 shrink-0">Width</dt>
-                        <dd className="font-medium text-gray-900">{selectedLoad.width}</dd>
-                      </div>
-                      <div className="flex gap-3">
-                        <dt className="text-gray-500 w-14 shrink-0">Height</dt>
-                        <dd className="font-medium text-gray-900">{selectedLoad.height}</dd>
-                      </div>
-                    </dl>
-                  )}
-                </div>
-                <div>
-                  <div className="text-gray-500 text-xs mb-1">ESTIMATED</div>
-                  <div className="font-medium">
-                    {selectedRequest.distance_miles ? `${selectedRequest.distance_miles} miles` : '—'}<br />
-                    {selectedRequest.duration_hours ? `~${selectedRequest.duration_hours} hrs` : ''}
-                  </div>
-                </div>
-              </div>
-
-              {/* Corridor */}
-              <div>
-                <div className="text-gray-500 text-xs mb-1">ROUTE CORRIDOR</div>
-                <div className="flex flex-wrap gap-1">
-                  {(selectedRequest.route_corridor || []).map((state, i) => {
-                    const sub = submissions.find(s => s.permit_request_id === selectedRequest.id && s.state_code === state)
-                    let cls = 'bg-gray-100 text-gray-700'
-                    if (sub) {
-                      const sl = (sub.status || '').toLowerCase()
-                      if (sl.includes('pdf') || sl.includes('received') || sl.includes('complete')) cls = 'bg-emerald-500 text-white'
-                      else if (sl.includes('applied') || sl.includes('apply') || sl.includes('pending') || sl.includes('submit') || sl.includes('prefilled') || sl.includes('submitted')) cls = 'bg-yellow-500 text-white'
-                      else cls = 'bg-gray-400 text-white'
-                    } else if ((selectedRequest.permit_required_states || []).includes(state)) {
-                      cls = 'bg-red-500 text-white'
-                    }
-                    return <span key={i} className={`px-2 py-0.5 rounded text-xs font-mono ${cls}`}>{state}</span>
-                  })}
-                </div>
-              </div>
-
-              {/* Enhanced Highway-level visualization (matches live results style) */}
-              {selectedRequest.highways && selectedRequest.highways.length > 0 && (
-                <div className="p-4 border-2 border-blue-100 rounded-xl bg-blue-50">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="font-semibold text-blue-900 text-sm">Key Highways / Interstates</div>
-                    <span className="text-[10px] px-2 py-0.5 bg-blue-200 text-blue-800 rounded-full font-medium">From routing engine</span>
-                  </div>
-
-                  {(() => {
-                    // Compute relevant DOT restrictions for this saved request
-                    const relevantRestrictions = getRestrictionsForCorridor(
-                      selectedRequest.route_corridor || [],
-                      selectedRequest.highways || []
-                    )
-
-                    return (
-                      <div className="flex flex-wrap gap-1.5">
-                        {selectedRequest.highways.map((hwy: string, i: number) => {
-                          // Check if this highway is mentioned in any relevant restriction
-                          const displayHwy = formatHighwayForDisplay(hwy)
-                          const hasRestriction = relevantRestrictions.some(r =>
-                            r.highway.toLowerCase().includes(displayHwy.toLowerCase().replace(/\s/g, '')) ||
-                            r.description.toLowerCase().includes(displayHwy.toLowerCase())
-                          )
-
-                          return (
-                            <span
-                              key={i}
-                              className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border transition-all ${
-                                hasRestriction
-                                  ? 'bg-amber-100 text-amber-900 border-amber-300'
-                                  : 'bg-white text-blue-800 border-blue-200'
-                              }`}
-                              title={hasRestriction ? "This highway has known restrictions in the loaded DOT data" : ""}
-                            >
-                              {displayHwy}
-                              {hasRestriction && <span className="ml-1 text-amber-600">⚠</span>}
-                            </span>
-                          )
-                        })}
-                      </div>
-                    )
-                  })()}
-
-                  <p className="text-[10px] text-blue-700 mt-2">
-                    Amber = highway matches known restrictions from State DOT open data.
-                  </p>
-                </div>
-              )}
-
-              {/* Permit Status */}
-              <div>
-                <div className="text-gray-500 text-xs mb-1">PERMIT STATUS</div>
-                <div className={`inline-block px-3 py-1 rounded-lg text-sm font-medium ${getPermitStatus(selectedRequest).color}`}>
-                  {getPermitStatus(selectedRequest).text}
-                </div>
-              </div>
-
-              {/* Reasons */}
-              {selectedRequest.reasons && selectedRequest.reasons.length > 0 && (
-                <div>
-                  <div className="text-gray-500 text-xs mb-2">WHY PERMITS WERE REQUIRED</div>
-                  <ul className="list-disc pl-5 space-y-1 text-gray-700">
-                    {selectedRequest.reasons.map((r, i) => (
-                      <li key={i}>{r}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Notes & Restrictions */}
-              {selectedRequest.notes && selectedRequest.notes.length > 0 && (
-                <div>
-                  <div className="text-gray-500 text-xs mb-2">ADDITIONAL NOTES</div>
-                  <ul className="list-disc pl-5 space-y-1 text-gray-700">
-                    {selectedRequest.notes.map((n, i) => (
-                      <li key={i}>{n}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Portal Submissions (new unified view) */}
-              {(() => {
-                const related = submissions.filter(s => s.permit_request_id === selectedRequest.id)
-                if (related.length === 0) return null
-
-                return (
-                  <div>
-                    <div className="text-gray-500 text-xs mb-2">PORTAL SUBMISSIONS</div>
-                    <div className="space-y-2">
-                      {related.map((sub, i) => (
-                        <div key={i} className="p-3 bg-gray-50 border rounded text-xs">
-                          <div className="flex justify-between">
-                            <span className="font-semibold">{sub.state_code}</span>
-                            <span className={`px-2 rounded ${sub.human_approved ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                              {sub.status}
-                            </span>
-                          </div>
-                          {sub.permit_number && <div>Permit #: <strong>{sub.permit_number}</strong></div>}
-                          {sub.portal_fees != null && <div>Fees: ${sub.portal_fees}</div>}
-                          <div className="text-[10px] text-gray-500 mt-1">{new Date(sub.created_at).toLocaleString()}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })()}
-
-              {/* Cost */}
-              {selectedRequest.estimated_cost != null && (
-                <div className="pt-4 border-t flex justify-between items-center">
-                  <span className="font-medium">Estimated Total Cost</span>
-                  <span className="text-2xl font-bold">${selectedRequest.estimated_cost}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="border-t px-6 py-4 flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => handleDeleteOne(selectedRequest.id)}
-                disabled={deleting}
-                className="w-full sm:w-auto px-5 py-2 text-sm border border-red-200 text-red-700 rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {deleting ? 'Deleting...' : 'Delete'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedRequest(null)}
-                className="w-full sm:w-auto px-5 py-2 text-sm border rounded-lg hover:bg-gray-50"
-              >
-                Close
-              </button>
-              <a
-                href={`/portal-assist?requestId=${selectedRequest.id}`}
-                className="w-full sm:w-auto px-5 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-center"
-              >
-                Launch Portal Assist
-              </a>
-              <a
-                href="/permit-test"
-                className="w-full sm:w-auto px-5 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 text-center"
-              >
-                Run New Analysis
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
