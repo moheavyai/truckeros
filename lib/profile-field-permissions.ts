@@ -16,6 +16,7 @@ export const DRIVER_RESTRICTED_FIELD_KEYS = [
 
 /** Contact fields drivers may edit on their own profile. */
 export const DRIVER_EDITABLE_FIELD_KEYS = [
+  'driver_id',
   'driver_phone',
   'driver_email',
   'emergency_contact',
