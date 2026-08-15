@@ -210,6 +210,7 @@ const BOOTSTRAP_CARRIER_FIELDS: FieldConfig[] = CARRIER_FIELDS.filter(
 
 const DRIVER_IDENTITY_FIELDS: FieldConfig[] = [
   { key: 'driver_full_name', label: 'Full Name', placeholder: 'Jane Doe' },
+  { key: 'driver_id', label: 'Driver ID', placeholder: 'e.g. 42 or A-104' },
   { key: 'cdl_number', label: 'CDL#', placeholder: 'D1234567' },
 ]
 

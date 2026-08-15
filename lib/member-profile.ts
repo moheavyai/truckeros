@@ -41,6 +41,7 @@ export const CARRIER_SUMMARY_LABELS: { key: CarrierFieldKey; label: string }[] =
 const TEXT_FIELDS = [
   ...CARRIER_FIELD_KEYS,
   'driver_full_name',
+  'driver_id',
   'cdl_number',
   'driver_phone',
   'driver_email',
@@ -869,6 +870,7 @@ export function emptyMemberProfileForm(): MemberProfileFormData {
     carrier_email: '',
     insurance_contact: '',
     driver_full_name: '',
+    driver_id: '',
     cdl_number: '',
     cdl_state: '',
     date_of_birth: '',
