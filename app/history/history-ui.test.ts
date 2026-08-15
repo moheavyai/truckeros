@@ -10,10 +10,8 @@ function readHistorySource() {
 
 function desktopTableSlice(source: string) {
   const start = source.indexOf('{/* ——— Desktop table (md+) ——— */}')
-  const end = source.indexOf('{/* Details Modal */}')
   expect(start).toBeGreaterThan(-1)
-  expect(end).toBeGreaterThan(start)
-  return source.slice(start, end)
+  return source.slice(start)
 }
 
 function mobileCardsSlice(source: string) {
@@ -22,13 +20,6 @@ function mobileCardsSlice(source: string) {
   expect(start).toBeGreaterThan(-1)
   expect(end).toBeGreaterThan(start)
   return source.slice(start, end)
-}
-
-function modalFooterSlice(source: string) {
-  const marker = '{/* Details Modal */}'
-  const start = source.indexOf(marker)
-  expect(start).toBeGreaterThan(-1)
-  return source.slice(start)
 }
 
 /** Extract a single const handler body so scoping asserts cannot span other handlers/fetch. */
@@ -56,40 +47,47 @@ describe('History page UI cleanup', () => {
     )
   })
 
-  it('renders mobile cards without overflow-x and with stacked View/Delete', () => {
+  it('renders mobile cards without overflow-x and with stacked Portal Assist / Delete / Re-run', () => {
     const mobile = mobileCardsSlice(readHistorySource())
 
     expect(mobile).toContain('md:hidden')
     expect(mobile).not.toContain('overflow-x-auto')
-    expect(mobile).toContain('View')
+    expect(mobile).toContain('Portal Assist')
     expect(mobile).toContain('Delete')
+    expect(mobile).toContain('Re-run Analysis')
     expect(mobile).toContain('handleDeleteOne')
     expect(mobile).toContain('min-h-[44px]')
     expect(mobile).toContain('flex flex-col gap-2')
     expect(mobile).toContain('w-full')
-    expect(mobile).not.toContain('Portal Assist')
+    // Primary action is direct Portal Assist — no intermediate View modal step
+    expect(mobile).not.toMatch(/>\s*View\s*</)
+    expect(mobile).not.toContain('setSelectedRequest')
+    expect(mobile).toMatch(/href=\{`\/portal-assist\?requestId=\$\{req\.id\}`\}/)
+    expect(mobile).toContain('href="/permit-test"')
+    expect(mobile).toContain('bg-emerald-600')
   })
 
-  it('keeps desktop table with View and Delete in row actions (no row-level Portal Assist)', () => {
-    const rowActions = desktopTableSlice(readHistorySource())
+  it('keeps desktop table dual-render with Portal Assist primary actions', () => {
+    const desktop = desktopTableSlice(readHistorySource())
 
-    expect(rowActions).toContain('hidden md:block')
-    expect(rowActions).toContain('View')
-    expect(rowActions).toContain('Delete')
-    expect(rowActions).toContain('handleDeleteOne')
-    expect(rowActions).not.toContain('Portal Assist')
-    expect(rowActions).not.toContain('/portal-assist?requestId=')
+    expect(desktop).toContain('hidden md:block')
+    expect(desktop).toContain('<table')
+    expect(desktop).toContain('Portal Assist')
+    expect(desktop).toContain('Delete')
+    expect(desktop).toContain('Re-run')
+    expect(desktop).toMatch(/href=\{`\/portal-assist\?requestId=\$\{req\.id\}`\}/)
+    expect(desktop).toContain('href="/permit-test"')
+    expect(desktop).not.toMatch(/>\s*View\s*</)
   })
 
-  it('places Launch Portal Assist in the details modal footer with requestId', () => {
-    const modal = modalFooterSlice(readHistorySource())
+  it('does not use an intermediate details modal for primary actions', () => {
+    const source = readHistorySource()
 
-    expect(modal).toContain('Launch Portal Assist')
-    expect(modal).toMatch(/href=\{`\/portal-assist\?requestId=\$\{selectedRequest\.id\}`\}/)
-    expect(modal).toContain('Run New Analysis')
-    expect(modal).toContain('bg-emerald-600')
-    expect(modal).toContain('border border-gray-300')
-    expect(modal).toMatch(/flex-col sm:flex-row/)
+    expect(source).not.toContain('Details Modal')
+    expect(source).not.toContain('selectedRequest')
+    expect(source).not.toContain('setSelectedRequest')
+    // Portal Assist lives on the card/row itself
+    expect(source).toMatch(/href=\{`\/portal-assist\?requestId=\$\{req\.id\}`\}/)
   })
 })
 
@@ -133,12 +131,5 @@ describe('History page delete actions', () => {
     expect(source).toContain('setDeleteError')
     expect(source).toContain('deleteError')
     expect(source).toContain('role="alert"')
-  })
-
-  it('exposes delete in the details modal footer', () => {
-    const modal = modalFooterSlice(readHistorySource())
-
-    expect(modal).toContain('handleDeleteOne(selectedRequest.id)')
-    expect(modal).toContain('Delete')
   })
 })
