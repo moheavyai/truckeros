@@ -146,7 +146,7 @@ function stateRequiresPermit(primary: PermitPrimary | null | undefined, state: s
 
 /** Form controls — stronger borders/text on mobile; softer from sm+ */
 const fieldControlClass =
-  'border border-gray-500 sm:border-gray-300 text-gray-900 placeholder:text-gray-500 bg-white'
+  'border border-gray-500 sm:border-gray-300 text-gray-900 placeholder:text-gray-400 bg-white'
 const inputClass = `${fieldControlClass} rounded w-full p-2`
 const inputCompactClass = `${fieldControlClass} rounded w-full text-sm p-1.5`
 const selectClass = `${fieldControlClass} p-2 rounded-lg text-sm w-full`
@@ -2870,9 +2870,7 @@ export default function PermitTestPage() {
       <div className="mb-6">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">New Route Analysis</h1>
-          <p className="text-sm text-gray-700 sm:text-gray-600 mt-1">
-            Choose driver and rig, enter load details, optional route preferences, then pickup and drops — routing runs when addresses geocode and load dimensions are set.
-          </p>
+          
         </div>
 
         {/* OR-Tools Service Connection Status — dev-only debug chrome (hidden in production) */}
