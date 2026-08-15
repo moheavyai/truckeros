@@ -138,6 +138,7 @@ const MO_FIELDS = [
   { key: 'contact_name', label: 'Carrier contact name', mapsFrom: 'contact_name' },
   { key: 'carrier_email', label: 'Carrier email', mapsFrom: 'carrier_email' },
   { key: 'driver_name', label: 'Driver name', mapsFrom: 'driver_name' },
+  { key: 'driver_id', label: 'Driver ID', mapsFrom: 'driver_id' },
   // Trip tab guidance
   { key: 'origin', label: 'Origin', mapsFrom: 'origin' },
   { key: 'destination', label: 'Destination', mapsFrom: 'destination' },
@@ -199,6 +200,7 @@ const MO_PACKET_ORDER = [
   'contact_name',
   'carrier_email',
   'driver_name',
+  'driver_id',
   'origin',
   'destination',
   'route',
