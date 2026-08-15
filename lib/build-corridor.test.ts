@@ -7,6 +7,7 @@ import {
   extractAvoidHighwaysFromNotEnforcedMarker,
   extractBorderCrossingsFromSteps,
   fillCorridorGapsFromGeometry,
+  skipNonTraversedStates,
   formatRoutePreferenceAsSpecialInstructions,
   hasParseableRoutePreference,
   hasPlausibleTransitions,
@@ -864,6 +865,36 @@ describe('fillCorridorGapsFromGeometry / long-haul insert', () => {
     // Geometry should contribute AL and/or GA/TN between bookends
     const mid = corridor.slice(1, -1)
     expect(mid.length).toBeGreaterThan(0)
+  })
+})
+
+
+describe('skipNonTraversedStates', () => {
+  it('drops middle states absent from geometry while keeping bookends', () => {
+    // Corridor has spurious OK from highway heuristic; geometry only walks MO→IA→NE
+    const steps = [
+      {
+        ref: 'I 29',
+        maneuver: { location: [-94.5, 39.1] },
+        geometry: {
+          coordinates: [
+            [-94.5, 39.1], // MO
+            [-95.0, 40.5], // IA
+            [-96.0, 41.2], // NE
+          ],
+        },
+      },
+    ]
+    const cleaned = skipNonTraversedStates(['MO', 'OK', 'IA', 'NE'], steps)
+    expect(cleaned[0]).toBe('MO')
+    expect(cleaned[cleaned.length - 1]).toBe('NE')
+    expect(cleaned).not.toContain('OK')
+    expect(cleaned).toContain('IA')
+  })
+
+  it('no-ops when corridor is already short or geometry empty', () => {
+    expect(skipNonTraversedStates(['FL', 'GA'], [])).toEqual(['FL', 'GA'])
+    expect(skipNonTraversedStates(['FL'], [{ ref: 'I 75' }])).toEqual(['FL'])
   })
 })
 
