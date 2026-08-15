@@ -4324,12 +4324,17 @@ export default function PermitTestPage() {
                     )}
                     {primary.unableToScale && (
                       <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 font-medium">
-                        Unable to scale the proposed load on the current axle-group configuration.
+                        Hard scale limit exceeded — beyond typical OSOW permit group ceilings. Add axles or reduce weight.
+                      </div>
+                    )}
+                    {!primary.unableToScale && primary.scaleFindings?.some((f: { severity?: string }) => f.severity === 'warning') && (
+                      <div className="mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900 font-medium">
+                        Exceeds non-permit legal limits — overweight permit path (typically allowable on this axle setup; confirm spacing / bridge formula per state).
                       </div>
                     )}
                     {primary.corridorScaleFailedStates?.length > 0 && (
-                      <div className="mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
-                        Corridor weight/scale failure in: <b>{primary.corridorScaleFailedStates.join(', ')}</b>
+                      <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-900">
+                        Corridor hard scale limit exceeded in: <b>{primary.corridorScaleFailedStates.join(', ')}</b>
                       </div>
                     )}
                     {primary.scaleFindings?.length > 0 && (
