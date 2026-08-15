@@ -3031,11 +3031,15 @@ export default function PermitTestPage() {
         {/* Permit driver & carrier — picker in carrier mode and service mode (carrier from header) */}
         <section className="space-y-4">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">1. Driver for this load</h2>
-            <p className={`${fieldHintClass} mt-0.5`}>
-              Select the driver — their profile fills permit fields.
-            </p>
-          </div>
+  <h2 className="text-lg font-semibold text-gray-900">
+    {selectedDriverKey
+      ? `1. Driver — ${formatDriverSummaryLine(pickPermitCarrierDriverFields(formData))}`
+      : '1. Driver'}
+  </h2>
+  <p className={`${fieldHintClass} mt-0.5`}>
+    Select the driver — their profile fills permit fields.
+  </p>
+</div>
 
           {workspaceMode === 'service' && !effectiveOrganizationId && (
             <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
