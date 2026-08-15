@@ -42,6 +42,15 @@ export const DEFAULT_QUAD_LBS = 50_000
 /** Rough federal gross for 5-axle combination when no state rule present. */
 export const DEFAULT_GROSS_LEGAL_LBS = 80_000
 /**
+ * Typical OSOW *permit* group ceilings (lbs) — not legal non-permit limits.
+ * Distinguishes "needs overweight permit" from "cannot scale even under permit."
+ */
+export const DEFAULT_PERMIT_STEER_LBS = 18_000
+export const DEFAULT_PERMIT_SINGLE_LBS = 25_000
+export const DEFAULT_PERMIT_TANDEM_LBS = 46_000
+export const DEFAULT_PERMIT_TRIDEM_LBS = 60_000
+export const DEFAULT_PERMIT_QUAD_LBS = 72_000
+/**
  * Federal tandem adjacent-spacing ceiling (inches). Adjacent axles ≤ this form a
  * tandem / close multi-axle group; any gap > this is a spread (weight-win singles).
  * Mirrors lib/axleGroupCalculator TANDEM_MAX_IN.
@@ -153,6 +162,22 @@ export function defaultGroupWeightLimitLbs(
   if (n === 3) return DEFAULT_TRIDEM_LBS
   if (n === 4) return DEFAULT_QUAD_LBS
   return Math.min(n * 16_000, 80_000)
+}
+
+/** Typical OSOW permit group ceiling — above legal, below structural hard-fail. */
+export function defaultGroupPermitLimitLbs(
+  type: AxleGroupType,
+  axleCount: number
+): number {
+  const n = Math.max(1, Math.floor(axleCount) || 1)
+  if (type === 'steer') {
+    return DEFAULT_PERMIT_STEER_LBS * n
+  }
+  if (n === 1) return DEFAULT_PERMIT_SINGLE_LBS
+  if (n === 2) return DEFAULT_PERMIT_TANDEM_LBS
+  if (n === 3) return DEFAULT_PERMIT_TRIDEM_LBS
+  if (n === 4) return DEFAULT_PERMIT_QUAD_LBS
+  return Math.min(n * 20_000, 100_000)
 }
 
 function roleToGroupType(role: TrailerRole): AxleGroupType {
@@ -780,14 +805,38 @@ export function checkScaleAbility(input: ScaleCheckInput): ScaleCheckResult {
 
   const totalGroupLimitLbs = groupChecks.reduce((s, c) => s + c.limitLbs, 0)
 
+  const totalPermitLimitLbs = groups.reduce(
+    (s, g) => s + defaultGroupPermitLimitLbs(g.type, g.axleCount),
+    0
+  )
+
   for (const check of groupChecks) {
-    if (check.complete && check.weightLbs > 0 && !check.ok) {
+    if (!(check.complete && check.weightLbs > 0 && !check.ok)) continue
+
+    const permitLimit = defaultGroupPermitLimitLbs(
+      check.group.type,
+      check.group.axleCount
+    )
+    const overLegal = Math.round(check.overByLbs)
+    const label = `${check.group.label} group (${check.group.axleCount} axle${
+      check.group.axleCount === 1 ? '' : 's'
+    }) at ${Math.round(check.weightLbs).toLocaleString()} lbs`
+
+    if (check.weightLbs > permitLimit) {
       findings.push({
         severity: 'failure',
         code: 'group_over',
         groupType: check.group.type,
         stateCode: input.stateCode,
-        message: `${check.group.label} group (${check.group.axleCount} axle${check.group.axleCount === 1 ? '' : 's'}) at ${Math.round(check.weightLbs).toLocaleString()} lbs exceeds simple legal limit of ${check.limitLbs.toLocaleString()} lbs by ${Math.round(check.overByLbs).toLocaleString()} lbs — unable to scale this load on the current configuration.`,
+        message: `${label} exceeds typical OSOW permit group ceiling of ${permitLimit.toLocaleString()} lbs by ${Math.round(check.weightLbs - permitLimit).toLocaleString()} lbs — add axles (jeep / flip / stinger) or reduce group load.`,
+      })
+    } else {
+      findings.push({
+        severity: 'warning',
+        code: 'group_over',
+        groupType: check.group.type,
+        stateCode: input.stateCode,
+        message: `${label} exceeds non-permit legal limit of ${check.limitLbs.toLocaleString()} lbs by ${overLegal.toLocaleString()} lbs — overweight permit path (typical permit ceiling ≈ ${permitLimit.toLocaleString()} lbs). Confirm axle spacing / bridge formula with the issuing state.`,
       })
     }
   }
@@ -799,26 +848,34 @@ export function checkScaleAbility(input: ScaleCheckInput): ScaleCheckResult {
 
   if (legalGross != null && totalWeightLbs > legalGross) {
     findings.push({
-      severity: 'failure',
+      severity: 'warning',
       code: 'gross_over',
       stateCode: input.stateCode,
-      message: `Gross weight ${Math.round(totalWeightLbs).toLocaleString()} lbs exceeds legal/permit gross ${legalGross.toLocaleString()} lbs${input.stateCode ? ` (${input.stateCode})` : ''}.`,
+      message: `Gross weight ${Math.round(totalWeightLbs).toLocaleString()} lbs exceeds non-permit legal/threshold ${legalGross.toLocaleString()} lbs${input.stateCode ? ` (${input.stateCode})` : ''} — overweight permit required; verify group distribution and bridge formula.`,
     })
   }
 
-  if (
-    totalWeightLbs > 0 &&
-    totalGroupLimitLbs > 0 &&
-    totalWeightLbs > totalGroupLimitLbs
-  ) {
+  if (totalWeightLbs > 0 && totalPermitLimitLbs > 0 && totalWeightLbs > totalPermitLimitLbs) {
     if (!findings.some((f) => f.code === 'unable_to_scale')) {
       findings.push({
         severity: 'failure',
         code: 'unable_to_scale',
         stateCode: input.stateCode,
-        message: `Rig cannot scale ${Math.round(totalWeightLbs).toLocaleString()} lbs — combined axle-group capacity ≈ ${totalGroupLimitLbs.toLocaleString()} lbs under simple legal defaults. Add axles (jeep / flip / stinger) or reduce load weight.`,
+        message: `Rig cannot scale ${Math.round(totalWeightLbs).toLocaleString()} lbs — combined typical OSOW permit group capacity ≈ ${totalPermitLimitLbs.toLocaleString()} lbs. Add axles (jeep / flip / stinger) or reduce load weight.`,
       })
     }
+  } else if (
+    totalWeightLbs > 0 &&
+    totalGroupLimitLbs > 0 &&
+    totalWeightLbs > totalGroupLimitLbs &&
+    !findings.some((f) => f.code === 'unable_to_scale' || f.code === 'gross_over')
+  ) {
+    findings.push({
+      severity: 'warning',
+      code: 'corridor_weight',
+      stateCode: input.stateCode,
+      message: `Gross ${Math.round(totalWeightLbs).toLocaleString()} lbs exceeds combined non-permit group capacity ≈ ${totalGroupLimitLbs.toLocaleString()} lbs — overweight permit path on this axle configuration (permit capacity ≈ ${totalPermitLimitLbs.toLocaleString()} lbs).`,
+    })
   }
 
   if (totalAxles >= MAX_TOTAL_AXLES) {
@@ -900,19 +957,25 @@ export function checkCorridorScale(input: CorridorScaleInput): CorridorScaleResu
     })
 
     const grossFail = stateCheck.findings.find((f) => f.code === 'gross_over')
-    const unable = stateCheck.findings.find((f) => f.code === 'unable_to_scale')
-    const groupFail = stateCheck.findings.find((f) => f.code === 'group_over')
+    const unable = stateCheck.findings.find(
+      (f) => f.code === 'unable_to_scale' && f.severity === 'failure'
+    )
+    const groupHardFail = stateCheck.findings.find(
+      (f) => f.code === 'group_over' && f.severity === 'failure'
+    )
+    const groupSoft = stateCheck.findings.find(
+      (f) => f.code === 'group_over' && f.severity === 'warning'
+    )
 
-    if (unable || groupFail) {
+    if (unable || groupHardFail) {
       if (!failedStates.includes(state)) failedStates.push(state)
-      // Do not re-list the same config failure once per state — collect for a single corridor note.
       if (!configFailStates.includes(state)) configFailStates.push(state)
-    } else if (grossFail) {
+    } else if (grossFail || groupSoft) {
       findings.push({
         severity: 'warning',
         code: 'corridor_weight',
         stateCode: state,
-        message: `${state}: exceeds legal/permit gross under v1 group capacity / state gross limits (${grossFail.message}) — overweight permit path; verify axle-group distribution.`,
+        message: `${state}: exceeds non-permit legal weight limits — overweight permit path; verify axle-group distribution and bridge formula (not a hard scale fail under typical OSOW ceilings).`,
       })
     }
   }
@@ -921,10 +984,9 @@ export function checkCorridorScale(input: CorridorScaleInput): CorridorScaleResu
     findings.push({
       severity: 'failure',
       code: 'corridor_weight',
-      // No single stateCode — applies to the set; base findings hold the config detail.
       message: baseConfigFail
-        ? `Corridor states affected by v1 group capacity / state gross limits: ${configFailStates.join(', ')}. See scale findings above (not full state axle-law charts).`
-        : `Corridor states under v1 group capacity / state gross limits: ${configFailStates.join(', ')}.`,
+        ? `Corridor states with hard scale limits exceeded: ${configFailStates.join(', ')}. See scale findings above (typical OSOW permit ceilings — not full state axle-law charts).`
+        : `Corridor states with hard scale limits exceeded: ${configFailStates.join(', ')}.`,
     })
   }
 
@@ -1062,12 +1124,12 @@ export function formatScaleFindingsForAgent(findings: ScaleFinding[]): {
     if (f.severity === 'failure') {
       // Prefer state-prefixed form for UI card matching (`r.startsWith(`${state}:`)`)
       if (f.stateCode) {
-        reasons.push(`${f.stateCode}: SCALE FAIL: ${f.message.replace(new RegExp(`^${f.stateCode}:\\s*`), '')}`)
+        reasons.push(`${f.stateCode}: SCALE HARD LIMIT: ${f.message.replace(new RegExp(`^${f.stateCode}:\\s*`), '')}`)
       } else {
-        reasons.push(`SCALE FAIL: ${f.message}`)
+        reasons.push(`SCALE HARD LIMIT: ${f.message}`)
       }
     } else {
-      notes.push(`${statePrefix}SCALE: ${f.message.replace(new RegExp(`^${f.stateCode}:\\s*`), '')}`)
+      notes.push(`${statePrefix}OVERWEIGHT PERMIT: ${f.message.replace(new RegExp(`^${f.stateCode}:\\s*`), '')}`)
     }
   }
   return { reasons, notes }
@@ -1128,15 +1190,25 @@ export function attachScaleFieldsToOption<T extends Record<string, unknown>>(
     if (!existingNotes.includes(line)) existingNotes.push(line)
   }
   if (unableToScale) {
-    const line = 'Unable to scale the proposed load on the current axle-group configuration.'
+    const line =
+      'Hard scale limit exceeded on the current axle-group configuration — add axles or reduce weight (beyond typical OSOW permit group ceilings).'
+    if (!existingNotes.includes(line)) existingNotes.push(line)
+  } else if (
+    corridorScale.findings.some(
+      (f) =>
+        f.severity === 'warning' &&
+        (f.code === 'group_over' || f.code === 'gross_over' || f.code === 'corridor_weight')
+    )
+  ) {
+    const line =
+      'Exceeds non-permit legal axle/gross limits — overweight permit path on this configuration (typically allowable; confirm spacing / bridge formula per state).'
     if (!existingNotes.includes(line)) existingNotes.push(line)
   }
   if (corridorScale.failedStates.length > 0) {
-    const line = `Corridor scale/weight failure in: ${corridorScale.failedStates.join(', ')}.`
+    const line = `Corridor hard scale limit exceeded in: ${corridorScale.failedStates.join(', ')}.`
     if (!existingNotes.includes(line)) existingNotes.push(line)
-    // One compact state-prefixed reason per failed state for permit-test cards (`startsWith(`${state}:`)`).
     for (const st of corridorScale.failedStates) {
-      const cardLine = `${st}: SCALE FAIL: v1 group capacity / state gross limits (see Scale & Axle Groups)`
+      const cardLine = `${st}: SCALE HARD LIMIT: exceeds typical OSOW permit group ceilings (see Scale & Axle Groups)`
       if (!existingReasons.includes(cardLine)) existingReasons.push(cardLine)
     }
   }

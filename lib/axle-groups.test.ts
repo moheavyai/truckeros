@@ -524,14 +524,27 @@ describe('checkScaleAbility', () => {
     expect(result.ableToScale).toBe(true)
   })
 
-  it('fails when a group is overloaded', () => {
+  it('soft-warns when a group exceeds legal but stays under typical OSOW permit ceiling', () => {
     const result = checkScaleAbility({
       groups,
       axleWeights: [20_000, 20_000, 20_000, 20_000, 20_000],
       totalWeightLbs: 100_000,
     })
+    // 40k tandem is over 34k legal, under 46k typical permit → warning, not hard fail
+    expect(result.ableToScale).toBe(true)
+    expect(result.findings.some((f) => f.code === 'group_over' && f.severity === 'warning')).toBe(true)
+    expect(result.findings.some((f) => f.severity === 'failure')).toBe(false)
+  })
+
+  it('hard-fails when a group exceeds typical OSOW permit ceiling', () => {
+    const result = checkScaleAbility({
+      groups,
+      axleWeights: [12_000, 30_000, 30_000, 30_000, 30_000],
+      totalWeightLbs: 132_000,
+    })
+    // 60k tandem > 46k permit ceiling
     expect(result.ableToScale).toBe(false)
-    expect(result.findings.some((f) => f.code === 'group_over')).toBe(true)
+    expect(result.findings.some((f) => f.code === 'group_over' && f.severity === 'failure')).toBe(true)
   })
 
   it('warns on partial axle weights without inventing group_over on zeros', () => {
@@ -543,6 +556,16 @@ describe('checkScaleAbility', () => {
     expect(result.findings.some((f) => f.code === 'incomplete_weights')).toBe(true)
     // Incomplete drive/trailer groups must not spuriously fail as group_over
     expect(result.findings.filter((f) => f.code === 'group_over')).toHaveLength(0)
+  })
+
+
+  it('92k on 5-axle is overweight-permit path not hard fail', () => {
+    const result = checkScaleAbility({
+      groups,
+      totalWeightLbs: 92_000,
+    })
+    expect(result.ableToScale).toBe(true)
+    expect(result.findings.some((f) => f.code === 'unable_to_scale' && f.severity === 'failure')).toBe(false)
   })
 
   it('detects unable_to_scale when gross exceeds combined group capacity', () => {
