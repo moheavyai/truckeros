@@ -137,16 +137,17 @@ describe('permit-test mobile contrast classes', () => {
 
   it('keeps sticky header outside overflow-clipped content shell', () => {
     const source = read(permitPagePath)
+    // Shared AppHeader owns sticky chrome; page must not nest sticky under overflow-x-clip
+    expect(source).toMatch(/import AppHeader from ['"]@\/components\/AppHeader['"]/)
+    expect(source).toMatch(/<AppHeader\s+user=\{user\}\s+ownOrganizationId=\{ownOrganizationId\}\s*\/>/)
     // Outer shell is min-w-0 without overflow-x-clip on the sticky ancestor
     expect(source).toMatch(/className="w-full min-w-0"/)
-    expect(source).toMatch(/sticky top-0 z-50/)
     // Content shell has responsive padding; clip lives on html/body, not sticky parent
     expect(source).toMatch(/max-w-3xl mx-auto px-4 py-6 sm:px-8 sm:pb-8 w-full min-w-0/)
-    const stickyBlock = source.slice(
-      source.indexOf('sticky top-0 z-50'),
-      source.indexOf('sticky top-0 z-50') + 80
-    )
-    expect(stickyBlock).not.toContain('overflow-x-clip')
+    // Sticky lives in AppHeader (not duplicated on this page)
+    const headerSrc = read(path.join(process.cwd(), 'components', 'AppHeader.tsx'))
+    expect(headerSrc).toMatch(/sticky top-0 z-50/)
+    expect(headerSrc).not.toMatch(/overflow-x-clip/)
   })
 })
 

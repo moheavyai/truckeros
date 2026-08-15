@@ -37,7 +37,7 @@ import DimensionInput from '@/components/DimensionInput'
 import OverhangFeetInput from '@/components/OverhangFeetInput'
 import LocationStopInput from '@/components/LocationStopInput'
 import ActiveCarrierBanner from '@/components/ActiveCarrierBanner'
-import CarrierContextBar from '@/components/CarrierContextBar'
+import AppHeader from '@/components/AppHeader'
 import {
   RouteMapCard,
   ROUTE_MAP_CARD_EMBED_CLASS,
@@ -2804,12 +2804,6 @@ export default function PermitTestPage() {
     setTimeout(checkMigrationStatus, 1500)
   }
 
-  const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
-
   // === Authentication Protection ===
   // While we are still checking the Supabase session, show a clean loading state.
   // This prevents any flash of the protected form and ensures unauthenticated
@@ -2832,39 +2826,9 @@ export default function PermitTestPage() {
   return (
     /* Sticky header must not live under overflow-x-clip (breaks position:sticky). */
     <div className="w-full min-w-0">
-      {/* Professional Header — outside clipped content shell */}
-      <header className="border-b bg-white sticky top-0 z-50">
-        <div className="max-w-3xl mx-auto px-4 sm:px-8 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <a href="/" className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-              <div className="w-8 h-8 bg-black rounded flex items-center justify-center shrink-0">
-                <span className="text-white text-lg font-bold tracking-tighter">M</span>
-              </div>
-              <span className="text-lg sm:text-xl font-semibold tracking-tight truncate">MoHeavy AI</span>
-            </a>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm flex-wrap justify-end max-w-full">
-            <a href="/dashboard" className="inline-flex items-center min-h-[40px] px-1.5 font-medium text-gray-700 hover:text-black touch-manipulation">Dashboard</a>
-            <a href="/equipment" className="inline-flex items-center min-h-[40px] px-1.5 font-medium text-gray-700 hover:text-black touch-manipulation">Equipment</a>
-            <a href="/history" className="inline-flex items-center min-h-[40px] px-1.5 font-medium text-gray-700 hover:text-black touch-manipulation">History</a>
-            {workspaceMode === 'service' && (
-              <a href="/carriers" className="inline-flex items-center min-h-[40px] px-1.5 font-medium text-gray-700 hover:text-black touch-manipulation">Carriers</a>
-            )}
-            <div className="w-px h-4 bg-gray-300 mx-0.5 sm:mx-1" />
-            {user && <span className="text-gray-600 hidden md:inline text-sm">{user.email}</span>}
-            <button 
-              onClick={handleLogout} 
-              className="inline-flex items-center justify-center min-h-[40px] px-3 sm:px-4 py-2 text-xs sm:text-sm border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors shrink-0 touch-manipulation"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppHeader user={user} ownOrganizationId={ownOrganizationId} />
 
       <div className="max-w-3xl mx-auto px-4 py-6 sm:px-8 sm:pb-8 w-full min-w-0">
-      <CarrierContextBar ownOrganizationId={ownOrganizationId} />
       <ActiveCarrierBanner ownOrganizationId={ownOrganizationId} />
 
       <div className="mb-6">

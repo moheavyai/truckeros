@@ -161,15 +161,19 @@ export default function AppHeader({
       <DevAccountSwitcher currentEmail={user?.email} />
       <header className="border-b bg-white sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">
             <a
               href={incompleteOnboarding ? ONBOARDING_PATH : '/'}
-              className="flex items-center gap-2 sm:gap-2.5 min-w-0 max-w-full"
+              className="flex items-center gap-2 sm:gap-2.5 min-w-0"
             >
               <div className="w-8 h-8 bg-black rounded flex items-center justify-center shrink-0">
                 <span className="text-white text-lg font-bold tracking-tighter">M</span>
               </div>
-              <span className="text-lg sm:text-xl font-semibold tracking-tight truncate min-w-0">MoHeavy AI</span>
+              {/* Mobile: shorter wordmark so nav never crushes the brand; full name from sm+ */}
+              <span className="text-base sm:text-xl font-semibold tracking-tight text-gray-900 whitespace-nowrap">
+                <span className="sm:hidden">MoHeavy</span>
+                <span className="hidden sm:inline">MoHeavy AI</span>
+              </span>
             </a>
           </div>
 
