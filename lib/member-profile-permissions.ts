@@ -54,10 +54,13 @@ export function memberDisplayName(
 export function formatMemberListSummary(
   row: Pick<
     MemberProfile,
-    'cdl_number' | 'cdl_state' | 'driver_phone' | 'driver_email'
+    'driver_id' | 'cdl_number' | 'cdl_state' | 'driver_phone' | 'driver_email'
   >
 ): string {
   const parts: string[] = []
+
+  const driverId = row.driver_id?.trim()
+  if (driverId) parts.push(`ID ${driverId}`)
 
   const cdl = row.cdl_number?.trim()
   const state = row.cdl_state?.trim()
