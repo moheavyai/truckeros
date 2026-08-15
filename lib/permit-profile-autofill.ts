@@ -19,6 +19,7 @@ export type PermitCarrierDriverFormFields = {
   carrierEmail: string
   insuranceContact: string
   driverFullName: string
+  driverId: string
   cdlNumber: string
   cdlState: string
   driverPhone: string
@@ -38,6 +39,7 @@ export const EMPTY_PERMIT_CARRIER_DRIVER_FIELDS: PermitCarrierDriverFormFields =
   carrierEmail: '',
   insuranceContact: '',
   driverFullName: '',
+  driverId: '',
   cdlNumber: '',
   cdlState: '',
   driverPhone: '',
@@ -114,6 +116,7 @@ export const PERMIT_CARRIER_FIELD_KEYS = [
 
 export const PERMIT_DRIVER_FIELD_KEYS = [
   'driverFullName',
+  'driverId',
   'cdlNumber',
   'cdlState',
   'driverPhone',
@@ -151,6 +154,7 @@ function mapDriverFieldsFromProfile(
 ): Pick<PermitCarrierDriverFormFields, (typeof PERMIT_DRIVER_FIELD_KEYS)[number]> {
   return {
     driverFullName: trimField(profile.driver_full_name),
+    driverId: trimField(profile.driver_id),
     cdlNumber: trimField(profile.cdl_number),
     cdlState: trimField(profile.cdl_state),
     driverPhone: trimField(profile.driver_phone),
@@ -312,22 +316,27 @@ export function resolveDriverProfileForSelection(
   return null
 }
 
-/** One-line driver summary for permit-test carrier mode: name, phone, CDL. */
+/** One-line driver summary for permit-test carrier mode: name, Driver ID, phone, CDL. */
 export function formatDriverSummaryLine(
-  fields: Pick<PermitCarrierDriverFormFields, 'driverFullName' | 'driverPhone' | 'cdlNumber' | 'cdlState'>
+  fields: Pick<
+    PermitCarrierDriverFormFields,
+    'driverFullName' | 'driverId' | 'driverPhone' | 'cdlNumber' | 'cdlState'
+  >
 ): string {
   const name = trimField(fields.driverFullName)
+  const driverId = trimField(fields.driverId)
   const phone = trimField(fields.driverPhone)
   const cdlNumber = trimField(fields.cdlNumber)
   const cdlState = trimField(fields.cdlState)
 
-  if (!name && !phone && !cdlNumber && !cdlState) return '—'
+  if (!name && !driverId && !phone && !cdlNumber && !cdlState) return '—'
 
+  const idPart = driverId ? `#${driverId}` : null
   const cdl =
     cdlNumber || cdlState
       ? `CDL ${cdlNumber || '—'}${cdlState ? ` (${cdlState})` : ''}`
-      : '—'
-  return `${name || '—'} — ${phone || '—'} — ${cdl}`
+      : null
+  return [name || null, idPart, phone || null, cdl].filter(Boolean).join(' — ') || '—'
 }
 
 /** Extract dotNumber/mcNumber for permit agent and optimize-route API payloads. */
