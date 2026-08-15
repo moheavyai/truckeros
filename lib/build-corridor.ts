@@ -622,11 +622,76 @@ function findBoundCrossing(
 }
 
 function stateFromStepGeometry(step: any): string | null {
-  for (const [lat, lon] of stepCoordinateSamples(step)) {
+  // Prefer dense samples so long multi-state steps still yield a state near the step.
+  const samples = stepCoordinateSamples(step, true)
+  const pts = samples.length > 0 ? samples : stepCoordinateSamples(step, false)
+  for (const [lat, lon] of pts) {
     const st = stateFromCoordinates(lat, lon)
     if (st) return st
   }
   return null
+}
+
+/**
+ * Ordered unique states from dense step geometry (axis-aligned state boxes).
+ * Used to fill intermediate gaps when step refs skipped a state.
+ */
+function orderedStatesFromGeometry(steps: any[]): string[] {
+  const out: string[] = []
+  for (const step of steps || []) {
+    const samples = stepCoordinateSamples(step, true)
+    const pts = samples.length > 0 ? samples : stepCoordinateSamples(step, false)
+    for (const [lat, lon] of pts) {
+      const st = stateFromCoordinates(lat, lon)
+      if (st && (out.length === 0 || out[out.length - 1] !== st)) out.push(st)
+    }
+  }
+  return out
+}
+
+/**
+ * Insert missing intermediate states from geometry into a sparse step-ref corridor.
+ * Preserves bookend order; only inserts states that appear between consecutive
+ * corridor members in the geometry walk. Skips inserts that would make transitions worse.
+ */
+export function fillCorridorGapsFromGeometry(corridor: string[], steps: any[]): string[] {
+  if (!corridor || corridor.length < 2 || !steps || steps.length === 0) return corridor
+  const geo = orderedStatesFromGeometry(steps)
+  if (geo.length <= corridor.length) return corridor
+
+  const result: string[] = []
+  for (let i = 0; i < corridor.length; i++) {
+    const curr = corridor[i]
+    if (result.length === 0 || result[result.length - 1] !== curr) result.push(curr)
+    if (i >= corridor.length - 1) break
+    const next = corridor[i + 1]
+    if (curr === next) continue
+
+    // Find a geo segment that runs curr → … → next
+    let start = -1
+    for (let g = 0; g < geo.length; g++) {
+      if (geo[g] === curr) start = g
+      if (start >= 0 && g > start && geo[g] === next) {
+        for (let k = start + 1; k < g; k++) {
+          const s = geo[k]
+          if (s !== curr && s !== next && result[result.length - 1] !== s) {
+            result.push(s)
+          }
+        }
+        break
+      }
+    }
+  }
+
+  // Drop consecutive dupes
+  const deduped = result.filter((s, idx) => idx === 0 || s !== result[idx - 1])
+  if (deduped.length <= corridor.length) return corridor
+
+  // Prefer filled when it is plausible, or when the sparse corridor was already implausible
+  if (hasPlausibleTransitions(deduped) || !hasPlausibleTransitions(corridor)) {
+    return deduped
+  }
+  return corridor
 }
 
 function normalizeHighwayFromRef(raw: string): string | null {
@@ -899,6 +964,16 @@ export function buildCorridorFromSteps(
           if (db && US_STATE_CODES.has(db) && corridor[corridor.length - 1] !== db) corridor.push(db)
         }
       }
+    }
+  }
+
+  // Geometry gap-fill: step refs often skip intermediates on long-haul routes (FL→ND).
+  // Insert ordered states from dense geometry between consecutive corridor members.
+  {
+    const filled = fillCorridorGapsFromGeometry(corridor, steps || [])
+    if (filled.length > corridor.length) {
+      corridor.length = 0
+      corridor.push(...filled)
     }
   }
 
