@@ -37,6 +37,24 @@ const mutedTextClass = 'text-gray-600 sm:text-gray-500'
 const bodyTextClass = 'text-gray-700 sm:text-gray-600'
 const cardClass = 'bg-white border border-gray-300 sm:border-gray-200 rounded-2xl p-6'
 
+function firstNameFromProfile(profile: MemberProfile | null, email?: string | null): string {
+  const full = profile?.driver_full_name?.trim()
+  if (full) {
+    const first = full.split(/\s+/)[0]
+    if (first) return first.charAt(0).toUpperCase() + first.slice(1)
+  }
+  if (email) {
+    const prefix = email.split('@')[0] || ''
+    // Prefer a clean first-name style over raw email local-part when possible
+    const cleaned = prefix.replace(/[._+].*$/, '').replace(/\d+$/, '')
+    if (cleaned.length >= 2) {
+      return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase()
+    }
+    return prefix
+  }
+  return ''
+}
+
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [ownOrganizationId, setOwnOrganizationId] = useState<string | null>(null)
@@ -327,6 +345,13 @@ export default function Dashboard() {
     welcomeTools[0]
   const secondaryTools = welcomeTools.filter((t) => t.id !== primaryTool?.id)
 
+  const displayFirstName = firstNameFromProfile(profileSnapshot, user?.email)
+  const mostRecentRequest = recentRequests[0] ?? null
+  const totalPermitsAcrossRecent = recentRequests.reduce(
+    (sum, req) => sum + (req.permit_required_states?.length || 0),
+    0
+  )
+
   // === Authentication Protection ===
   // Show a clean, branded loading state while verifying the user's session.
   // This prevents any flash of protected content and provides good UX.
@@ -353,10 +378,10 @@ export default function Dashboard() {
         {/* Welcome Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-semibold tracking-tight text-gray-900">
-            Welcome back{user?.email ? `, ${user.email.split('@')[0]}` : ''}
+            Welcome back{displayFirstName ? `, ${displayFirstName}` : ''}
           </h1>
           <p className={`${bodyTextClass} mt-1.5 text-[15px]`}>
-            Get accurate, route-specific permit intelligence in seconds.
+            Get accurate, route-specific permit intelligence fast.
           </p>
         </div>
 
@@ -410,35 +435,43 @@ export default function Dashboard() {
               </a>
             </p>
           )}
-          {primaryTool?.description && (
-            <p className={`text-sm ${mutedTextClass} mt-2 ml-1 basis-full`}>{primaryTool.description}</p>
-          )}
         </div>
 
-        {/* Stats — only when permit history is in scope */}
+        {/* Stats — only when permit history is in scope. Cards are actionable. */}
         {tools.some((t) => t.id === 'history' || t.id === 'permit_analysis') && (
           <div className="grid md:grid-cols-2 gap-6 mb-10">
-            <div className={cardClass}>
-              <div className={`text-sm ${mutedTextClass} mb-1`}>Recent analyses</div>
+            <a
+              href={mostRecentRequest ? `/portal-assist?requestId=${mostRecentRequest.id}` : '/history'}
+              className={`${cardClass} block hover:border-gray-400 transition-colors`}
+            >
+              <div className={`text-sm ${mutedTextClass} mb-1`}>
+                {mostRecentRequest ? 'Most recent analysis' : 'Recent analyses'}
+              </div>
               <div className="text-4xl font-semibold tracking-tighter text-gray-900">
                 {recentRequests.length > 0 ? recentRequests.length : '—'}
               </div>
-              <div className={`text-xs ${mutedTextClass} mt-2`}>Recent saved runs</div>
-            </div>
-            <div className={cardClass}>
+              <div className={`text-xs ${mutedTextClass} mt-2`}>
+                {mostRecentRequest
+                  ? `${mostRecentRequest.origin_city || '?'}, ${mostRecentRequest.origin_state || '?'} → ${mostRecentRequest.destination_city || '?'}, ${mostRecentRequest.destination_state || '?'}`
+                  : 'Tap to view history'}
+              </div>
+            </a>
+            <a
+              href="/history"
+              className={`${cardClass} block hover:border-gray-400 transition-colors`}
+            >
               <div className={`text-sm ${mutedTextClass} mb-1`}>Permits Required</div>
               <div className="text-4xl font-semibold tracking-tighter text-gray-900">
-                {recentRequests.reduce(
-                  (sum, req) => sum + (req.permit_required_states?.length || 0),
-                  0
-                ) || '—'}
+                {totalPermitsAcrossRecent || '—'}
               </div>
-              <div className={`text-xs ${mutedTextClass} mt-2`}>Across recent routes</div>
-            </div>
+              <div className={`text-xs ${mutedTextClass} mt-2`}>
+                Across recent routes · View history →
+              </div>
+            </a>
           </div>
         )}
 
-        {/* Recent Activity */}
+        {/* Recent Activity — clear shortcut to History */}
         {tools.some((t) => t.id === 'history' || t.id === 'permit_analysis') && (
           <div className={cardClass}>
             <div className="flex items-center justify-between mb-4">
