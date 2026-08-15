@@ -1029,6 +1029,7 @@ export const PREFILL_FIELD_LABELS: Record<string, string> = {
   carrier_phone: 'Carrier Phone',
   carrier_email: 'Carrier Email',
   driver_name: 'Driver',
+  driver_id: 'Driver ID',
   driver_cdl: 'Driver CDL',
   driver_cdl_state: 'Driver CDL State',
   driver_phone: 'Driver Phone',
@@ -2223,6 +2224,9 @@ export function generatePortalPrefill(
   if (carrierEmail) generated.carrier_email = carrierEmail
   const driverName = pickEquipmentField(carrierDriver, 'driverFullName', 'driver_full_name')
   if (driverName) generated.driver_name = driverName
+  // Driver ID (carrier unit #) — profile driver_id / form driverId
+  const driverId = pickEquipmentField(carrierDriver, 'driverId', 'driver_id')
+  if (driverId) generated.driver_id = String(driverId).trim()
   // Payment contact: carrier contact / company preferred over driver
   const contactName = buildMoContactName(carrierDriver)
   if (contactName) generated.contact_name = contactName
@@ -2433,6 +2437,7 @@ export function buildPortalClipboardPacket(
   pushLine('carrier_usdot', fields.carrier_usdot)
   pushLine('carrier_mc', fields.carrier_mc)
   pushLine('driver_name', fields.driver_name)
+  pushLine('driver_id', fields.driver_id)
 
   // Trip type always present in packet
   pushLine('trip_type', tripType)

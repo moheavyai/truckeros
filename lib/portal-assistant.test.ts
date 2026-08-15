@@ -250,9 +250,9 @@ const OK_KS_NE_CROSSINGS = [
 
 describe('formatBorderPoint / resolveStateBorderFields', () => {
   it('formats lat,lon with optional highway', () => {
-    expect(formatBorderPoint({ lat: 36.99, lon: -94.61 })).toBe('36.99,-94.61')
+    expect(formatBorderPoint({ lat: 36.99, lon: -94.61 })).toBe('36.99000,-94.61000')
     expect(formatBorderPoint({ lat: 36.99, lon: -94.61, highway: 'I-44' })).toBe(
-      '36.99,-94.61 (I-44)'
+      '36.99000,-94.61000 (I-44)'
     )
     expect(formatBorderPoint(null)).toBe('')
     expect(formatBorderPoint(undefined)).toBe('')
@@ -273,8 +273,8 @@ describe('formatBorderPoint / resolveStateBorderFields', () => {
   it('through-state KS on OK-KS-NE gets entry + exit from sample crossings', () => {
     const fields = resolveStateBorderFields('KS', ['OK', 'KS', 'NE'], OK_KS_NE_CROSSINGS)
     expect(fields.role).toBe('through')
-    expect(fields.entryPoint).toBe('36.99,-94.62 (US-69)')
-    expect(fields.exitPoint).toBe('40,-95.9 (US-75)')
+    expect(fields.entryPoint).toBe('36.99000,-94.62000 (US-69)')
+    expect(fields.exitPoint).toBe('40.00000,-95.90000 (US-75)')
     expect(fields.borderEntry).toBe(fields.entryPoint)
     expect(fields.borderExit).toBe(fields.exitPoint)
     expect(fields.borderSummary).toContain('Entry:')
@@ -285,13 +285,13 @@ describe('formatBorderPoint / resolveStateBorderFields', () => {
     const fields = resolveStateBorderFields('OK', ['OK', 'KS', 'NE'], OK_KS_NE_CROSSINGS)
     expect(fields.role).toBe('origin')
     expect(fields.entryPoint).toBe('')
-    expect(fields.exitPoint).toBe('36.99,-94.62 (US-69)')
+    expect(fields.exitPoint).toBe('36.99000,-94.62000 (US-69)')
   })
 
   it('destination NE gets entry only', () => {
     const fields = resolveStateBorderFields('NE', ['OK', 'KS', 'NE'], OK_KS_NE_CROSSINGS)
     expect(fields.role).toBe('destination')
-    expect(fields.entryPoint).toBe('40,-95.9 (US-75)')
+    expect(fields.entryPoint).toBe('40.00000,-95.90000 (US-75)')
     expect(fields.exitPoint).toBe('')
   })
 
@@ -307,8 +307,8 @@ describe('formatBorderPoint / resolveStateBorderFields', () => {
     ]
     const fields = resolveStateBorderFields('KS', ['OK', 'KS', 'NE'], partial)
     expect(fields.role).toBe('through')
-    expect(fields.entryPoint).toBe('36.99,-94.62 (US-69)')
-    expect(fields.exitPoint).toBe('39.8,-95 (US-75)')
+    expect(fields.entryPoint).toBe('36.99000,-94.62000 (US-69)')
+    expect(fields.exitPoint).toBe('39.80000,-95.00000 (US-75)')
   })
 
   it('origin exit stays empty when only leaveCrossing.exit is present (not entry)', () => {
@@ -396,10 +396,10 @@ describe('generatePortalPrefill', () => {
     )
 
     expect(prefill.generatedFields.border_role).toBe('through')
-    expect(prefill.generatedFields.entry_point).toBe('36.99,-94.62 (US-69)')
-    expect(prefill.generatedFields.exit_point).toBe('40,-95.9 (US-75)')
-    expect(prefill.generatedFields.border_entry).toBe('36.99,-94.62 (US-69)')
-    expect(prefill.generatedFields.border_exit).toBe('40,-95.9 (US-75)')
+    expect(prefill.generatedFields.entry_point).toBe('36.99000,-94.62000 (US-69)')
+    expect(prefill.generatedFields.exit_point).toBe('40.00000,-95.90000 (US-75)')
+    expect(prefill.generatedFields.border_entry).toBe('36.99000,-94.62000 (US-69)')
+    expect(prefill.generatedFields.border_exit).toBe('40.00000,-95.90000 (US-75)')
     expect(prefill.generatedFields.border_summary).toContain('Entry:')
     expect(prefill.generatedFields.border_summary).toContain('Exit:')
   })
@@ -424,7 +424,7 @@ describe('generatePortalPrefill', () => {
       'OK'
     )
     expect(prefill.generatedFields.border_role).toBe('origin')
-    expect(prefill.generatedFields.exit_point).toBe('36.99,-94.62 (US-69)')
+    expect(prefill.generatedFields.exit_point).toBe('36.99000,-94.62000 (US-69)')
     expect(prefill.generatedFields.entry_point).toBe('')
   })
 
@@ -637,6 +637,7 @@ describe('generatePortalPrefill', () => {
             carrierPhone: '555-0100',
             carrierEmail: 'ops@acme.com',
             driverFullName: 'Jane Doe',
+            driverId: '42',
             cdlNumber: 'D1234567',
             cdlState: 'TX',
             driverPhone: '555-0200',
@@ -652,6 +653,7 @@ describe('generatePortalPrefill', () => {
     expect(prefill.generatedFields.carrier_phone).toBe('555-0100')
     expect(prefill.generatedFields.carrier_email).toBe('ops@acme.com')
     expect(prefill.generatedFields.driver_name).toBe('Jane Doe')
+    expect(prefill.generatedFields.driver_id).toBe('42')
     expect(prefill.generatedFields.driver_cdl).toBe('D1234567')
     expect(prefill.generatedFields.driver_cdl_state).toBe('TX')
     expect(prefill.generatedFields.driver_phone).toBe('555-0200')
@@ -728,8 +730,8 @@ describe('buildPortalClipboardPacket', () => {
     const prefill = generatePortalPrefill(richRequest, 'KS')
     const packet = buildPortalClipboardPacket(prefill, STATE_PORTAL_CONFIGS.KS)
 
-    expect(packet).toMatch(/Border Entry: 36\.99,-94\.62 \(US-69\)/)
-    expect(packet).toMatch(/Border Exit: 40,-95\.9 \(US-75\)/)
+    expect(packet).toMatch(/Border Entry: 36\.99000,-94\.62000 \(US-69\)/)
+    expect(packet).toMatch(/Border Exit: 40\.00000,-95\.90000 \(US-75\)/)
     expect(packet).toContain('Axles: 6')
     expect(packet).toContain('Vehicle / VIN: UNIT-1')
     expect(packet).toContain('USDOT: 1234567')
@@ -1719,6 +1721,7 @@ describe('Missouri Portal Assist playbook v3', () => {
         'contact_name',
         'carrier_email',
         'driver_name',
+        'driver_id',
         'origin',
         'destination',
         'route',
