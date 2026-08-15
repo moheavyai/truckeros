@@ -1703,7 +1703,8 @@ export interface StateBorderFields {
  */
 export function formatBorderPoint(point?: PortalBorderPoint | null): string {
   if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lon)) return ''
-  const coords = `${point.lat},${point.lon}`
+  // Fixed precision for clean portal paste (avoids long float noise)
+  const coords = `${Number(point.lat).toFixed(5)},${Number(point.lon).toFixed(5)}`
   return point.highway ? `${coords} (${point.highway})` : coords
 }
 

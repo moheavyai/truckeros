@@ -693,6 +693,32 @@ export function fillCorridorGapsFromGeometry(corridor: string[], steps: any[]): 
   }
   return corridor
 }
+/**
+ * Drop middle corridor states that never appear in dense geometry.
+ * Keeps origin/dest bookends. Heuristic inserts (I-35→OK, etc.) that the
+ * route never actually traversed get removed so portal state count stays honest.
+ */
+export function skipNonTraversedStates(corridor: string[], steps: any[]): string[] {
+  if (!corridor || corridor.length < 3 || !steps || steps.length === 0) return corridor
+  const geo = orderedStatesFromGeometry(steps)
+  if (geo.length === 0) return corridor
+  const geoSet = new Set(geo)
+
+  const origin = corridor[0]
+  const dest = corridor[corridor.length - 1]
+  const mid = corridor.slice(1, -1).filter((s) => geoSet.has(s))
+  const next = [origin, ...mid, dest].filter((s, i, arr) => i === 0 || s !== arr[i - 1])
+
+  if (next.length >= corridor.length) return corridor
+  if (next.length < 2) return corridor
+
+  // Accept when cleaned is plausible, or sparse was already broken
+  if (hasPlausibleTransitions(next) || !hasPlausibleTransitions(corridor)) {
+    return next
+  }
+  return corridor
+}
+
 
 function normalizeHighwayFromRef(raw: string): string | null {
   let h = raw
@@ -974,6 +1000,15 @@ export function buildCorridorFromSteps(
     if (filled.length > corridor.length) {
       corridor.length = 0
       corridor.push(...filled)
+    }
+  }
+
+  // Skip: drop heuristic-only middle states the geometry never traversed.
+  {
+    const cleaned = skipNonTraversedStates(corridor, steps || [])
+    if (cleaned.length < corridor.length) {
+      corridor.length = 0
+      corridor.push(...cleaned)
     }
   }
 
