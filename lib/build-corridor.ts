@@ -582,12 +582,40 @@ function getPrimaryStateForStep(step: any): string | null {
   }
   return candidates.length > 0 ? candidates[candidates.length - 1] : null
 }
-
+/**
+ * Snap a state-border point for portal prefill.
+ *
+ * OSRM step state labels often flip late (mid-state), so the first geometry of the
+ * "new state" step can sit deep inside the state (e.g. Birmingham for AL) instead of
+ * near the real border. Prefer the last point still attributed to the previous state,
+ * and when both sides exist use the midpoint (better approximation of the boundary).
+ */
+function snapBorderPoint(
+  lastInPrev: BorderPoint | null,
+  firstInCurr: BorderPoint | null,
+  highway?: string
+): BorderPoint | null {
+  if (lastInPrev && firstInCurr) {
+    return {
+      lat: (lastInPrev.lat + firstInCurr.lat) / 2,
+      lon: (lastInPrev.lon + firstInCurr.lon) / 2,
+      highway: highway || firstInCurr.highway || lastInPrev.highway,
+    }
+  }
+  if (lastInPrev) {
+    return highway ? { ...lastInPrev, highway: highway || lastInPrev.highway } : lastInPrev
+  }
+  if (firstInCurr) {
+    return highway ? { ...firstInCurr, highway: highway || firstInCurr.highway } : firstInCurr
+  }
+  return null
+}
 /**
  * Extract structured state-border crossings from the same OSRM steps used for routeCorridor.
- * One BorderCrossing per actual state change. Entry = first geometry of the entering step;
- * exit is refined to the last geometry of the segment still attributed to the new state
- * (or the next transition if the state is only a single step).
+ * One BorderCrossing per actual state change.
+ * Entry snaps to the state edge (last prev-state geometry + first new-state midpoint when both exist)
+ * instead of the first mid-state sample after a late label flip.
+ * Exit is the last geometry still attributed to the state being left.
  * Single-state or empty steps -> []. Keeps portal forms aligned with the chosen geometry.
  */
 export function extractBorderCrossingsFromSteps(steps: any[]): BorderCrossing[] {
@@ -595,6 +623,8 @@ export function extractBorderCrossingsFromSteps(steps: any[]): BorderCrossing[] 
 
   const crossings: BorderCrossing[] = []
   let prevState: string | null = null
+  /** Last geometry still attributed to prevState — used to snap borders near the edge. */
+  let lastInPrevState: BorderPoint | null = null
   let open: {
     fromState: string
     toState: string
@@ -610,50 +640,56 @@ export function extractBorderCrossingsFromSteps(steps: any[]): BorderCrossing[] 
     const samples = stepCoordinateSamples(step)
     const first = samples[0]
     const last = samples[samples.length - 1] || first
+    const firstPt: BorderPoint | null = first
+      ? { lat: first[0], lon: first[1], highway }
+      : null
+    const lastPt: BorderPoint | null = last
+      ? { lat: last[0], lon: last[1], highway }
+      : firstPt
 
     if (prevState !== null && curr !== prevState) {
-      // Close any open crossing for the previous state
       if (open) {
         crossings.push({
           fromState: open.fromState,
           toState: open.toState,
           entry: open.entry,
-          exit: open.lastPoint,
+          exit: lastInPrevState || open.lastPoint,
         })
         open = null
       }
 
-      // Open a new crossing into the current state
-      if (first) {
-        const entry: BorderPoint = {
-          lat: first[0],
-          lon: first[1],
-          highway,
-        }
+      const entry = snapBorderPoint(lastInPrevState, firstPt, highway)
+      if (entry) {
         open = {
           fromState: prevState,
           toState: curr,
           entry,
-          lastPoint: last
-            ? { lat: last[0], lon: last[1], highway }
-            : entry,
+          lastPoint: lastPt || entry,
         }
       }
-    } else if (open && last) {
-      // Still in the same state - keep extending the exit point
-      open.lastPoint = { lat: last[0], lon: last[1], highway: highway || open.lastPoint.highway }
+      lastInPrevState = lastPt
+    } else {
+      if (open && lastPt) {
+        open.lastPoint = {
+          lat: lastPt.lat,
+          lon: lastPt.lon,
+          highway: highway || open.lastPoint.highway,
+        }
+      }
+      if (lastPt) {
+        lastInPrevState = lastPt
+      }
     }
 
     prevState = curr
   }
 
-  // Flush the final open crossing
   if (open) {
     crossings.push({
       fromState: open.fromState,
       toState: open.toState,
       entry: open.entry,
-      exit: open.lastPoint,
+      exit: lastInPrevState || open.lastPoint,
     })
   }
 
