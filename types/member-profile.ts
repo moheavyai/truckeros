@@ -33,6 +33,7 @@ export type MemberProfileFields = {
   carrier_email?: string | null
   insurance_contact?: string | null
   driver_full_name?: string | null
+  driver_id?: string | null
   cdl_number?: string | null
   cdl_state?: string | null
   date_of_birth?: string | null
