@@ -683,6 +683,100 @@ describe('extractBorderCrossingsFromSteps', () => {
   })
 })
 
+
+describe('extractBorderCrossingsFromSteps border snap (late state flip)', () => {
+  it('does not place AL entry at deep mid-state when prev-state geometry exists', () => {
+    // Geometry crosses GA→AL bound near ~-85.0; AL label only appears deep in Birmingham.
+    // Bound-based snap must place entry near the state edge, not Birmingham.
+    const steps = [
+      {
+        ref: 'GA 400',
+        maneuver: { location: [-84.7, 33.5] },
+        geometry: {
+          coordinates: [
+            [-84.7, 33.5],
+            [-84.85, 33.4],
+            [-84.95, 33.3],
+            [-85.05, 33.2], // still GA box / near edge
+          ],
+        },
+      },
+      {
+        ref: 'I 22;AL 4',
+        maneuver: { location: [-86.815, 33.546] },
+        geometry: {
+          coordinates: [
+            [-85.15, 33.15], // first pts still near GA/AL edge
+            [-85.4, 33.2],
+            [-86.0, 33.4],
+            [-86.815, 33.546], // Birmingham
+            [-86.82, 33.58],
+          ],
+        },
+      },
+      {
+        ref: 'I 65;TN 6',
+        maneuver: { location: [-86.7, 35.1] },
+        geometry: {
+          coordinates: [
+            [-86.75, 34.7],
+            [-86.72, 34.95],
+            [-86.7, 35.05], // crosses into TN ~35.0
+            [-86.6, 35.5],
+          ],
+        },
+      },
+    ]
+    const crossings = extractBorderCrossingsFromSteps(steps)
+    expect(crossings.length).toBeGreaterThanOrEqual(1)
+    const intoAl = crossings.find((c) => c.toState === 'AL')
+    expect(intoAl).toBeTruthy()
+    // Must not be pure Birmingham entry
+    expect(intoAl!.entry.lat).not.toBeCloseTo(33.546, 1)
+    expect(intoAl!.entry.lon).not.toBeCloseTo(-86.815, 1)
+    // Bound snap should stay near eastern AL (~-85.x), not central Birmingham
+    expect(intoAl!.entry.lon).toBeGreaterThan(-86.0)
+    const leaveAl = crossings.find((c) => c.fromState === 'AL')
+    if (leaveAl) {
+      // Exit toward TN should be near northern AL (~35), not Birmingham (~33.5)
+      expect(leaveAl.entry.lat).toBeGreaterThan(34.2) // north of Birmingham (~33.5), toward TN (~35)
+    }
+  })
+
+  it('exit for through state uses last geometry still in that state', () => {
+    const steps = [
+      {
+        ref: 'OK 11',
+        maneuver: { location: [-97.0, 36.0] },
+        geometry: { coordinates: [[-97.0, 36.0], [-96.9, 36.2]] },
+      },
+      {
+        ref: 'I 35;KS 15',
+        maneuver: { location: [-96.8, 37.05] },
+        geometry: {
+          coordinates: [
+            [-96.8, 37.05],
+            [-96.7, 38.0],
+            [-96.6, 39.5], // last KS-ish before NE
+          ],
+        },
+      },
+      {
+        ref: 'I 80;NE 2',
+        maneuver: { location: [-96.0, 40.6] },
+        geometry: { coordinates: [[-96.0, 40.6], [-95.5, 41.0]] },
+      },
+    ]
+    const crossings = extractBorderCrossingsFromSteps(steps)
+    const intoKs = crossings.find((c) => c.fromState === 'OK' && c.toState === 'KS')
+    const intoNe = crossings.find((c) => c.fromState === 'KS' && c.toState === 'NE')
+    expect(intoKs).toBeTruthy()
+    expect(intoNe).toBeTruthy()
+    // KS exit (into NE entry) should be near northern KS, not the southern KS entry
+    expect(intoNe!.entry.lat).toBeGreaterThan(intoKs!.entry.lat)
+  })
+})
+
 describe('same-state corridor resilience', () => {
   it('buildCorridorFromSteps with identical origin/dest still yields the single state', () => {
     const steps = [
