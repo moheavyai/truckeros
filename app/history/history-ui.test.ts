@@ -8,9 +8,17 @@ function readHistorySource() {
   return readFileSync(historyPagePath, 'utf8')
 }
 
-function tableRowActionsSlice(source: string) {
-  const start = source.indexOf('<td className="px-6 py-4 text-right">')
+function desktopTableSlice(source: string) {
+  const start = source.indexOf('{/* ——— Desktop table (md+) ——— */}')
   const end = source.indexOf('{/* Details Modal */}')
+  expect(start).toBeGreaterThan(-1)
+  expect(end).toBeGreaterThan(start)
+  return source.slice(start, end)
+}
+
+function mobileCardsSlice(source: string) {
+  const start = source.indexOf('{/* ——— Mobile card list (no horizontal scroll) ——— */}')
+  const end = source.indexOf('{/* ——— Desktop table (md+) ——— */}')
   expect(start).toBeGreaterThan(-1)
   expect(end).toBeGreaterThan(start)
   return source.slice(start, end)
@@ -48,9 +56,24 @@ describe('History page UI cleanup', () => {
     )
   })
 
-  it('shows View and Delete in table row actions (no row-level Portal Assist)', () => {
-    const rowActions = tableRowActionsSlice(readHistorySource())
+  it('renders mobile cards without overflow-x and with stacked View/Delete', () => {
+    const mobile = mobileCardsSlice(readHistorySource())
 
+    expect(mobile).toContain('md:hidden')
+    expect(mobile).not.toContain('overflow-x-auto')
+    expect(mobile).toContain('View')
+    expect(mobile).toContain('Delete')
+    expect(mobile).toContain('handleDeleteOne')
+    expect(mobile).toContain('min-h-[44px]')
+    expect(mobile).toContain('flex flex-col gap-2')
+    expect(mobile).toContain('w-full')
+    expect(mobile).not.toContain('Portal Assist')
+  })
+
+  it('keeps desktop table with View and Delete in row actions (no row-level Portal Assist)', () => {
+    const rowActions = desktopTableSlice(readHistorySource())
+
+    expect(rowActions).toContain('hidden md:block')
     expect(rowActions).toContain('View')
     expect(rowActions).toContain('Delete')
     expect(rowActions).toContain('handleDeleteOne')
