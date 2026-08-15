@@ -6,6 +6,7 @@ import {
   completeCorridorWithHighways,
   extractAvoidHighwaysFromNotEnforcedMarker,
   extractBorderCrossingsFromSteps,
+  fillCorridorGapsFromGeometry,
   formatRoutePreferenceAsSpecialInstructions,
   hasParseableRoutePreference,
   hasPlausibleTransitions,
@@ -774,6 +775,95 @@ describe('extractBorderCrossingsFromSteps border snap (late state flip)', () => 
     expect(intoNe).toBeTruthy()
     // KS exit (into NE entry) should be near northern KS, not the southern KS entry
     expect(intoNe!.entry.lat).toBeGreaterThan(intoKs!.entry.lat)
+  })
+})
+
+
+describe('fillCorridorGapsFromGeometry / long-haul insert', () => {
+  it('inserts GA AL TN between sparse FL→ND step-ref bookends using dense geometry', () => {
+    // Sparse refs only see FL and ND; geometry walks the real SE→upper Midwest path.
+    const steps = [
+      {
+        ref: 'I 75',
+        maneuver: { location: [-82.5, 28.0] },
+        geometry: {
+          coordinates: [
+            [-82.5, 28.0], // FL
+            [-83.5, 30.5], // FL/GA edge
+            [-84.4, 32.0], // GA
+            [-85.0, 33.0], // GA/AL
+            [-86.8, 33.5], // AL
+            [-86.8, 35.0], // AL/TN
+            [-86.7, 36.0], // TN
+            [-88.5, 37.5], // KY-ish / IL approach
+            [-89.5, 39.0], // IL
+            [-90.0, 43.0], // WI/MN approach
+            [-93.0, 45.0], // MN
+            [-101.0, 48.2], // ND
+          ],
+        },
+      },
+      {
+        ref: 'I 94',
+        maneuver: { location: [-101.3, 48.23] },
+        geometry: { coordinates: [[-101.3, 48.23], [-101.4, 48.25]] },
+      },
+    ]
+    const sparse = buildCorridorFromSteps(
+      [
+        { ref: 'FL 60', maneuver: { location: [-82.5, 28.0] }, geometry: { coordinates: [[-82.5, 28.0]] } },
+        { ref: 'ND 2', maneuver: { location: [-101.3, 48.23] }, geometry: { coordinates: [[-101.3, 48.23]] } },
+      ],
+      'FL',
+      'ND',
+    )
+    // Direct fill on sparse FL, ND with rich geometry steps
+    const filled = fillCorridorGapsFromGeometry(['FL', 'ND'], steps)
+    expect(filled[0]).toBe('FL')
+    expect(filled[filled.length - 1]).toBe('ND')
+    expect(filled.length).toBeGreaterThan(2)
+    // Must pick up southeastern intermediates from geometry
+    expect(filled).toEqual(expect.arrayContaining(['GA', 'AL']))
+  })
+
+  it('does not reorder or invent states when geometry is empty', () => {
+    const filled = fillCorridorGapsFromGeometry(['FL', 'GA', 'AL'], [])
+    expect(filled).toEqual(['FL', 'GA', 'AL'])
+  })
+
+  it('buildCorridorFromSteps gap-fills long sparse corridor', () => {
+    const steps = [
+      {
+        ref: 'FL 60',
+        maneuver: { location: [-82.5, 28.0] },
+        geometry: { coordinates: [[-82.5, 28.0], [-82.6, 28.1]] },
+      },
+      {
+        ref: 'I 75',
+        maneuver: { location: [-84.4, 32.0] },
+        geometry: {
+          coordinates: [
+            [-83.0, 30.8],
+            [-84.4, 32.0],
+            [-85.0, 33.0],
+            [-86.8, 33.5],
+            [-86.8, 35.0],
+            [-86.7, 36.0],
+          ],
+        },
+      },
+      {
+        ref: 'ND 2',
+        maneuver: { location: [-101.3, 48.23] },
+        geometry: { coordinates: [[-101.3, 48.23]] },
+      },
+    ]
+    const corridor = buildCorridorFromSteps(steps, 'FL', 'ND')
+    expect(corridor[0]).toBe('FL')
+    expect(corridor[corridor.length - 1]).toBe('ND')
+    // Geometry should contribute AL and/or GA/TN between bookends
+    const mid = corridor.slice(1, -1)
+    expect(mid.length).toBeGreaterThan(0)
   })
 })
 
