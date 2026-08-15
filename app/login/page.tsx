@@ -26,6 +26,12 @@ type AuthMode = 'signin' | 'signup' | 'forgot' | 'recovery'
 
 const PASSWORD_HINT = 'Min 8 characters, 1 uppercase, 1 special character'
 
+/** Shared auth field styles — strong mobile borders + readable text/placeholders.
+ *  Matches the permit-test mobile contrast pattern so fields stay legible under
+ *  OS dark mode, bright sun, and low-end Android screens. */
+const authInputClass =
+  'border border-gray-500 sm:border-gray-300 p-3 w-full rounded text-gray-900 placeholder:text-gray-500 bg-white'
+
 function validatePassword(password: string): string | null {
   if (password.length < 8) {
     return 'Password must be at least 8 characters.'
@@ -454,12 +460,14 @@ export default function LoginPage() {
             <div className="w-9 h-9 bg-black rounded flex items-center justify-center">
               <span className="text-white text-xl font-bold tracking-tighter">M</span>
             </div>
-            <span className="text-2xl font-semibold tracking-tight">MoHeavy AI</span>
+            <span className="text-2xl font-semibold tracking-tight text-gray-900">
+              MoHeavy AI
+            </span>
           </a>
         </div>
 
-        <div className="bg-white border rounded-2xl p-8 shadow-sm">
-          <h1 className="text-2xl font-semibold tracking-tight mb-1">{title}</h1>
+        <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
+          <h1 className="text-2xl font-semibold tracking-tight mb-1 text-gray-900">{title}</h1>
           <p className="text-gray-600 text-sm mb-6">{subtitle}</p>
 
           {isUsingPlaceholderEnv && (
@@ -494,7 +502,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"
-                className="border p-3 w-full rounded"
+                className={authInputClass}
                 required
                 minLength={8}
               />
@@ -504,7 +512,7 @@ export default function LoginPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 autoComplete="new-password"
-                className="border p-3 w-full rounded"
+                className={authInputClass}
                 required
                 minLength={8}
               />
@@ -534,7 +542,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
-                className="border p-3 w-full rounded"
+                className={authInputClass}
                 required
               />
               <button
@@ -562,7 +570,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
-                className="border p-3 w-full rounded"
+                className={authInputClass}
                 required
               />
               <input
@@ -571,7 +579,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                className="border p-3 w-full rounded"
+                className={authInputClass}
                 required
                 minLength={isSignUp ? 8 : undefined}
               />
@@ -583,7 +591,7 @@ export default function LoginPage() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     autoComplete="new-password"
-                    className="border p-3 w-full rounded"
+                    className={authInputClass}
                     required
                     minLength={8}
                   />
@@ -610,7 +618,7 @@ export default function LoginPage() {
             </form>
           )}
 
-          <div className="mt-5 pt-5 border-t text-center space-y-2">
+          <div className="mt-5 pt-5 border-t border-gray-200 text-center space-y-2">
             {isRecovery ? null : isForgot ? (
               <button
                 type="button"
