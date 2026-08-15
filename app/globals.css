@@ -1,8 +1,12 @@
 @import "tailwindcss";
 
+/* MoHeavy is designed as a light, high-contrast ops UI.
+   Force light scheme so OS dark mode cannot invert body text
+   against our light cards/backgrounds (common mobile failure mode). */
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -12,15 +16,13 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* Dark mode intentionally disabled until a full dark theme is designed.
+   Leaving the media query active caused headings and logos without
+   explicit text-* classes to become near-white on white cards. */
 
 html {
   overflow-x: clip;
+  color-scheme: light;
 }
 
 body {
