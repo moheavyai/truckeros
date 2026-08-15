@@ -16,7 +16,8 @@ export const metadata: Metadata = {
   title: "MoHeavy AI | Operating System for Truckers",
   description: "The operating system for owner-operators and small carriers. Intelligent OSOW permits, corridor management, and compliance tools.",
   icons: {
-    icon: "/favicon.ico",
+    icon: [{ url: "/icon", type: "image/png", sizes: "32x32" }],
+    apple: [{ url: "/apple-icon", sizes: "180x180", type: "image/png" }],
   },
 };
 
