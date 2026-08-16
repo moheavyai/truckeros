@@ -483,20 +483,22 @@ describe('formatDriverSummaryLine', () => {
 })
 
 describe('formatDriverDetailLine', () => {
-  it('formats phone and CDL with state and expiration', () => {
+  it('formats full name, phone, CDL, and expiration', () => {
     expect(
       formatDriverDetailLine({
+        driverFullName: 'Dana Driver',
         driverPhone: '(555) 555-6666',
         cdlNumber: 'D7654321',
         cdlState: 'OK',
         cdlExpiration: '2026-12-01',
       })
-    ).toBe('(555) 555-6666 · CDL D7654321 (OK) · exp 2026-12-01')
+    ).toBe('Dana Driver · (555) 555-6666 · CDL D7654321 (OK) · exp 2026-12-01')
   })
 
   it('omits empty parts', () => {
     expect(
       formatDriverDetailLine({
+        driverFullName: '',
         driverPhone: '',
         cdlNumber: 'D7654321',
         cdlState: '',
@@ -508,6 +510,7 @@ describe('formatDriverDetailLine', () => {
   it('returns dash when nothing present', () => {
     expect(
       formatDriverDetailLine({
+        driverFullName: '',
         driverPhone: '',
         cdlNumber: '',
         cdlState: '',

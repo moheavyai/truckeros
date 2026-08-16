@@ -339,21 +339,23 @@ export function formatDriverSummaryLine(
 
 /**
  * Detail line under the driver title (mirrors Rig dimensions line).
- * Phone · CDL number (state) · exp YYYY-MM-DD. Empty parts omitted.
+ * Full name · phone · CDL number (state) · exp YYYY-MM-DD. Empty parts omitted.
  * Callers should render status badges via getDriverCdlStatus.
  */
 export function formatDriverDetailLine(
   fields: Pick<
     PermitCarrierDriverFormFields,
-    'driverPhone' | 'cdlNumber' | 'cdlState' | 'cdlExpiration'
+    'driverFullName' | 'driverPhone' | 'cdlNumber' | 'cdlState' | 'cdlExpiration'
   >
 ): string {
+  const fullName = trimField(fields.driverFullName)
   const phone = trimField(fields.driverPhone)
   const cdlNumber = trimField(fields.cdlNumber)
   const cdlState = trimField(fields.cdlState)
   const cdlExpiration = trimField(fields.cdlExpiration)
 
   const parts: string[] = []
+  if (fullName) parts.push(fullName)
   if (phone) parts.push(phone)
   if (cdlNumber || cdlState) {
     parts.push(`CDL ${cdlNumber || '—'}${cdlState ? ` (${cdlState})` : ''}`)

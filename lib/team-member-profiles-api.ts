@@ -974,6 +974,7 @@ export function parseMemberProfileForm(body: Record<string, unknown>): MemberPro
     driver_id: String(body.driver_id ?? ''),
     cdl_number: String(body.cdl_number ?? ''),
     cdl_state: String(body.cdl_state ?? ''),
+    cdl_expiration: String(body.cdl_expiration ?? '').slice(0, 10),
     date_of_birth: String(body.date_of_birth ?? ''),
     driver_phone: String(body.driver_phone ?? ''),
     driver_email: String(body.driver_email ?? ''),

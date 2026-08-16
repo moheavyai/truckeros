@@ -71,6 +71,8 @@ export function profileChangeFieldLabel(fieldKey: string): string {
       return 'CDL#'
     case 'cdl_state':
       return 'CDL State'
+    case 'cdl_expiration':
+      return 'CDL Expiration'
     case 'date_of_birth':
       return 'Date of Birth'
     default:
