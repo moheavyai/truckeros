@@ -894,13 +894,25 @@ export default function PermitTestPage() {
         setFormData((prev) => ({
           ...prev,
           origin: {
+            ...prev.origin,
+            // keep stable LocationStop.id required by type
             query: String(data.origin_query || ''),
             street: '',
             city: String(data.origin_city || ''),
             state: String(data.origin_state || ''),
             zip: '',
           },
-          drops,
+          drops: drops.map((d: any, i: number) => ({
+            ...(prev.drops[i] ? { id: prev.drops[i].id } : {}),
+            id: String(d.id || prev.drops[i]?.id || `drop-${i + 1}`),
+            query: String(d.query || ''),
+            street: String(d.street || ''),
+            city: String(d.city || ''),
+            state: String(d.state || ''),
+            zip: String(d.zip || ''),
+            lat: typeof d.lat === 'number' ? d.lat : undefined,
+            lon: typeof d.lon === 'number' ? d.lon : undefined,
+          })),
           weight: Number(data.weight) || prev.weight,
           length: Number(data.length) || prev.length,
           width: Number(data.width) || prev.width,
