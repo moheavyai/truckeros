@@ -11,6 +11,9 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test --grep @smoke",
+    "test:e2e:ui": "playwright test --ui",
     "restart:ortools": "powershell -NoProfile -ExecutionPolicy Bypass -File ./restart-ortools.ps1",
     "safety:backup": "powershell -ExecutionPolicy Bypass -File ./scripts/backup-and-push.ps1",
     "test:safety": "powershell -ExecutionPolicy Bypass -Command \"if (-not (Get-Module -ListAvailable -Name Pester)) { Write-Error 'Pester not installed. Run: Install-Module Pester -Scope CurrentUser -Force'; exit 1 }; $r = Invoke-Pester -Path ./scripts/backup-and-push.Tests.ps1 -PassThru; if ($r.FailedCount -gt 0) { exit 1 }\""
@@ -25,6 +28,7 @@
     "react-dom": "^19.0.0-rc-02c0e824-20241028"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "@tailwindcss/postcss": "^4.3.0",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^20",
