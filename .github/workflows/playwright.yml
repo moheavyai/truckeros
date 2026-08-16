@@ -5,17 +5,15 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  # Allow manual runs (useful while we tune the suite)
   workflow_dispatch:
 
-# Cancel in-progress runs for the same PR / branch
 concurrency:
   group: playwright-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
   smoke:
-    timeout-minutes: 20
+    timeout-minutes: 25
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,10 +32,11 @@ jobs:
       - name: Run smoke tests
         run: npx playwright test --grep @smoke
         env:
-          # Optional: set repo variable PLAYWRIGHT_TEST_BASE_URL to a stable
-          # production or staging URL. When empty, Playwright starts `npm run dev`.
-          # Later we can wire Vercel preview URLs via deployment_status.
+          # Optional stable URL (production / staging). When empty, starts local dev server.
           PLAYWRIGHT_TEST_BASE_URL: ${{ vars.PLAYWRIGHT_TEST_BASE_URL }}
+          # Required for authenticated smoke (added as repository secrets)
+          PLAYWRIGHT_TEST_EMAIL: ${{ secrets.PLAYWRIGHT_TEST_EMAIL }}
+          PLAYWRIGHT_TEST_PASSWORD: ${{ secrets.PLAYWRIGHT_TEST_PASSWORD }}
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
