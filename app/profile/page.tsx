@@ -2595,11 +2595,11 @@ export default function ProfilePage() {
         <form onSubmit={handleSave} className="space-y-6 mb-6">
           <section className={cardClass}>
             <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
-              <div>
+              <div className="min-w-0 flex-1">
                 <h2 className="font-semibold text-lg tracking-tight text-gray-900">{memberCardTitle}</h2>
                 <p className={`${fieldHintClass} mt-1`}>{memberEditSubtitle}</p>
               </div>
-              {showMemberSaveInHeader && (
+              <div className="ml-auto shrink-0">
                 <button
                   type="submit"
                   disabled={memberSaveDisabled}
@@ -2607,7 +2607,7 @@ export default function ProfilePage() {
                 >
                   {saveButtonLabel}
                 </button>
-              )}
+              </div>
             </div>
 
             {showDriverRestrictedWarning && (
@@ -2618,8 +2618,8 @@ export default function ProfilePage() {
               >
                 <p className="font-medium">Requires Admin approval</p>
                 <p className="mt-1">
-                  Changes to name, CDL, or date of birth will be submitted for review when you save. Contact
-                  fields save immediately.
+                  Changes to name, CDL number/state/expiration, or date of birth will be submitted for review
+                  when you save. Contact fields save immediately.
                 </p>
               </div>
             )}
@@ -2837,29 +2837,29 @@ export default function ProfilePage() {
                     onChange={setMemberPermissions}
                   />
                 )}
-                {!showMemberSaveInHeader && (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      type="submit"
-                      disabled={memberSaveDisabled || savingAndInviting}
-                      className={buttonPrimaryCompactClass}
-                    >
-                      {saveButtonLabel}
-                    </button>
-                    {showSaveAndInviteButton && (
-                      <button
-                        type="button"
-                        onClick={handleSaveAndInvite}
-                        disabled={memberSaveDisabled || savingAndInviting}
-                        className={`${buttonSuccessClass} rounded-lg px-4 py-2 whitespace-nowrap`}
-                      >
-                        {savingAndInviting ? 'Saving & inviting…' : 'Save and Invite'}
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
             )}
+
+            {/* Bottom save — always available so long forms don't require scrolling to the top */}
+            <div className={`mt-6 pt-4 border-t ${softDividerBorderClass} flex flex-wrap items-center justify-end gap-2`}>
+              <button
+                type="submit"
+                disabled={memberSaveDisabled || savingAndInviting}
+                className={buttonPrimaryCompactClass}
+              >
+                {saveButtonLabel}
+              </button>
+              {showSaveAndInviteButton && (
+                <button
+                  type="button"
+                  onClick={handleSaveAndInvite}
+                  disabled={memberSaveDisabled || savingAndInviting}
+                  className={`${buttonSuccessClass} rounded-lg px-4 py-2 whitespace-nowrap`}
+                >
+                  {savingAndInviting ? 'Saving & inviting…' : 'Save and Invite'}
+                </button>
+              )}
+            </div>
           </section>
 
           {showBootstrapProfilePrompt && editingTarget.kind === 'self' && (
@@ -2915,79 +2915,68 @@ export default function ProfilePage() {
                 Save your profile to see it listed here.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className={`bg-gray-50 border-b ${dividerBorderClass}`}>
-                    <tr>
-                      <th className="text-left px-6 py-4 font-semibold text-gray-700">Name</th>
-                      <th className="text-left px-6 py-4 font-semibold text-gray-700">Roles</th>
-                      <th className="text-left px-6 py-4 font-semibold text-gray-700">Company</th>
-                      <th className="text-left px-6 py-4 font-semibold text-gray-700">Driver Info</th>
-                      <th className="text-right px-6 py-4 font-semibold text-gray-700">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className={listDivideClass}>
-                    {teamMembers.map((member) => {
-                      const allowEdit = effectiveOwnProfile
-                        ? canEditMember(actingPermissionActor, member)
-                        : member.is_self
+              <div className="px-4 sm:px-6 py-4 space-y-3">
+                {teamMembers.map((member) => {
+                  const allowEdit = effectiveOwnProfile
+                    ? canEditMember(actingPermissionActor, member)
+                    : member.is_self
 
-                      const rowKey = memberListKey(member)
-                      const isEditingRow = editingMemberKey === rowKey
+                  const rowKey = memberListKey(member)
+                  const isEditingRow = editingMemberKey === rowKey
 
-                      return (
-                        <tr
-                          key={rowKey}
-                          className={`transition-colors ${
-                            isEditingRow ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-gray-50'
-                          }`}
-                        >
-                          <td className="px-6 py-4">
-                            <div className="font-medium text-gray-900">{member.display_name}</div>
-                            {member.is_self && (
-                              <div className={`text-xs ${mutedTextClass} mt-0.5`}>You</div>
+                  return (
+                    <div
+                      key={rowKey}
+                      className={`rounded-xl border p-4 transition-colors ${
+                        isEditingRow
+                          ? 'border-blue-300 bg-blue-50'
+                          : 'border-gray-200 bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-semibold text-gray-900 truncate">{member.display_name}</div>
+                          <div className={`text-xs ${mutedTextClass} mt-0.5 flex flex-wrap gap-x-2`}>
+                            {member.is_self && <span>You</span>}
+                            {member.is_primary_owner && !member.is_self && <span>Primary owner</span>}
+                            {member.company_name?.trim() && (
+                              <span className="truncate">{member.company_name.trim()}</span>
                             )}
-                            {member.is_primary_owner && !member.is_self && (
-                              <div className={`text-xs ${mutedTextClass} mt-0.5`}>Primary owner</div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex flex-wrap gap-1.5">
-                              {member.user_roles.length > 0 ? (
-                                member.user_roles.map((role, index) => (
-                                  <span
-                                    key={`${role}-${index}`}
-                                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${roleBadgeClass(role)}`}
-                                  >
-                                    {role}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className={mutedTextClass}>—</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className={`px-6 py-4 ${bodyTextClass}`}>{member.company_name?.trim() || '—'}</td>
-                          <td className={`px-6 py-4 ${mutedTextClass}`}>{member.driver_summary}</td>
-                          <td className="px-6 py-4 text-right whitespace-nowrap">
-                            {allowEdit && canWriteProfile && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (confirmDiscardIfDirty()) void handleEditMember(member)
-                                }}
-                                disabled={isLoadingMember || isSaving}
-                                className={buttonSecondaryClass}
-                              >
-                                Edit
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                          </div>
+                        </div>
+                        {allowEdit && canWriteProfile && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirmDiscardIfDirty()) void handleEditMember(member)
+                            }}
+                            disabled={isLoadingMember || isSaving}
+                            className={`${buttonSecondaryClass} shrink-0`}
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {member.user_roles.length > 0 ? (
+                          member.user_roles.map((role, index) => (
+                            <span
+                              key={`${role}-${index}`}
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${roleBadgeClass(role)}`}
+                            >
+                              {role}
+                            </span>
+                          ))
+                        ) : (
+                          <span className={`text-xs ${mutedTextClass}`}>No roles</span>
+                        )}
+                      </div>
+                      {member.driver_summary && member.driver_summary !== 'No driver details' && (
+                        <p className={`mt-2 text-xs ${mutedTextClass} break-words`}>{member.driver_summary}</p>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </section>
