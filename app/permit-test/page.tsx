@@ -61,6 +61,8 @@ import {
   driverSelectionKey,
   EMPTY_PERMIT_CARRIER_DRIVER_FIELDS,
   formatDriverSummaryLine,
+  formatDriverDetailLine,
+  isDriverCdlMissing,
   clearDefaultPermitDriverKey,
   getDefaultPermitDriverKey,
   memberProfileToPermitAutofill,
@@ -3083,7 +3085,14 @@ export default function PermitTestPage() {
                           ★
                         </span>
                       )}
-                      {formatDriverSummaryLine(pickPermitCarrierDriverFields(formData))}
+                      <span className="font-mono text-xs sm:text-sm tracking-tight">
+                        {formatDriverDetailLine(pickPermitCarrierDriverFields(formData))}
+                      </span>
+                      {isDriverCdlMissing(pickPermitCarrierDriverFields(formData)) && (
+                        <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800">
+                          CDL missing
+                        </span>
+                      )}
                     </span>
                   ) : (
                     <span>No driver selected</span>
