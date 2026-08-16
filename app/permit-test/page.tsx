@@ -790,6 +790,8 @@ export default function PermitTestPage() {
 
   const [routeProgress, setRouteProgress] = useState<'idle' | 'geocoding' | 'calculating' | 'ready' | 'error'>('idle')
   const [routeProgressDetail, setRouteProgressDetail] = useState('')
+  /** When false (Reject & Start Over, or redo prefill), field changes do not auto-run analysis. */
+  const [autoRouteEnabled, setAutoRouteEnabled] = useState(true)
   const [showRigPicker, setShowRigPicker] = useState(false)
   const [showRigDetails, setShowRigDetails] = useState(false)
   const [showRouteDetails, setShowRouteDetails] = useState(false)
@@ -841,6 +843,83 @@ export default function PermitTestPage() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       pendingRigIdRef.current = params.get('rigId')
+    }
+  }, [])
+
+  // Re-do / review mode: prefill from a saved permit_request, do not auto-run
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const requestId = params.get('requestId')
+    const mode = params.get('mode')
+    if (!requestId) return
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from('permit_requests')
+          .select('*')
+          .eq('id', requestId)
+          .maybeSingle()
+        if (cancelled || error || !data) return
+
+        const dropsRaw = Array.isArray(data.drops) ? data.drops : []
+        const drops =
+          dropsRaw.length > 0
+            ? dropsRaw.map((d: any, i: number) => ({
+                id: String(d.id || `drop-${i + 1}`),
+                query: String(d.query || ''),
+                street: String(d.street || ''),
+                city: String(d.city || ''),
+                state: String(d.state || ''),
+                zip: String(d.zip || ''),
+                lat: typeof d.lat === 'number' ? d.lat : undefined,
+                lon: typeof d.lon === 'number' ? d.lon : undefined,
+              }))
+            : [
+                {
+                  id: 'drop-1',
+                  query: String(data.destination_query || ''),
+                  street: '',
+                  city: String(data.destination_city || ''),
+                  state: String(data.destination_state || ''),
+                  zip: '',
+                  lat: undefined as number | undefined,
+                  lon: undefined as number | undefined,
+                },
+              ]
+
+        setFormData((prev) => ({
+          ...prev,
+          origin: {
+            query: String(data.origin_query || ''),
+            street: '',
+            city: String(data.origin_city || ''),
+            state: String(data.origin_state || ''),
+            zip: '',
+          },
+          drops,
+          weight: Number(data.weight) || prev.weight,
+          length: Number(data.length) || prev.length,
+          width: Number(data.width) || prev.width,
+          height: Number(data.height) || prev.height,
+        }))
+        setAgentResult(null)
+        setResult(null)
+        setSavedToDatabase(false)
+        if (mode === 'review' || params.has('requestId')) {
+          setAutoRouteEnabled(false)
+          setRouteProgress('idle')
+          setRouteProgressDetail('Review prefilled route, then tap Run analysis')
+        }
+      } catch (e) {
+        console.warn('[permit-test] prefill from requestId failed', e)
+      }
+    })()
+    return () => {
+      cancelled = true
     }
   }, [])
 
@@ -2146,6 +2225,13 @@ export default function PermitTestPage() {
 
     if (!coordsReady || !dimsReady) return
 
+    // Manual review mode (reject / redo): never auto-fire; user must click Run analysis
+    if (!autoRouteEnabled) {
+      setRouteProgress('idle')
+      setRouteProgressDetail('Review form, then tap Run analysis')
+      return
+    }
+
     if (autoRouteTimeoutRef.current) clearTimeout(autoRouteTimeoutRef.current)
     autoRouteTimeoutRef.current = setTimeout(() => {
       runRouteAnalysis()
@@ -2159,7 +2245,7 @@ export default function PermitTestPage() {
     formData.origin.query, formData.origin.city, formData.origin.state,
     formData.drops,
     formData.weight, formData.length, formData.width, formData.height,
-    isGeocoding, manualRoute,
+    isGeocoding, manualRoute, autoRouteEnabled,
   ])
 
   // New function: Approve & Save (Human Approval Gate)
@@ -2422,12 +2508,23 @@ export default function PermitTestPage() {
     setChangeRouteError(null)
     setChangeRouteBusy(false)
     setRouteProgress('idle')
-    setRouteProgressDetail('')
+    setRouteProgressDetail('Review form, then tap Run analysis')
+    // Stop auto-run so dimension/preference edits do not immediately recalculate
+    setAutoRouteEnabled(false)
+    if (autoRouteTimeoutRef.current) {
+      clearTimeout(autoRouteTimeoutRef.current)
+      autoRouteTimeoutRef.current = undefined
+    }
     // Scroll back to the form for convenience
     const reduceMotion =
       typeof window !== 'undefined' &&
       window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })
+  }
+
+  const handleRunAnalysis = () => {
+    setAutoRouteEnabled(true)
+    void runRouteAnalysis()
   }
 
   // Handle manual route change (Change Route feature)
@@ -3020,6 +3117,24 @@ export default function PermitTestPage() {
       </div>
 
       <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
+        {!autoRouteEnabled && (
+          <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 px-4 py-3 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center gap-3 shadow-sm">
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-amber-950 text-sm sm:text-base">Review mode</div>
+              <p className="text-xs sm:text-sm text-amber-900 mt-0.5">
+                Change any field freely — analysis will not run until you tap Run analysis.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleRunAnalysis}
+              disabled={loading}
+              className="shrink-0 min-h-[44px] px-5 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 disabled:opacity-50 touch-manipulation"
+            >
+              {loading ? 'Running…' : 'Run analysis'}
+            </button>
+          </div>
+        )}
         {/* Form Card Wrapper for polished look */}
         <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 space-y-8 shadow-sm min-w-0">
         {/* Validation Errors */}

@@ -353,7 +353,7 @@ export default function HistoryPage() {
                           {deleting ? 'Deleting...' : 'Delete'}
                         </button>
                         <a
-                          href="/permit-test"
+                          href={`/permit-test?requestId=${req.id}&mode=review`}
                           className="w-full min-h-[44px] inline-flex items-center justify-center text-sm font-medium border border-gray-300 text-gray-800 hover:bg-gray-50 rounded-xl transition touch-manipulation"
                         >
                           Re-run Analysis
@@ -439,7 +439,7 @@ export default function HistoryPage() {
                                 {deleting ? 'Deleting...' : 'Delete'}
                               </button>
                               <a
-                                href="/permit-test"
+                                href={`/permit-test?requestId=${req.id}&mode=review`}
                                 className="text-sm px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-100 rounded-lg transition"
                               >
                                 Re-run

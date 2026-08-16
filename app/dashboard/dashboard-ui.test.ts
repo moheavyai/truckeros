@@ -58,18 +58,22 @@ describe('Dashboard page — onboarding + role tools', () => {
     expect(source).toContain('getVisibleDashboardTools')
   })
 
-  it('recent analyses rows link to portal-assist by requestId and use req.id as key', () => {
+  it('activity card opens drawer; detail offers Portal Assist and Re-do review prefill', () => {
     const source = readDashboardSource()
+    expect(source).toContain('Recent activity')
+    expect(source).toContain('activityOpen')
+    expect(source).toContain('setSelectedRequest')
     expect(source).toContain('portal-assist?requestId=')
-    expect(source).toMatch(/href=\{`\/portal-assist\?requestId=\$\{req\.id\}`\}/)
-    expect(source).toMatch(/key=\{req\.id\}/)
-    expect(source).toContain('hover:bg-gray-50')
-    expect(source).toContain('focus-visible:bg-gray-50')
-    expect(source).toContain('focus-visible:ring-2')
+    expect(source).toContain('mode=review')
+    expect(source).toContain('Continue to Portal Assist')
+    expect(source).toContain('Re-do analysis')
     expect(source).toContain('View all →')
     expect(source).toContain('href="/history"')
     // No Pro Tips card chrome
     expect(source).not.toContain('Pro Tips')
+    // Old triple-card chrome removed
+    expect(source).not.toContain('Most recent analysis')
+    expect(source).not.toContain('Permits Required')
   })
 
   it('honors guided dismiss and admin setup eligibility for finish-setup banner', () => {

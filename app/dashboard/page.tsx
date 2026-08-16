@@ -78,6 +78,8 @@ export default function Dashboard() {
   const [teamMemberCount, setTeamMemberCount] = useState(1)
   const [hasEquipment, setHasEquipment] = useState(false)
   const [guidedDismissed, setGuidedDismissed] = useState(false)
+  const [activityOpen, setActivityOpen] = useState(false)
+  const [selectedRequest, setSelectedRequest] = useState<any | null>(null)
   const router = useRouter()
   const { workspaceMode, activeOrganizationId } = useOrganizationContext(ownOrganizationId)
 
@@ -437,104 +439,204 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Stats — only when permit history is in scope. Cards are actionable. */}
+        {/* Single activity card — opens drawer with recent 5 + permits total */}
         {tools.some((t) => t.id === 'history' || t.id === 'permit_analysis') && (
-          <div className="grid md:grid-cols-2 gap-6 mb-10">
-            <a
-              href={mostRecentRequest ? `/portal-assist?requestId=${mostRecentRequest.id}` : '/history'}
-              className={`${cardClass} block hover:border-gray-400 transition-colors`}
+          <div className="mb-10">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedRequest(null)
+                setActivityOpen(true)
+              }}
+              className={`${cardClass} w-full text-left hover:border-gray-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300`}
             >
-              <div className={`text-sm ${mutedTextClass} mb-1`}>
-                {mostRecentRequest ? 'Most recent analysis' : 'Recent analyses'}
-              </div>
-              <div className="text-4xl font-semibold tracking-tighter text-gray-900">
-                {recentRequests.length > 0 ? recentRequests.length : '—'}
-              </div>
-              <div className={`text-xs ${mutedTextClass} mt-2`}>
-                {mostRecentRequest
-                  ? `${mostRecentRequest.origin_city || '?'}, ${mostRecentRequest.origin_state || '?'} → ${mostRecentRequest.destination_city || '?'}, ${mostRecentRequest.destination_state || '?'}`
-                  : 'Tap to view history'}
-              </div>
-            </a>
-            <a
-              href="/history"
-              className={`${cardClass} block hover:border-gray-400 transition-colors`}
-            >
-              <div className={`text-sm ${mutedTextClass} mb-1`}>Permits Required</div>
-              <div className="text-4xl font-semibold tracking-tighter text-gray-900">
-                {totalPermitsAcrossRecent || '—'}
-              </div>
-              <div className={`text-xs ${mutedTextClass} mt-2`}>
-                Across recent routes · View history →
-              </div>
-            </a>
-          </div>
-        )}
-
-        {/* Recent Activity — clear shortcut to History */}
-        {tools.some((t) => t.id === 'history' || t.id === 'permit_analysis') && (
-          <div className={cardClass}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-lg tracking-tight text-gray-900">Recent Analyses</h2>
-              {tools.some((t) => t.id === 'history') && (
-                <a href="/history" className={`text-sm ${bodyTextClass} hover:text-black`}>
-                  View all →
-                </a>
-              )}
-            </div>
-
-            <div className="divide-y divide-gray-200 sm:divide-gray-100">
-              {recentRequests.length > 0 ? (
-                recentRequests.map((req) => {
-                  const permitCount = req.permit_required_states?.length || 0
-                  const date = req.created_at ? new Date(req.created_at).toLocaleDateString() : ''
-
-                  return (
-                    <a
-                      key={req.id}
-                      href={`/portal-assist?requestId=${req.id}`}
-                      className="py-4 flex items-center justify-between text-sm hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 -mx-2 px-2 rounded-lg transition-colors"
-                    >
-                      <div>
-                        <div className="font-medium text-gray-900">
-                          {req.origin_city}, {req.origin_state} → {req.destination_city},{' '}
-                          {req.destination_state}
-                        </div>
-                        <div className={`${mutedTextClass} text-xs mt-0.5`}>
-                          {req.weight?.toLocaleString()} lbs • {req.length} ft
-                        </div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className={`text-sm ${mutedTextClass} mb-1`}>Recent activity</div>
+                  {mostRecentRequest ? (
+                    <>
+                      <div className="text-lg font-semibold text-gray-900 tracking-tight truncate">
+                        {mostRecentRequest.origin_city || '?'}, {mostRecentRequest.origin_state || '?'} →{' '}
+                        {mostRecentRequest.destination_city || '?'}, {mostRecentRequest.destination_state || '?'}
                       </div>
-                      <div className="text-right">
-                        <div
-                          className={`${permitCount > 0 ? 'text-orange-700 sm:text-orange-600' : 'text-emerald-700 sm:text-emerald-600'} font-medium text-xs`}
-                        >
-                          {permitCount > 0
-                            ? `${permitCount} State${permitCount > 1 ? 's' : ''} Require Permit`
-                            : 'No Permit Required'}
-                        </div>
-                        <div className={`${mutedTextClass} text-xs`}>{date}</div>
+                      <div className={`text-xs ${mutedTextClass} mt-1.5`}>
+                        {recentRequests.length} recent · {totalPermitsAcrossRecent || 0} permits across those routes
                       </div>
-                    </a>
-                  )
-                })
-              ) : (
-                <div className={`py-6 text-center text-sm ${mutedTextClass}`}>
-                  <p>No analyses yet. Run your first route analysis to see history here.</p>
-                  <p className={`${bodyTextClass} text-xs mt-2`}>
-                    Tip: geocode origin and destination for the most accurate corridor.
-                  </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-lg font-semibold text-gray-900 tracking-tight">No analyses yet</div>
+                      <div className={`text-xs ${mutedTextClass} mt-1.5`}>
+                        Tap to open recent routes once you save an analysis
+                      </div>
+                    </>
+                  )}
                 </div>
-              )}
-            </div>
-
-            {recentRequests.length > 0 && (
-              <div className={`pt-4 text-xs ${mutedTextClass} border-t border-gray-200 sm:border-gray-100`}>
-                Showing your last {recentRequests.length} saved analyses.
+                <span className="shrink-0 text-gray-400 text-xl leading-none mt-0.5" aria-hidden>
+                  →
+                </span>
               </div>
-            )}
+            </button>
           </div>
         )}
       </main>
+
+      {/* Activity drawer — recent 5 + detail actions */}
+      {activityOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close activity drawer"
+            onClick={() => {
+              setActivityOpen(false)
+              setSelectedRequest(null)
+            }}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={selectedRequest ? 'Analysis details' : 'Recent analyses'}
+            className="relative z-10 w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[85vh] overflow-y-auto"
+          >
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-5 py-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-semibold text-lg text-gray-900">
+                  {selectedRequest ? 'Analysis' : 'Recent analyses'}
+                </h2>
+                {!selectedRequest && (
+                  <p className={`text-xs ${mutedTextClass} mt-0.5`}>
+                    {totalPermitsAcrossRecent || 0} permits required across last {recentRequests.length || 0} routes
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {selectedRequest && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRequest(null)}
+                    className="text-sm font-medium text-gray-700 hover:text-black px-2 py-1"
+                  >
+                    Back
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivityOpen(false)
+                    setSelectedRequest(null)
+                  }}
+                  className="text-sm font-medium text-gray-600 hover:text-black px-2 py-1"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="px-5 py-4">
+              {selectedRequest ? (
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-base font-semibold text-gray-900">
+                      {selectedRequest.origin_city}, {selectedRequest.origin_state} →{' '}
+                      {selectedRequest.destination_city}, {selectedRequest.destination_state}
+                    </div>
+                    <div className={`text-xs ${mutedTextClass} mt-1`}>
+                      {(selectedRequest.permit_required_states?.length || 0) > 0
+                        ? `${selectedRequest.permit_required_states.length} state${selectedRequest.permit_required_states.length > 1 ? 's' : ''} require permit`
+                        : 'No permit required'}
+                      {selectedRequest.created_at
+                        ? ` · ${new Date(selectedRequest.created_at).toLocaleDateString()}`
+                        : ''}
+                    </div>
+                    {(selectedRequest.weight || selectedRequest.length) && (
+                      <div className={`text-xs ${mutedTextClass} mt-1`}>
+                        {selectedRequest.weight ? `${Number(selectedRequest.weight).toLocaleString()} lbs` : null}
+                        {selectedRequest.weight && selectedRequest.length ? ' · ' : null}
+                        {selectedRequest.length ? `${selectedRequest.length} ft` : null}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <a
+                      href={`/portal-assist?requestId=${selectedRequest.id}`}
+                      className="w-full min-h-[44px] inline-flex items-center justify-center text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 rounded-xl transition"
+                    >
+                      Continue to Portal Assist
+                    </a>
+                    <a
+                      href={`/permit-test?requestId=${selectedRequest.id}&mode=review`}
+                      className="w-full min-h-[44px] inline-flex items-center justify-center text-sm font-semibold border border-gray-300 text-gray-900 hover:bg-gray-50 rounded-xl transition"
+                    >
+                      Re-do analysis
+                    </a>
+                  </div>
+                  <p className={`text-xs ${mutedTextClass}`}>
+                    Re-do prefills the form from this route. Review dimensions and preferences, then run when ready — it will not auto-start.
+                  </p>
+                </div>
+              ) : recentRequests.length > 0 ? (
+                <div className="space-y-1">
+                  {recentRequests.map((req) => {
+                    const permitCount = req.permit_required_states?.length || 0
+                    const date = req.created_at ? new Date(req.created_at).toLocaleDateString() : ''
+                    return (
+                      <button
+                        key={req.id}
+                        type="button"
+                        onClick={() => setSelectedRequest(req)}
+                        className="w-full text-left py-3 px-2 -mx-2 rounded-xl hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-medium text-gray-900 text-sm truncate">
+                              {req.origin_city}, {req.origin_state} → {req.destination_city}, {req.destination_state}
+                            </div>
+                            <div className={`${mutedTextClass} text-xs mt-0.5`}>
+                              {req.weight ? `${Number(req.weight).toLocaleString()} lbs` : null}
+                              {req.weight && req.length ? ' · ' : null}
+                              {req.length ? `${req.length} ft` : null}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div
+                              className={`font-medium text-xs ${
+                                permitCount > 0
+                                  ? 'text-orange-700 sm:text-orange-600'
+                                  : 'text-emerald-700 sm:text-emerald-600'
+                              }`}
+                            >
+                              {permitCount > 0
+                                ? `${permitCount} permit${permitCount > 1 ? 's' : ''}`
+                                : 'Legal'}
+                            </div>
+                            <div className={`${mutedTextClass} text-xs`}>{date}</div>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                  {tools.some((t) => t.id === 'history') && (
+                    <a
+                      href="/history"
+                      className={`block text-center text-sm font-medium ${bodyTextClass} hover:text-black pt-3 border-t border-gray-100 mt-3`}
+                    >
+                      View all →
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <div className={`py-8 text-center text-sm ${mutedTextClass}`}>
+                  <p>No analyses yet. Run your first route analysis to see history here.</p>
+                  <a href="/permit-test" className="inline-block mt-3 text-sm font-semibold text-black underline underline-offset-2">
+                    Start New Route Analysis
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
