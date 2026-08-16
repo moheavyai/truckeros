@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 /**
  * Critical-path smoke tests for MoHeavy AI.
@@ -11,6 +11,16 @@ import { test, expect } from '@playwright/test';
  * Owner-Operator style user — expect empty equipment state and
  * normal post-login app chrome.
  */
+
+async function fillProfileName(page: Page, name: string) {
+  const profileNameInput = page
+    .locator('label', { hasText: /Profile Name/i })
+    .locator('..')
+    .locator('input')
+    .first();
+  await expect(profileNameInput).toBeVisible({ timeout: 10_000 });
+  await profileNameInput.fill(name);
+}
 
 test.describe('Public surface @smoke', () => {
   test('landing page loads and shows core brand + CTAs', async ({ page }) => {
@@ -57,17 +67,14 @@ test.describe('Authenticated critical path @smoke', () => {
     const body = page.locator('body');
     await expect(body).toContainText(/Equipment|Tractor|Trailer|Rig/i);
 
-    // Tab buttons are plain <button>s, not role=tab
     await expect(page.getByRole('button', { name: 'Tractors' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Trailers' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Rigs' })).toBeVisible();
   });
 
   test('can create and delete a tractor profile', async ({ page }) => {
-    // Unique name so we do not collide with leftover data
     const profileName = `PW Tractor ${Date.now()}`;
 
-    // Auto-accept the browser confirm() used by deleteTractor
     page.on('dialog', async (dialog) => {
       await dialog.accept();
     });
@@ -75,39 +82,106 @@ test.describe('Authenticated critical path @smoke', () => {
     await page.goto('/equipment');
     await expect(page.getByText(/MoHeavy/i).first()).toBeVisible({ timeout: 15_000 });
 
-    // Ensure we are on Tractors tab
     await page.getByRole('button', { name: 'Tractors' }).click();
-
-    // Open new tractor editor
     await page.getByRole('button', { name: /New Tractor Profile/i }).click();
-
-    // Profile Name is the first required field in the editor
-    // Labels are tiny; the input is bound to profile_name
-    const nameInput = page.locator('input').filter({ has: page.locator('..') }).first();
-    // More reliable: find the input near "Profile Name"
-    const profileNameInput = page
-      .locator('label', { hasText: /Profile Name/i })
-      .locator('..')
-      .locator('input')
-      .first();
-
-    await expect(profileNameInput).toBeVisible({ timeout: 10_000 });
-    await profileNameInput.fill(profileName);
-
-    // Save
+    await fillProfileName(page, profileName);
     await page.getByRole('button', { name: 'Save Tractor' }).click();
 
-    // After save the editor closes and the card should appear
     await expect(page.getByText(profileName).first()).toBeVisible({
       timeout: 20_000,
     });
 
-    // Clean up — Delete sits on the card
     const card = page.locator('div').filter({ hasText: profileName }).first();
     await card.getByRole('button', { name: 'Delete' }).click();
-
-    // Profile should disappear
     await expect(page.getByText(profileName)).toHaveCount(0, { timeout: 15_000 });
+  });
+
+  test('can build a rig and see SuccessToast', async ({ page }) => {
+    const stamp = Date.now();
+    const tractorName = `PW Rig Tractor ${stamp}`;
+    const trailerName = `PW Rig Trailer ${stamp}`;
+    const rigName = `PW Rig ${stamp}`;
+
+    page.on('dialog', async (dialog) => {
+      await dialog.accept();
+    });
+
+    await page.goto('/equipment');
+    await expect(page.getByText(/MoHeavy/i).first()).toBeVisible({ timeout: 15_000 });
+
+    // --- Tractor ---
+    await page.getByRole('button', { name: 'Tractors' }).click();
+    await page.getByRole('button', { name: /New Tractor Profile/i }).click();
+    await fillProfileName(page, tractorName);
+    await page.getByRole('button', { name: 'Save Tractor' }).click();
+    await expect(page.getByText(tractorName).first()).toBeVisible({ timeout: 20_000 });
+
+    // --- Trailer ---
+    await page.getByRole('button', { name: 'Trailers' }).click();
+    await page.getByRole('button', { name: /New Trailer Profile/i }).click();
+    await fillProfileName(page, trailerName);
+    await page.getByRole('button', { name: 'Save Trailer' }).click();
+    await expect(page.getByText(trailerName).first()).toBeVisible({ timeout: 20_000 });
+
+    // --- Rig builder ---
+    await page.getByRole('button', { name: 'Rigs' }).click();
+
+    // Builder may already be open for empty fleet; otherwise open it
+    const buildNew = page.getByRole('button', { name: /Build New Rig|Build first rig/i });
+    if (await buildNew.count()) {
+      await buildNew.first().click();
+    }
+
+    await expect(page.getByText(/Build a Combination/i)).toBeVisible({ timeout: 10_000 });
+
+    // Select tractor
+    const tractorSelect = page.locator('select').filter({ hasText: /Select tractor/i }).first();
+    // Fallback: first select on the builder card
+    const selects = page.locator('select');
+    await selects.nth(0).selectOption({ label: new RegExp(tractorName) });
+
+    // Add trailer via second select
+    await selects.nth(1).selectOption({ label: new RegExp(trailerName) });
+
+    // Rig name
+    const rigNameInput = page.getByPlaceholder(/e\.g\. KW T680|Rig Name|Flatbed/i);
+    if (await rigNameInput.count()) {
+      await rigNameInput.first().fill(rigName);
+    } else {
+      // Fallback: input near "Rig Name"
+      await page
+        .locator('label', { hasText: /Rig Name/i })
+        .locator('..')
+        .locator('input')
+        .first()
+        .fill(rigName);
+    }
+
+    // Save
+    await page.getByRole('button', { name: /Save Rig Configuration/i }).click();
+
+    // SuccessToast uses role="status"
+    const toast = page.getByRole('status');
+    await expect(toast).toBeVisible({ timeout: 20_000 });
+    await expect(toast).toContainText(/Saved|ready for analysis|Updated/i);
+
+    // Rig card should appear
+    await expect(page.getByText(rigName).first()).toBeVisible({ timeout: 15_000 });
+
+    // --- Cleanup (rig, then trailer, then tractor) ---
+    const rigCard = page.locator('div').filter({ hasText: rigName }).first();
+    await rigCard.getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByText(rigName)).toHaveCount(0, { timeout: 15_000 });
+
+    await page.getByRole('button', { name: 'Trailers' }).click();
+    const trailerCard = page.locator('div').filter({ hasText: trailerName }).first();
+    await trailerCard.getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByText(trailerName)).toHaveCount(0, { timeout: 15_000 });
+
+    await page.getByRole('button', { name: 'Tractors' }).click();
+    const tractorCard = page.locator('div').filter({ hasText: tractorName }).first();
+    await tractorCard.getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByText(tractorName)).toHaveCount(0, { timeout: 15_000 });
   });
 
   test('Permit Test page renders core route surface', async ({ page }) => {
