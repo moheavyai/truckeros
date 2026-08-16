@@ -62,7 +62,8 @@ import {
   EMPTY_PERMIT_CARRIER_DRIVER_FIELDS,
   formatDriverSummaryLine,
   formatDriverDetailLine,
-  isDriverCdlMissing,
+  getDriverCdlStatus,
+  driverCdlStatusLabel,
   clearDefaultPermitDriverKey,
   getDefaultPermitDriverKey,
   memberProfileToPermitAutofill,
@@ -3079,6 +3080,11 @@ export default function PermitTestPage() {
                         )}
                     </span>
                   ) : selectedDriverKey ? (
+                    (() => {
+                      const driverFields = pickPermitCarrierDriverFields(formData)
+                      const cdlStatus = getDriverCdlStatus(driverFields)
+                      const cdlLabel = driverCdlStatusLabel(cdlStatus, driverFields)
+                      return (
                     <span className="text-gray-900">
                       {selectedDriverKey === defaultDriverKey && (
                         <span className="text-amber-500 mr-1" title="Default driver">
@@ -3086,14 +3092,29 @@ export default function PermitTestPage() {
                         </span>
                       )}
                       <span className="font-mono text-xs sm:text-sm tracking-tight">
-                        {formatDriverDetailLine(pickPermitCarrierDriverFields(formData))}
+                        {formatDriverDetailLine(driverFields)}
                       </span>
-                      {isDriverCdlMissing(pickPermitCarrierDriverFields(formData)) && (
-                        <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800">
-                          CDL missing
+                      {cdlLabel && (
+                        <span
+                          className={`ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            cdlStatus === 'expired'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                          title={
+                            cdlStatus === 'missing'
+                              ? 'Add CDL number on the driver profile'
+                              : cdlStatus === 'expired'
+                                ? 'CDL is past its expiration date'
+                                : 'CDL expires within 30 days'
+                          }
+                        >
+                          {cdlLabel}
                         </span>
                       )}
                     </span>
+                      )
+                    })()
                   ) : (
                     <span>No driver selected</span>
                   )}

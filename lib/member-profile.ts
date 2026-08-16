@@ -873,6 +873,7 @@ export function emptyMemberProfileForm(): MemberProfileFormData {
     driver_id: '',
     cdl_number: '',
     cdl_state: '',
+    cdl_expiration: '',
     date_of_birth: '',
     driver_phone: '',
     driver_email: '',
@@ -1031,6 +1032,7 @@ export function memberProfileFromRow(
     form[key] = (row[key] as string | null) ?? ''
   }
   form.cdl_state = row.cdl_state ?? ''
+  form.cdl_expiration = row.cdl_expiration ? row.cdl_expiration.slice(0, 10) : ''
   form.date_of_birth = row.date_of_birth ? row.date_of_birth.slice(0, 10) : ''
   const isPrimaryOwner =
     'is_primary_owner' in row && (row as MemberProfile).is_primary_owner === true
@@ -1051,6 +1053,7 @@ function profileFieldsToPayload(
   }
 
   payload.cdl_state = normalizeCdlState(form.cdl_state)
+  payload.cdl_expiration = trimOrNull(form.cdl_expiration)
   payload.date_of_birth = trimOrNull(form.date_of_birth)
   const userRoles = validateUserRoles(form.user_roles as string[])
   if (!isValidMemberProfileUserRolesCombination(userRoles)) {

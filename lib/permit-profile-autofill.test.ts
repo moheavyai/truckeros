@@ -9,6 +9,8 @@ import {
   formatDriverSummaryLine,
   formatDriverDetailLine,
   isDriverCdlMissing,
+  getDriverCdlStatus,
+  driverCdlStatusLabel,
   clearDefaultPermitDriverKey,
   getDefaultPermitDriverKey,
   memberProfileToPermitAutofill,
@@ -481,14 +483,15 @@ describe('formatDriverSummaryLine', () => {
 })
 
 describe('formatDriverDetailLine', () => {
-  it('formats phone and CDL with state', () => {
+  it('formats phone and CDL with state and expiration', () => {
     expect(
       formatDriverDetailLine({
         driverPhone: '(555) 555-6666',
         cdlNumber: 'D7654321',
         cdlState: 'OK',
+        cdlExpiration: '2026-12-01',
       })
-    ).toBe('(555) 555-6666 · CDL D7654321 (OK)')
+    ).toBe('(555) 555-6666 · CDL D7654321 (OK) · exp 2026-12-01')
   })
 
   it('omits empty parts', () => {
@@ -497,6 +500,7 @@ describe('formatDriverDetailLine', () => {
         driverPhone: '',
         cdlNumber: 'D7654321',
         cdlState: '',
+        cdlExpiration: '',
       })
     ).toBe('CDL D7654321')
   })
@@ -507,6 +511,7 @@ describe('formatDriverDetailLine', () => {
         driverPhone: '',
         cdlNumber: '',
         cdlState: '',
+        cdlExpiration: '',
       })
     ).toBe('—')
   })
@@ -520,6 +525,49 @@ describe('isDriverCdlMissing', () => {
 
   it('is false when cdl number is present', () => {
     expect(isDriverCdlMissing({ cdlNumber: 'D123' })).toBe(false)
+  })
+})
+
+describe('getDriverCdlStatus', () => {
+  const today = new Date(2026, 7, 16) // Aug 16, 2026 local
+
+  it('returns missing when number is blank', () => {
+    expect(getDriverCdlStatus({ cdlNumber: '', cdlExpiration: '2027-01-01' }, today)).toBe('missing')
+  })
+
+  it('returns ok when number present and no expiration', () => {
+    expect(getDriverCdlStatus({ cdlNumber: 'D1', cdlExpiration: '' }, today)).toBe('ok')
+  })
+
+  it('returns expired when expiration is in the past', () => {
+    expect(getDriverCdlStatus({ cdlNumber: 'D1', cdlExpiration: '2026-08-15' }, today)).toBe('expired')
+  })
+
+  it('returns expiring_soon within 30 days', () => {
+    expect(getDriverCdlStatus({ cdlNumber: 'D1', cdlExpiration: '2026-09-01' }, today)).toBe(
+      'expiring_soon'
+    )
+  })
+
+  it('returns ok when expiration is beyond 30 days', () => {
+    expect(getDriverCdlStatus({ cdlNumber: 'D1', cdlExpiration: '2027-01-01' }, today)).toBe('ok')
+  })
+})
+
+describe('driverCdlStatusLabel', () => {
+  it('labels missing and expired', () => {
+    expect(driverCdlStatusLabel('missing')).toBe('CDL missing')
+    expect(driverCdlStatusLabel('expired')).toBe('CDL expired')
+  })
+
+  it('includes expiration date when expiring soon', () => {
+    expect(driverCdlStatusLabel('expiring_soon', { cdlExpiration: '2026-09-01' })).toBe(
+      'CDL expires 2026-09-01'
+    )
+  })
+
+  it('returns null for ok', () => {
+    expect(driverCdlStatusLabel('ok')).toBeNull()
   })
 })
 
