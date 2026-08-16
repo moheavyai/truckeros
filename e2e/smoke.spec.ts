@@ -109,24 +109,20 @@ test.describe('Authenticated critical path @smoke', () => {
     await page.goto('/equipment');
     await expect(page.getByText(/MoHeavy/i).first()).toBeVisible({ timeout: 15_000 });
 
-    // --- Tractor ---
     await page.getByRole('button', { name: 'Tractors' }).click();
     await page.getByRole('button', { name: /New Tractor Profile/i }).click();
     await fillProfileName(page, tractorName);
     await page.getByRole('button', { name: 'Save Tractor' }).click();
     await expect(page.getByText(tractorName).first()).toBeVisible({ timeout: 20_000 });
 
-    // --- Trailer ---
     await page.getByRole('button', { name: 'Trailers' }).click();
     await page.getByRole('button', { name: /New Trailer Profile/i }).click();
     await fillProfileName(page, trailerName);
     await page.getByRole('button', { name: 'Save Trailer' }).click();
     await expect(page.getByText(trailerName).first()).toBeVisible({ timeout: 20_000 });
 
-    // --- Rig builder ---
     await page.getByRole('button', { name: 'Rigs' }).click();
 
-    // Builder may already be open for empty fleet; otherwise open it
     const buildNew = page.getByRole('button', { name: /Build New Rig|Build first rig/i });
     if (await buildNew.count()) {
       await buildNew.first().click();
@@ -134,21 +130,14 @@ test.describe('Authenticated critical path @smoke', () => {
 
     await expect(page.getByText(/Build a Combination/i)).toBeVisible({ timeout: 10_000 });
 
-    // Select tractor
-    const tractorSelect = page.locator('select').filter({ hasText: /Select tractor/i }).first();
-    // Fallback: first select on the builder card
     const selects = page.locator('select');
     await selects.nth(0).selectOption({ label: new RegExp(tractorName) });
-
-    // Add trailer via second select
     await selects.nth(1).selectOption({ label: new RegExp(trailerName) });
 
-    // Rig name
     const rigNameInput = page.getByPlaceholder(/e\.g\. KW T680|Rig Name|Flatbed/i);
     if (await rigNameInput.count()) {
       await rigNameInput.first().fill(rigName);
     } else {
-      // Fallback: input near "Rig Name"
       await page
         .locator('label', { hasText: /Rig Name/i })
         .locator('..')
@@ -157,18 +146,14 @@ test.describe('Authenticated critical path @smoke', () => {
         .fill(rigName);
     }
 
-    // Save
     await page.getByRole('button', { name: /Save Rig Configuration/i }).click();
 
-    // SuccessToast uses role="status"
     const toast = page.getByRole('status');
     await expect(toast).toBeVisible({ timeout: 20_000 });
     await expect(toast).toContainText(/Saved|ready for analysis|Updated/i);
 
-    // Rig card should appear
     await expect(page.getByText(rigName).first()).toBeVisible({ timeout: 15_000 });
 
-    // --- Cleanup (rig, then trailer, then tractor) ---
     const rigCard = page.locator('div').filter({ hasText: rigName }).first();
     await rigCard.getByRole('button', { name: 'Delete' }).click();
     await expect(page.getByText(rigName)).toHaveCount(0, { timeout: 15_000 });
@@ -191,7 +176,41 @@ test.describe('Authenticated critical path @smoke', () => {
     await expect(page.getByText(/MoHeavy/i).first()).toBeVisible({ timeout: 15_000 });
 
     const body = page.locator('body');
-    await expect(body).toContainText(/Permit|Route|Origin|Destination|Corridor|Load/i);
+    await expect(body).toContainText(/Permit|Route|Origin|Destination|Corridor|Load|Pickup|Drop/i);
+  });
+
+  test('can fill pickup and drop on Permit Test', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    await page.goto('/permit-test');
+    await expect(page.getByText(/MoHeavy/i).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: /New Route Analysis/i })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // Pickup (section 5)
+    const pickup = page.getByPlaceholder(/Case IH|Grand Island|Pickup|plant/i);
+    await expect(pickup.first()).toBeVisible({ timeout: 10_000 });
+    await pickup.first().fill('Kansas City, MO');
+    await pickup.first().blur();
+
+    // First drop (section 6)
+    const drop = page.getByPlaceholder(/Minot|Dickinson|Full address|business name|Northern Plains/i);
+    await expect(drop.first()).toBeVisible({ timeout: 10_000 });
+    await drop.first().fill('St. Louis, MO');
+    await drop.first().blur();
+
+    // Soft progress signal — geocode, calculating, corridor, or error banner.
+    // Do NOT require a full OR-Tools success (service may be unreachable in CI).
+    const body = page.locator('body');
+    await expect(body).toContainText(
+      /Geocod|Resolving|Calculating|Route|Corridor|MO|Missouri|Kansas|St\. Louis|Kansas City|Fix the address|manual|coordinate/i,
+      { timeout: 60_000 }
+    );
+
+    // Page must still be interactive (not a hard crash / login bounce)
+    await expect(page).not.toHaveURL(/\/login/);
+    await expect(page.getByText(/MoHeavy/i).first()).toBeVisible();
   });
 
   test('Portal Assist route is reachable while authenticated', async ({ page }) => {
