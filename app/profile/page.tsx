@@ -2758,6 +2758,27 @@ export default function ProfilePage() {
                 </select>
               </div>
               <div>
+                <label htmlFor="cdl_expiration" className={fieldLabelClass}>
+                  CDL Expiration
+                  {effectiveOwnProfile &&
+                    isDriverSelfServiceActor(effectiveOwnProfile) &&
+                    isEditingOwnProfileTarget() && (
+                    <span className="ml-1 text-amber-700">(requires approval)</span>
+                  )}
+                  {pendingFieldKeys.has('cdl_expiration') && (
+                    <span className="ml-1 text-blue-700">(pending approval)</span>
+                  )}
+                </label>
+                <input
+                  id="cdl_expiration"
+                  type="date"
+                  value={form.cdl_expiration ?? ''}
+                  onChange={(e) => updateField('cdl_expiration', e.target.value)}
+                  className={inputClass}
+                  disabled={isFieldDisabled('cdl_expiration')}
+                />
+              </div>
+              <div>
                 <label htmlFor="date_of_birth" className={fieldLabelClass}>
                   Date of Birth
                   {effectiveOwnProfile &&

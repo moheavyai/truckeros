@@ -28,6 +28,12 @@
     "040_phase1_team_invite_self_clerk_update.sql",
     "041_phase1_team_invite_self_clerk_session_match.sql",
     "042_axle_configs.sql",
-    "043_permit_request_border_crossings.sql"
+    "043_permit_request_border_crossings.sql",
+    "044_fix_org_memberships_bootstrap_rls_recursion.sql",
+    "045_state_escort_rules_jsonb.sql",
+    "046_state_escort_rules_remaining.sql",
+    "047_state_permit_rules_all_50.sql",
+    "049_add_driver_id.sql",
+    "050_add_cdl_expiration.sql"
   ]
 }

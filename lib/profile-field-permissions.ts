@@ -11,6 +11,7 @@ export const DRIVER_RESTRICTED_FIELD_KEYS = [
   'driver_full_name',
   'cdl_number',
   'cdl_state',
+  'cdl_expiration',
   'date_of_birth',
 ] as const satisfies readonly ProfileFieldKey[]
 

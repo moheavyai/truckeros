@@ -36,6 +36,8 @@ export type MemberProfileFields = {
   driver_id?: string | null
   cdl_number?: string | null
   cdl_state?: string | null
+  /** ISO date YYYY-MM-DD when known. */
+  cdl_expiration?: string | null
   date_of_birth?: string | null
   driver_phone?: string | null
   driver_email?: string | null

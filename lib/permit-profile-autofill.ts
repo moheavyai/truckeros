@@ -22,6 +22,7 @@ export type PermitCarrierDriverFormFields = {
   driverId: string
   cdlNumber: string
   cdlState: string
+  cdlExpiration: string
   driverPhone: string
   driverEmail: string
   dateOfBirth: string
@@ -42,6 +43,7 @@ export const EMPTY_PERMIT_CARRIER_DRIVER_FIELDS: PermitCarrierDriverFormFields =
   driverId: '',
   cdlNumber: '',
   cdlState: '',
+  cdlExpiration: '',
   driverPhone: '',
   driverEmail: '',
   dateOfBirth: '',
@@ -119,6 +121,7 @@ export const PERMIT_DRIVER_FIELD_KEYS = [
   'driverId',
   'cdlNumber',
   'cdlState',
+  'cdlExpiration',
   'driverPhone',
   'driverEmail',
   'dateOfBirth',
@@ -157,6 +160,7 @@ function mapDriverFieldsFromProfile(
     driverId: trimField(profile.driver_id),
     cdlNumber: trimField(profile.cdl_number),
     cdlState: trimField(profile.cdl_state),
+    cdlExpiration: profile.cdl_expiration ? String(profile.cdl_expiration).slice(0, 10) : '',
     driverPhone: trimField(profile.driver_phone),
     driverEmail: trimField(profile.driver_email),
     dateOfBirth: trimField(profile.date_of_birth),
@@ -335,32 +339,86 @@ export function formatDriverSummaryLine(
 
 /**
  * Detail line under the driver title (mirrors Rig dimensions line).
- * Phone · CDL number (state). Empty parts omitted.
- * Callers should flag missing CDL separately via isDriverCdlMissing.
+ * Phone · CDL number (state) · exp YYYY-MM-DD. Empty parts omitted.
+ * Callers should render status badges via getDriverCdlStatus.
  */
 export function formatDriverDetailLine(
   fields: Pick<
     PermitCarrierDriverFormFields,
-    'driverPhone' | 'cdlNumber' | 'cdlState'
+    'driverPhone' | 'cdlNumber' | 'cdlState' | 'cdlExpiration'
   >
 ): string {
   const phone = trimField(fields.driverPhone)
   const cdlNumber = trimField(fields.cdlNumber)
   const cdlState = trimField(fields.cdlState)
+  const cdlExpiration = trimField(fields.cdlExpiration)
 
   const parts: string[] = []
   if (phone) parts.push(phone)
   if (cdlNumber || cdlState) {
     parts.push(`CDL ${cdlNumber || '—'}${cdlState ? ` (${cdlState})` : ''}`)
   }
+  if (cdlExpiration) parts.push(`exp ${cdlExpiration}`)
   return parts.join(' · ') || '—'
 }
 
-/** True when CDL number is blank — used for missing/expired visual flags. */
+/** Days before expiration to treat as expiring soon (permit desks care about this window). */
+export const CDL_EXPIRING_SOON_DAYS = 30
+
+export type DriverCdlStatus = 'missing' | 'expired' | 'expiring_soon' | 'ok'
+
+/**
+ * CDL status for UI badges.
+ * Priority: missing number → expired → expiring soon → ok.
+ * Expiration without a number still surfaces expired/expiring (incomplete record).
+ */
+export function getDriverCdlStatus(
+  fields: Pick<PermitCarrierDriverFormFields, 'cdlNumber' | 'cdlExpiration'>,
+  today: Date = new Date()
+): DriverCdlStatus {
+  const cdlNumber = trimField(fields.cdlNumber)
+  const expRaw = trimField(fields.cdlExpiration)
+
+  if (!cdlNumber) return 'missing'
+  if (!expRaw) return 'ok' // number present, no date on file yet
+
+  // Parse YYYY-MM-DD as local calendar date (avoid UTC shift)
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(expRaw)
+  if (!m) return 'ok'
+  const exp = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const msPerDay = 24 * 60 * 60 * 1000
+  const daysUntil = Math.floor((exp.getTime() - startOfToday.getTime()) / msPerDay)
+
+  if (daysUntil < 0) return 'expired'
+  if (daysUntil <= CDL_EXPIRING_SOON_DAYS) return 'expiring_soon'
+  return 'ok'
+}
+
+/** @deprecated Prefer getDriverCdlStatus — kept for existing call sites. */
 export function isDriverCdlMissing(
   fields: Pick<PermitCarrierDriverFormFields, 'cdlNumber'>
 ): boolean {
   return !trimField(fields.cdlNumber)
+}
+
+/** Short badge label for the selected-driver detail line. */
+export function driverCdlStatusLabel(
+  status: DriverCdlStatus,
+  fields?: Pick<PermitCarrierDriverFormFields, 'cdlExpiration'>
+): string | null {
+  switch (status) {
+    case 'missing':
+      return 'CDL missing'
+    case 'expired':
+      return 'CDL expired'
+    case 'expiring_soon': {
+      const exp = fields ? trimField(fields.cdlExpiration) : ''
+      return exp ? `CDL expires ${exp}` : 'CDL expiring soon'
+    }
+    default:
+      return null
+  }
 }
 
 /** Extract dotNumber/mcNumber for permit agent and optimize-route API payloads. */
