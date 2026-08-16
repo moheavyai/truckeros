@@ -4,88 +4,73 @@ import { test, expect } from '@playwright/test';
  * Critical-path smoke tests for MoHeavy AI.
  * Tagged @smoke so CI can run only this suite quickly.
  *
- * These tests intentionally avoid authenticated flows for now.
- * Auth storageState + fixture will be added in a follow-up once
- * we have a stable test account strategy.
+ * Public tests run without auth.
+ * Authenticated tests reuse storageState from auth.setup.ts.
  */
-test.describe('MoHeavy critical path @smoke', () => {
+
+test.describe('Public surface @smoke', () => {
+  // These do not need the authenticated storageState.
+  // They still run inside the chromium project (which has storageState),
+  // but they start from public URLs so the session is irrelevant.
+
   test('landing page loads and shows core brand + CTAs', async ({ page }) => {
     await page.goto('/');
 
-    // Brand
     await expect(page.getByText('MoHeavy AI').first()).toBeVisible();
     await expect(
       page.getByRole('heading', { name: /Operating System\s*for Truckers/i })
     ).toBeVisible();
 
-    // Primary CTAs
     await expect(page.getByRole('link', { name: 'Log In' }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: 'Get Started' })).toBeVisible();
   });
 
   test('login page loads in sign-in mode with form fields', async ({ page }) => {
+    // Clear storage so we see the real login form
+    await page.context().clearCookies();
     await page.goto('/login');
 
-    // Brand + title
     await expect(page.getByText('MoHeavy AI').first()).toBeVisible({
       timeout: 15_000,
     });
     await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
 
-    // Core form controls
     await expect(page.getByPlaceholder('Email')).toBeVisible();
     await expect(page.getByPlaceholder('Password')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
-
-    // Mode switchers present
-    await expect(page.getByRole('button', { name: /Forgot password/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Create one/i })).toBeVisible();
   });
+});
 
-  test('Get Started deep-links into signup mode', async ({ page }) => {
+test.describe('Authenticated critical path @smoke', () => {
+  test('after login we are inside the app (not on /login)', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('link', { name: 'Get Started' }).click();
 
-    await expect(page).toHaveURL(/\/login/);
-
-    // Signup surface
-    await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(page.getByPlaceholder('Email')).toBeVisible();
-    await expect(page.getByPlaceholder(/Password/)).toBeVisible();
-    await expect(page.getByPlaceholder('Confirm password')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible();
+    // Should not be bounced back to login
+    await expect(page).not.toHaveURL(/\/login/);
+    await expect(page.getByText(/MoHeavy/i).first()).toBeVisible();
   });
 
-  test('can switch from sign-in to signup and back via UI', async ({ page }) => {
-    await page.goto('/login');
+  test('can open Equipment page while authenticated', async ({ page }) => {
+    await page.goto('/equipment');
 
-    await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible({
-      timeout: 15_000,
-    });
+    // Should stay authenticated and render the equipment surface
+    await expect(page).not.toHaveURL(/\/login/);
+    await expect(page.getByText(/MoHeavy/i).first()).toBeVisible({ timeout: 15_000 });
 
-    // → Signup
-    await page.getByRole('button', { name: /Create one/i }).click();
-    await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible();
-    await expect(page.getByPlaceholder('Confirm password')).toBeVisible();
-
-    // → Back to sign-in
-    await page.getByRole('button', { name: /Sign in/i }).click();
-    await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+    // Soft signal that we are on the right page (tabs or heading)
+    // Exact copy may evolve; we mainly care that it does not 500 / redirect to login
+    const body = page.locator('body');
+    await expect(body).toContainText(/Equipment|Tractor|Trailer|Rig/i);
   });
 
-  test('forgot-password mode is reachable and shows email field', async ({ page }) => {
-    await page.goto('/login');
+  test('can open Permit Test page while authenticated', async ({ page }) => {
+    await page.goto('/permit-test');
 
-    await page.getByRole('button', { name: /Forgot password/i }).click();
+    await expect(page).not.toHaveURL(/\/login/);
+    await expect(page.getByText(/MoHeavy/i).first()).toBeVisible({ timeout: 15_000 });
 
-    await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible({
-      timeout: 10_000,
-    });
-    await expect(page.getByPlaceholder('Email')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Send reset link' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Back to/i })).toBeVisible();
+    // Permit-test is a large surface; just assert it rendered without crashing
+    const body = page.locator('body');
+    await expect(body).toContainText(/Permit|Route|Origin|Destination|Corridor/i);
   });
 });

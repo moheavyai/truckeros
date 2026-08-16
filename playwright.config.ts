@@ -1,15 +1,20 @@
 import { defineConfig, devices } from '@playwright/test';
+import path from 'path';
 
 /**
  * Playwright config for MoHeavy / TruckerOS critical-path smoke tests.
  *
  * BASE URL priority:
- * 1. PLAYWRIGHT_TEST_BASE_URL (set by GitHub Actions for Vercel previews)
+ * 1. PLAYWRIGHT_TEST_BASE_URL (set by GitHub Actions for Vercel previews / production)
  * 2. http://localhost:3000 (local `npm run dev`)
  *
- * Keep the suite small and stable. Prefer user-facing locators
- * (getByRole, getByText, getByLabel) over CSS classes.
+ * Auth:
+ * - e2e/auth.setup.ts runs once, logs in, saves storageState to playwright/.auth/user.json
+ * - Authenticated tests reuse that state (no repeated UI login)
+ * - Requires PLAYWRIGHT_TEST_EMAIL + PLAYWRIGHT_TEST_PASSWORD (GitHub Secrets in CI)
  */
+const authFile = path.join(__dirname, 'playwright/.auth/user.json');
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -25,21 +30,26 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
-    // Reasonable timeouts for a Next.js app that may still be warming
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
   },
 
   projects: [
+    // 1. Login once and save storage state
+    {
+      name: 'setup',
+      testMatch: /auth\.setup\.ts/,
+    },
+    // 2. Authenticated smoke (depends on setup)
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: authFile,
+      },
+      dependencies: ['setup'],
+      testIgnore: /auth\.setup\.ts/,
     },
-    // Uncomment later for mobile smoke if needed
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
-    // },
   ],
 
   // Only start a local server when no external base URL is provided
