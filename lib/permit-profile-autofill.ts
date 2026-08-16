@@ -316,27 +316,22 @@ export function resolveDriverProfileForSelection(
   return null
 }
 
-/** One-line driver summary for permit-test carrier mode: name, Driver ID, phone, CDL. */
+/** One-line driver summary for permit-test carrier mode: first name and/or #driverId only. */
 export function formatDriverSummaryLine(
   fields: Pick<
     PermitCarrierDriverFormFields,
-    'driverFullName' | 'driverId' | 'driverPhone' | 'cdlNumber' | 'cdlState'
+    'driverFullName' | 'driverId'
   >
 ): string {
   const name = trimField(fields.driverFullName)
   const driverId = trimField(fields.driverId)
-  const phone = trimField(fields.driverPhone)
-  const cdlNumber = trimField(fields.cdlNumber)
-  const cdlState = trimField(fields.cdlState)
 
-  if (!name && !driverId && !phone && !cdlNumber && !cdlState) return '—'
+  if (!name && !driverId) return '—'
 
+  // Prefer first name only (no phone, CDL, or other PII in the smart title)
+  const firstName = name ? name.split(/\s+/)[0] : null
   const idPart = driverId ? `#${driverId}` : null
-  const cdl =
-    cdlNumber || cdlState
-      ? `CDL ${cdlNumber || '—'}${cdlState ? ` (${cdlState})` : ''}`
-      : null
-  return [name || null, idPart, phone || null, cdl].filter(Boolean).join(' — ') || '—'
+  return [firstName, idPart].filter(Boolean).join(' ') || '—'
 }
 
 /** Extract dotNumber/mcNumber for permit agent and optimize-route API payloads. */

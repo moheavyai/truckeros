@@ -1592,6 +1592,15 @@ export default function PermitTestPage() {
 
   const updateStopQuery = (stopKey: StopKey, query: string) => {
     bumpGeocodeGeneration(stopKey)
+    // Clear prior geocode error for this field as soon as user edits
+    setErrors((prev) => {
+      const errKey = stopKey === 'origin' ? 'origin.query' : `${stopKey}.query`
+      if (!prev[errKey] && !prev['geocode']) return prev
+      const next = { ...prev }
+      delete next[errKey]
+      delete next['geocode']
+      return next
+    })
     setFormData((prev) => {
       if (stopKey === 'origin') {
         return {
@@ -1666,28 +1675,29 @@ export default function PermitTestPage() {
     if (isGeocoding[stopKey]) return
     if (!isAddressReadyForGeocode(address)) return
 
-    const now = Date.now()
-    if (now - (lastGeocodeAttempt.current[stopKey] || 0) < GEOCODE_COOLDOWN_MS) {
-      const seconds = Math.ceil(GEOCODE_COOLDOWN_MS / 1000)
-      setGeocodeStatus(`Please wait ~${seconds}s before geocoding again`)
-      return
-    }
-
-    lastGeocodeAttempt.current[stopKey] = now
-
+    // Cancel any pending timeout for this key (user still typing)
     if (geocodeTimeoutRef.current[stopKey]) {
       clearTimeout(geocodeTimeoutRef.current[stopKey])
     }
 
     geocodeTimeoutRef.current[stopKey] = setTimeout(async () => {
-      setIsGeocoding((prev) => ({ ...prev, [stopKey]: true }))
-      setGeocodeStatus(`Geocoding ${stopKey}...`)
-
+      // Re-check readiness after debounce — avoid firing on intermediate spaces/partials
       const latestAddress = getStopFromForm(formDataRef.current, stopKey)
       if (!isAddressReadyForGeocode(latestAddress)) {
-        setIsGeocoding((prev) => ({ ...prev, [stopKey]: false }))
         return
       }
+
+      // Only apply cooldown once we are about to actually call the geocoder
+      const now = Date.now()
+      if (now - (lastGeocodeAttempt.current[stopKey] || 0) < GEOCODE_COOLDOWN_MS) {
+        const seconds = Math.ceil(GEOCODE_COOLDOWN_MS / 1000)
+        setGeocodeStatus(`Please wait ~${seconds}s before geocoding again`)
+        return
+      }
+      lastGeocodeAttempt.current[stopKey] = now
+
+      setIsGeocoding((prev) => ({ ...prev, [stopKey]: true }))
+      setGeocodeStatus(`Geocoding ${stopKey}...`)
 
       const queryAtStart = buildGeocodeQuery(latestAddress)
       const generation = (geocodeGenerationRef.current[stopKey] || 0)
@@ -1703,27 +1713,54 @@ export default function PermitTestPage() {
           applyGeocodeToForm(stopKey, result)
           setShowManualCoords((prev) => ({ ...prev, [stopKey]: false }))
           setGeocodeStatus(`${stopKey} geocoded successfully`)
-          if (errors['geocode']) {
-            const { geocode: _, ...rest } = errors
-            setErrors(rest)
-          }
+          // Clear any prior error for this field
+          setErrors((prev) => {
+            const key = stopKey === 'origin' ? 'origin.query' : `${stopKey}.query`
+            if (!prev[key] && !prev['geocode']) return prev
+            const next = { ...prev }
+            delete next[key]
+            delete next['geocode']
+            return next
+          })
         } else if (isGeocodeFailure(result)) {
           setShowManualCoords((prev) => ({ ...prev, [stopKey]: true }))
           setGeocodeStatus(result.userMessage)
+          // Surface failure on the input for border + soft refocus
+          const errKey = stopKey === 'origin' ? 'origin.query' : `${stopKey}.query`
+          setErrors((prev) => ({ ...prev, [errKey]: result.userMessage || 'Could not geocode — check address' }))
           setRouteProgress((p) => (p === 'geocoding' || p === 'calculating' ? 'error' : p))
           setRouteProgressDetail('Fix the address above, then route will continue')
+          // Soft refocus the failed field after a tick so the user can continue typing
+          setTimeout(() => {
+            const el = document.querySelector(
+              stopKey === 'origin'
+                ? '#origin-address-section input[type="text"]'
+                : `#drops-section [data-drop-id="${String(stopKey).replace('drop-', '')}"] input[type="text"]`
+            ) as HTMLInputElement | null
+            el?.focus({ preventScroll: true })
+          }, 50)
         }
       } catch (error: any) {
         console.error('Geocoding error:', error)
         setShowManualCoords((prev) => ({ ...prev, [stopKey]: true }))
         setGeocodeStatus(GEOCODE_BUSY_MESSAGE)
+        const errKey = stopKey === 'origin' ? 'origin.query' : `${stopKey}.query`
+        setErrors((prev) => ({ ...prev, [errKey]: GEOCODE_BUSY_MESSAGE }))
         setRouteProgress((p) => (p === 'geocoding' || p === 'calculating' ? 'error' : p))
         setRouteProgressDetail('Fix the address above, then route will continue')
+        setTimeout(() => {
+          const el = document.querySelector(
+            stopKey === 'origin'
+              ? '#origin-address-section input[type="text"]'
+              : `#drops-section [data-drop-id="${String(stopKey).replace('drop-', '')}"] input[type="text"]`
+          ) as HTMLInputElement | null
+          el?.focus({ preventScroll: true })
+        }, 50)
       } finally {
         setIsGeocoding((prev) => ({ ...prev, [stopKey]: false }))
       }
-    }, 1200)
-  }, [errors, isGeocoding])
+    }, 1400) // slightly longer debounce so partial street + space does not fire early
+  }, [isGeocoding])
 
   const geocodeTimeoutRef = useRef<Record<string, NodeJS.Timeout | undefined>>({})
   const geocodeGenerationRef = useRef<Record<string, number>>({})
@@ -2997,16 +3034,9 @@ export default function PermitTestPage() {
           <div>
   <h2 className="text-lg font-semibold text-gray-900">
     {selectedDriverKey
-      ? (() => {
-          const fields = pickPermitCarrierDriverFields(formData)
-          const id = (fields.driverId || '').trim()
-          return id ? `1. Driver #${id}` : `1. Driver — ${formatDriverSummaryLine(fields)}`
-        })()
+      ? `1. Driver — ${formatDriverSummaryLine(pickPermitCarrierDriverFields(formData))}`
       : '1. Driver'}
   </h2>
-  <p className={`${fieldHintClass} mt-0.5`}>
-    Select the driver — their profile fills permit fields.
-  </p>
 </div>
 
           {workspaceMode === 'service' && !effectiveOrganizationId && (
@@ -3121,9 +3151,6 @@ export default function PermitTestPage() {
         <section className="space-y-2">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">2. Rig</h2>
-            <p className={`${fieldHintClass} mt-0.5`}>
-              Default rig when available — change only for different equipment.
-            </p>
           </div>
         <div className="flex items-center justify-between text-sm text-gray-600 py-1">
           <div>
@@ -3243,9 +3270,6 @@ export default function PermitTestPage() {
             3. Load details
             <button type="button" onClick={() => startVoiceInput('cargoDescription')} disabled={isListening} className="text-base p-1 hover:bg-gray-100 rounded" title="Speak cargo description">🎤</button>
           </h2>
-          <p className={`${fieldHintClass} mb-2`}>
-            Cargo, pieces, arrangement, and axle weights for oversize checks.
-          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <div className="md:col-span-2">
               <label className="block text-xs font-medium text-gray-800 mb-1">Description — what are you hauling?</label>
@@ -3801,9 +3825,6 @@ export default function PermitTestPage() {
               🎤
             </button>
           </h2>
-          <p className={`${fieldHintClass} mb-2`}>
-            Optional avoid/prefer rules (e.g. avoid AR, prefer I-40) — applied on first optimization.
-          </p>
           <textarea
             placeholder="E.g. avoid AR, avoid IL, include Corinth MS, prefer I-40 southern, stay on interstates..."
             value={manualRoute}
@@ -3811,9 +3832,6 @@ export default function PermitTestPage() {
             className={textareaClass}
             title="Prefer/include vias still apply with drops (placed before the first drop); multi-drop skips automatic corridor via suggestions."
           />
-          <p className={`${fieldHintTinyClass} mt-1`}>
-            Enforced in OR-Tools. Prefer/include vias apply with drops; multi-drop skips auto corridor vias.
-          </p>
         </div>
 
         {/* Pickup */}
@@ -3865,13 +3883,10 @@ export default function PermitTestPage() {
               + Add drop{formData.drops.length >= MAX_DROPS ? ` (max ${MAX_DROPS})` : ''}
             </button>
           </div>
-          <p className={`${fieldHintClass} -mt-1`}>
-            Delivery order; last drop is final destination. Business name or full address.
-          </p>
           {formData.drops.map((drop, idx) => {
             const key = dropStopKey(drop)
             return (
-            <div key={drop.id} className="border border-gray-300 sm:border-gray-200 rounded-xl p-3 min-w-0">
+            <div key={drop.id} data-drop-id={drop.id} className="border border-gray-300 sm:border-gray-200 rounded-xl p-3 min-w-0">
               <div className="flex flex-wrap items-start justify-between gap-2 min-w-0">
                 <div className="flex-1 min-w-0">
                   <LocationStopInput
@@ -4019,6 +4034,20 @@ export default function PermitTestPage() {
                 {/* Approval Gate Buttons + Change Route (only before saving) */}
                 {agentResult && !isSaved && (
                   <div className="space-y-4">
+                    {/* Success card when dimensions are legal and no permit is required */}
+                    {!routeRequiresPermit(primary) && (
+                      <div className="p-4 rounded-xl border-2 border-emerald-300 bg-emerald-50 text-emerald-900 shadow-sm">
+                        <div className="flex items-start gap-3">
+                          <span className="text-2xl leading-none">✅</span>
+                          <div>
+                            <div className="font-semibold text-lg">Legal dimensions — no permit required</div>
+                            <p className="text-sm mt-1 text-emerald-800">
+                              This route stays within standard legal limits for the selected rig and load. Portal Assist is not needed.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex flex-col sm:flex-row justify-center gap-4">
                       <button
                         onClick={handleRejectAndRestart}
@@ -4029,8 +4058,13 @@ export default function PermitTestPage() {
                       </button>
                       <button
                         onClick={handleApproveAndSave}
-                        disabled={loading || changeRouteBusy}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-8 py-3 rounded-lg text-lg disabled:bg-gray-400"
+                        disabled={loading || changeRouteBusy || !routeRequiresPermit(primary)}
+                        className={`font-semibold px-8 py-3 rounded-lg text-lg disabled:bg-gray-400 disabled:text-gray-200 disabled:cursor-not-allowed ${
+                          routeRequiresPermit(primary)
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                            : 'bg-gray-300 text-gray-500'
+                        }`}
+                        title={!routeRequiresPermit(primary) ? 'No permit needed — Portal Assist is disabled for legal routes' : undefined}
                       >
                         {/* Only Approve save uses "Saving…"; change-route uses changeRouteBusy + "Updating route…" */}
                         {loading && !changeRouteBusy ? 'Saving…' : 'Approve & Continue to Portal Assist'}
@@ -4228,6 +4262,9 @@ export default function PermitTestPage() {
                   </details>
                 )}
 
+                {/* When no permit is required, hide Scale / Restrictions / notes — not needed for legal loads */}
+                {routeRequiresPermit(primary) && (
+                <>
                 {/* Permit Readiness + Warnings (OR-Tools richer fields; only when present for backward compat) */}
                 {showRouteDetails && primary.permitReady !== undefined && (
                   <div className="p-4 border rounded-lg bg-white">
@@ -4404,7 +4441,11 @@ export default function PermitTestPage() {
                   </div>
                 )}
 
-                {/* Tier Selector (for cost estimation simulation) */}
+                
+                </>
+                )}
+
+{/* Tier Selector (for cost estimation simulation) */}
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-sm font-medium text-gray-600">Your Plan:</span>
                   <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm">

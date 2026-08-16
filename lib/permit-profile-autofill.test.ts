@@ -432,59 +432,49 @@ describe('driver selection key helpers', () => {
 })
 
 describe('formatDriverSummaryLine', () => {
-  it('formats name, phone, and CDL on one line', () => {
+  it('formats first name and driver id only', () => {
     expect(
       formatDriverSummaryLine({
         driverFullName: 'Dana Driver',
-        driverPhone: '(555) 555-6666',
-        cdlNumber: 'D7654321',
-        cdlState: 'OK',
+        driverId: '4444444444',
       })
-    ).toBe('Dana Driver — (555) 555-6666 — CDL D7654321 (OK)')
+    ).toBe('Dana #4444444444')
   })
 
   it('returns a single dash when all fields are empty', () => {
     expect(
       formatDriverSummaryLine({
         driverFullName: '',
-        driverPhone: '',
-        cdlNumber: '',
-        cdlState: '',
+        driverId: '',
       })
     ).toBe('—')
   })
 
-  it('fills missing phone and CDL with dashes when name is present', () => {
+  it('uses first name only when no driver id', () => {
     expect(
       formatDriverSummaryLine({
         driverFullName: 'Dana Driver',
-        driverPhone: '',
-        cdlNumber: '',
-        cdlState: '',
+        driverId: '',
       })
-    ).toBe('Dana Driver — — — —')
+    ).toBe('Dana')
   })
 
-  it('formats CDL with state only when number is missing', () => {
-    expect(
-      formatDriverSummaryLine({
-        driverFullName: 'Riley Roster',
-        driverPhone: '(555) 777-8888',
-        cdlNumber: '',
-        cdlState: 'LA',
-      })
-    ).toBe('Riley Roster — (555) 777-8888 — CDL — (LA)')
-  })
-
-  it('formats CDL number without state suffix when state is missing', () => {
+  it('uses #id only when no name', () => {
     expect(
       formatDriverSummaryLine({
         driverFullName: '',
-        driverPhone: '(555) 555-6666',
-        cdlNumber: 'D7654321',
-        cdlState: '',
+        driverId: '12345',
       })
-    ).toBe('— — (555) 555-6666 — CDL D7654321')
+    ).toBe('#12345')
+  })
+
+  it('ignores phone and CDL (not included in smart title)', () => {
+    expect(
+      formatDriverSummaryLine({
+        driverFullName: 'Riley Roster',
+        driverId: '999',
+      })
+    ).toBe('Riley #999')
   })
 })
 

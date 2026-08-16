@@ -58,8 +58,12 @@ export default function LocationStopInput({
             ✓ Geocoded{stop.state ? ` (${stop.state})` : ''}
           </span>
         ) : isGeocoding ? (
-          <span className="text-xs px-2.5 py-1 rounded-full bg-yellow-100 text-yellow-700 font-medium">
+          <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-medium">
             Geocoding...
+          </span>
+        ) : errorKey && errors[errorKey] ? (
+          <span className="text-xs px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-medium">
+            Geocode failed — fix address
           </span>
         ) : stop.query?.trim() ? (
           <span className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 font-medium">
@@ -77,7 +81,15 @@ export default function LocationStopInput({
         maxLength={MAX_Q_LEN}
         onChange={(e) => onQueryChange(e.target.value)}
         onBlur={onBlurGeocode}
-        className={`border p-4 min-h-[48px] rounded-lg w-full text-base text-gray-900 placeholder:text-gray-500 bg-white touch-manipulation ${errorKey && errors[errorKey] ? 'border-red-500' : 'border-gray-500 sm:border-gray-300'}`}
+        className={`border p-4 min-h-[48px] rounded-lg w-full text-base text-gray-900 placeholder:text-gray-500 bg-white touch-manipulation transition-colors ${
+          errorKey && errors[errorKey]
+            ? 'border-red-500 ring-1 ring-red-200'
+            : geocoded
+              ? 'border-emerald-500 ring-1 ring-emerald-100'
+              : isGeocoding
+                ? 'border-amber-400 ring-1 ring-amber-100'
+                : 'border-gray-500 sm:border-gray-300'
+        }`}
       />
       {errorKey && errors[errorKey] && (
         <p className="text-red-500 text-xs mt-1">{errors[errorKey]}</p>
