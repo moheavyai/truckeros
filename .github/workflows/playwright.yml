@@ -34,9 +34,10 @@ jobs:
       - name: Run smoke tests
         run: npx playwright test --grep @smoke
         env:
-          # Prefer an explicit URL if the caller sets it (e.g. Vercel preview).
-          # Otherwise the config falls back to starting `npm run dev`.
-          PLAYWRIGHT_TEST_BASE_URL: ${{ vars.PLAYWRIGHT_TEST_BASE_URL || '' }}
+          # Optional: set repo variable PLAYWRIGHT_TEST_BASE_URL to a stable
+          # production or staging URL. When empty, Playwright starts `npm run dev`.
+          # Later we can wire Vercel preview URLs via deployment_status.
+          PLAYWRIGHT_TEST_BASE_URL: ${{ vars.PLAYWRIGHT_TEST_BASE_URL }}
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
