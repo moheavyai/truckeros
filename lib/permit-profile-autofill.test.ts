@@ -7,6 +7,8 @@ import {
   EMPTY_PERMIT_CARRIER_DRIVER_FIELDS,
   filterDriverTeamMembers,
   formatDriverSummaryLine,
+  formatDriverDetailLine,
+  isDriverCdlMissing,
   clearDefaultPermitDriverKey,
   getDefaultPermitDriverKey,
   memberProfileToPermitAutofill,
@@ -475,6 +477,49 @@ describe('formatDriverSummaryLine', () => {
         driverId: '999',
       })
     ).toBe('Riley #999')
+  })
+})
+
+describe('formatDriverDetailLine', () => {
+  it('formats phone and CDL with state', () => {
+    expect(
+      formatDriverDetailLine({
+        driverPhone: '(555) 555-6666',
+        cdlNumber: 'D7654321',
+        cdlState: 'OK',
+      })
+    ).toBe('(555) 555-6666 · CDL D7654321 (OK)')
+  })
+
+  it('omits empty parts', () => {
+    expect(
+      formatDriverDetailLine({
+        driverPhone: '',
+        cdlNumber: 'D7654321',
+        cdlState: '',
+      })
+    ).toBe('CDL D7654321')
+  })
+
+  it('returns dash when nothing present', () => {
+    expect(
+      formatDriverDetailLine({
+        driverPhone: '',
+        cdlNumber: '',
+        cdlState: '',
+      })
+    ).toBe('—')
+  })
+})
+
+describe('isDriverCdlMissing', () => {
+  it('is true when cdl number is blank', () => {
+    expect(isDriverCdlMissing({ cdlNumber: '' })).toBe(true)
+    expect(isDriverCdlMissing({ cdlNumber: '  ' })).toBe(true)
+  })
+
+  it('is false when cdl number is present', () => {
+    expect(isDriverCdlMissing({ cdlNumber: 'D123' })).toBe(false)
   })
 })
 

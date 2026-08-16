@@ -316,7 +316,7 @@ export function resolveDriverProfileForSelection(
   return null
 }
 
-/** One-line driver summary for permit-test carrier mode: first name and/or #driverId only. */
+/** Smart title only: first name and/or #driverId (no phone/CDL). */
 export function formatDriverSummaryLine(
   fields: Pick<
     PermitCarrierDriverFormFields,
@@ -328,10 +328,39 @@ export function formatDriverSummaryLine(
 
   if (!name && !driverId) return '—'
 
-  // Prefer first name only (no phone, CDL, or other PII in the smart title)
   const firstName = name ? name.split(/\s+/)[0] : null
   const idPart = driverId ? `#${driverId}` : null
   return [firstName, idPart].filter(Boolean).join(' ') || '—'
+}
+
+/**
+ * Detail line under the driver title (mirrors Rig dimensions line).
+ * Phone · CDL number (state). Empty parts omitted.
+ * Callers should flag missing CDL separately via isDriverCdlMissing.
+ */
+export function formatDriverDetailLine(
+  fields: Pick<
+    PermitCarrierDriverFormFields,
+    'driverPhone' | 'cdlNumber' | 'cdlState'
+  >
+): string {
+  const phone = trimField(fields.driverPhone)
+  const cdlNumber = trimField(fields.cdlNumber)
+  const cdlState = trimField(fields.cdlState)
+
+  const parts: string[] = []
+  if (phone) parts.push(phone)
+  if (cdlNumber || cdlState) {
+    parts.push(`CDL ${cdlNumber || '—'}${cdlState ? ` (${cdlState})` : ''}`)
+  }
+  return parts.join(' · ') || '—'
+}
+
+/** True when CDL number is blank — used for missing/expired visual flags. */
+export function isDriverCdlMissing(
+  fields: Pick<PermitCarrierDriverFormFields, 'cdlNumber'>
+): boolean {
+  return !trimField(fields.cdlNumber)
 }
 
 /** Extract dotNumber/mcNumber for permit agent and optimize-route API payloads. */
