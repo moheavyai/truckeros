@@ -54,26 +54,60 @@ test.describe('Authenticated critical path @smoke', () => {
     await expect(page).not.toHaveURL(/\/login/);
     await expect(page.getByText(/MoHeavy/i).first()).toBeVisible({ timeout: 15_000 });
 
-    // Fresh Owner-Operator account should land on the redesigned empty state
-    // with Tractors | Trailers | Rigs tabs (or equivalent guidance).
     const body = page.locator('body');
     await expect(body).toContainText(/Equipment|Tractor|Trailer|Rig/i);
 
-    // Prefer explicit tab labels when present
-    const tractors = page.getByRole('tab', { name: /Tractors?/i });
-    const trailers = page.getByRole('tab', { name: /Trailers?/i });
-    const rigs = page.getByRole('tab', { name: /Rigs?/i });
+    // Tab buttons are plain <button>s, not role=tab
+    await expect(page.getByRole('button', { name: 'Tractors' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Trailers' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Rigs' })).toBeVisible();
+  });
 
-    const tabCount =
-      (await tractors.count()) + (await trailers.count()) + (await rigs.count());
+  test('can create and delete a tractor profile', async ({ page }) => {
+    // Unique name so we do not collide with leftover data
+    const profileName = `PW Tractor ${Date.now()}`;
 
-    if (tabCount > 0) {
-      // At least one of the expected tabs is visible
-      await expect(tractors.or(trailers).or(rigs).first()).toBeVisible();
-    } else {
-      // Fallback: page still clearly talks about equipment
-      await expect(body).toContainText(/add|create|tractor|trailer|rig/i);
-    }
+    // Auto-accept the browser confirm() used by deleteTractor
+    page.on('dialog', async (dialog) => {
+      await dialog.accept();
+    });
+
+    await page.goto('/equipment');
+    await expect(page.getByText(/MoHeavy/i).first()).toBeVisible({ timeout: 15_000 });
+
+    // Ensure we are on Tractors tab
+    await page.getByRole('button', { name: 'Tractors' }).click();
+
+    // Open new tractor editor
+    await page.getByRole('button', { name: /New Tractor Profile/i }).click();
+
+    // Profile Name is the first required field in the editor
+    // Labels are tiny; the input is bound to profile_name
+    const nameInput = page.locator('input').filter({ has: page.locator('..') }).first();
+    // More reliable: find the input near "Profile Name"
+    const profileNameInput = page
+      .locator('label', { hasText: /Profile Name/i })
+      .locator('..')
+      .locator('input')
+      .first();
+
+    await expect(profileNameInput).toBeVisible({ timeout: 10_000 });
+    await profileNameInput.fill(profileName);
+
+    // Save
+    await page.getByRole('button', { name: 'Save Tractor' }).click();
+
+    // After save the editor closes and the card should appear
+    await expect(page.getByText(profileName).first()).toBeVisible({
+      timeout: 20_000,
+    });
+
+    // Clean up — Delete sits on the card
+    const card = page.locator('div').filter({ hasText: profileName }).first();
+    await card.getByRole('button', { name: 'Delete' }).click();
+
+    // Profile should disappear
+    await expect(page.getByText(profileName)).toHaveCount(0, { timeout: 15_000 });
   });
 
   test('Permit Test page renders core route surface', async ({ page }) => {
@@ -83,37 +117,16 @@ test.describe('Authenticated critical path @smoke', () => {
     await expect(page.getByText(/MoHeavy/i).first()).toBeVisible({ timeout: 15_000 });
 
     const body = page.locator('body');
-
-    // Core permit-test vocabulary — do not require a live OR-Tools response
     await expect(body).toContainText(/Permit|Route|Origin|Destination|Corridor|Load/i);
-
-    // Prefer visible origin/destination style fields when present
-    const originish = page.getByPlaceholder(/origin|from|start/i).or(
-      page.getByLabel(/origin|from|start/i)
-    );
-    const destish = page.getByPlaceholder(/destination|to|end/i).or(
-      page.getByLabel(/destination|to|end/i)
-    );
-
-    // Soft check — if the labels exist, they should be visible; if not, the
-    // body-level assertion above is still enough for smoke.
-    if ((await originish.count()) > 0) {
-      await expect(originish.first()).toBeVisible();
-    }
-    if ((await destish.count()) > 0) {
-      await expect(destish.first()).toBeVisible();
-    }
   });
 
   test('Portal Assist route is reachable while authenticated', async ({ page }) => {
-    // Direct navigation — even if empty, should not bounce to login
     await page.goto('/portal-assist');
 
     await expect(page).not.toHaveURL(/\/login/);
     await expect(page.getByText(/MoHeavy/i).first()).toBeVisible({ timeout: 15_000 });
 
     const body = page.locator('body');
-    // Page may show empty state or require a prior permit — either is fine for smoke
     await expect(body).toContainText(/Portal|Assist|Permit|Copy|Checklist|Filing/i);
   });
 });
