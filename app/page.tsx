@@ -77,10 +77,19 @@ export default function MoHeavyLanding() {
 
       {/* Footer */}
       <footer className="border-t border-gray-200 py-8">
-        <div className="max-w-5xl mx-auto px-6 text-center text-sm text-gray-500">
-          MoHeavy AI — Operating System for Truckers
+        <div className="max-w-5xl mx-auto px-6 text-center text-sm text-gray-500 space-y-2">
+          <div>MoHeavy AI — Operating System for Truckers</div>
+          <div className="flex items-center justify-center gap-3">
+            <a href="/legal/terms" className="hover:text-gray-900 underline-offset-2 hover:underline">
+              Terms of Service
+            </a>
+            <span aria-hidden="true">·</span>
+            <a href="/legal/privacy" className="hover:text-gray-900 underline-offset-2 hover:underline">
+              Privacy Policy
+            </a>
+          </div>
         </div>
       </footer>
     </div>
-  );
+  )
 }
