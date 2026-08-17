@@ -1719,6 +1719,7 @@ export default function PermitTestPage() {
 
   // Ref for scrolling to results after submission
   const resultsRef = useRef<HTMLDivElement>(null)
+  const routeMapSectionRef = useRef<HTMLDivElement>(null)
 
   const getStopFromForm = (data: typeof formData, stopKey: StopKey): LocationStop => {
     if (stopKey === 'origin') return data.origin
@@ -2196,6 +2197,9 @@ export default function PermitTestPage() {
     ].join('|')
 
     if (fingerprint === lastRouteFingerprintRef.current && agentResult) {
+      // Explicit Run may have set calculating already — restore ready if nothing new to run.
+      setRouteProgress('ready')
+      setRouteProgressDetail('Route ready')
       return
     }
 
@@ -2623,9 +2627,26 @@ export default function PermitTestPage() {
     window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })
   }
 
+  const scrollFocusRouteMap = () => {
+    const el = routeMapSectionRef.current
+    if (!el) return
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
+    el.focus({ preventScroll: true })
+  }
+
   const handleRunAnalysis = () => {
+    // Paint calculating chrome before async geocode/optimize so Run feels started.
+    setRouteProgress('calculating')
+    setRouteProgressDetail('Calculating best route…')
     setAutoRouteEnabled(true)
     void runRouteAnalysis()
+    // Double rAF: Review bar hide + status badge paint before measuring scroll target.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(scrollFocusRouteMap)
+    })
   }
 
   // Handle manual route change (Change Route feature)
@@ -4176,7 +4197,14 @@ export default function PermitTestPage() {
         )}
 
         {/* Map v1: single Route card (replaces tall progress hero + long corridor preview chrome). */}
-        <RouteMapCard model={routeMapModel} className={ROUTE_MAP_CARD_EMBED_CLASS} />
+        <div
+          ref={routeMapSectionRef}
+          id="route-map-section"
+          tabIndex={-1}
+          className="scroll-mt-28 sm:scroll-mt-32 outline-none"
+        >
+          <RouteMapCard model={routeMapModel} className={ROUTE_MAP_CARD_EMBED_CLASS} />
+        </div>
         </div> {/* End form card */}
       </form>
 
