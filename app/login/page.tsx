@@ -20,6 +20,7 @@ import {
   resolveAuthenticatedLandingPath,
 } from '@/lib/onboarding'
 import { fetchActorTeamContext } from '@/lib/roster-profile-link'
+import { buildConsentPayload } from '@/lib/legal'
 import type { User } from '@supabase/supabase-js'
 
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'recovery'
@@ -58,11 +59,28 @@ function readInitialMode(): AuthMode {
   return 'signin'
 }
 
+async function recordUserConsent(userId: string) {
+  const payload = buildConsentPayload()
+  const supabase = createClient()
+  const { error } = await supabase.from('user_consents').upsert(
+    {
+      user_id: userId,
+      ...payload,
+    },
+    { onConflict: 'user_id' }
+  )
+  if (error) {
+    // Non-blocking: consent was still accepted in the UI; log for ops.
+    console.warn('[login] failed to persist user_consents', error)
+  }
+}
+
 export default function LoginPage() {
   const [mode, setMode] = useState<AuthMode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [acceptedLegal, setAcceptedLegal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
   const [authError, setAuthError] = useState<string | null>(null)
@@ -205,6 +223,7 @@ export default function LoginPage() {
     setSuccessMessage(null)
     setPassword('')
     setConfirmPassword('')
+    if (next !== 'signup') setAcceptedLegal(false)
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -281,8 +300,14 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
+    if (!acceptedLegal) {
+      setAuthError('You must agree to the Terms of Service and Privacy Policy to create an account.')
+      setLoading(false)
+      return
+    }
 
     const supabase = createClient()
+    const consent = buildConsentPayload()
 
     try {
       const pathToPersist = hasExplicitRedirect ? candidatePostLoginPath : null
@@ -298,7 +323,15 @@ export default function LoginPage() {
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
-        options: emailRedirectTo ? { emailRedirectTo } : undefined,
+        options: {
+          emailRedirectTo,
+          data: {
+            terms_version: consent.terms_version,
+            terms_accepted_at: consent.terms_accepted_at,
+            privacy_version: consent.privacy_version,
+            privacy_accepted_at: consent.privacy_accepted_at,
+          },
+        },
       })
 
       if (error) {
@@ -307,16 +340,19 @@ export default function LoginPage() {
       }
 
       if (data.session?.user) {
+        await recordUserConsent(data.session.user.id)
         await redirectAuthenticated(data.session.user)
         return
       }
 
+      // Email confirmation required — consent is already in user_metadata.
       setSuccessMessage(
         'Account created. Check your email for the confirmation link. After you confirm, return here and sign in.'
       )
       setMode('signin')
       setPassword('')
       setConfirmPassword('')
+      setAcceptedLegal(false)
     } catch (err: any) {
       const message = err?.message || 'An unexpected error occurred during sign up.'
       if (message.toLowerCase().includes('fetch')) {
@@ -596,12 +632,43 @@ export default function LoginPage() {
                     minLength={8}
                   />
                   <p className="text-xs text-gray-500">{PASSWORD_HINT}</p>
+
+                  <label className="flex items-start gap-3 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={acceptedLegal}
+                      onChange={(e) => setAcceptedLegal(e.target.checked)}
+                      className="mt-1 h-4 w-4 rounded border-gray-400 text-black focus:ring-black"
+                      required
+                    />
+                    <span>
+                      I agree to the{' '}
+                      <a
+                        href="/legal/terms"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-black underline underline-offset-2"
+                      >
+                        Terms of Service
+                      </a>{' '}
+                      and{' '}
+                      <a
+                        href="/legal/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-black underline underline-offset-2"
+                      >
+                        Privacy Policy
+                      </a>
+                      .
+                    </span>
+                  </label>
                 </>
               )}
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || (isSignUp && !acceptedLegal)}
                 className="bg-black text-white px-6 py-3 rounded-lg w-full font-semibold hover:bg-gray-900 disabled:bg-gray-400 transition-colors flex items-center justify-center gap-2"
               >
                 {loading ? (
@@ -666,6 +733,16 @@ export default function LoginPage() {
             )}
           </div>
         </div>
+
+        <p className="mt-6 text-center text-xs text-gray-500">
+          <a href="/legal/terms" className="hover:text-gray-800 underline-offset-2 hover:underline">
+            Terms
+          </a>
+          {' · '}
+          <a href="/legal/privacy" className="hover:text-gray-800 underline-offset-2 hover:underline">
+            Privacy
+          </a>
+        </p>
       </div>
     </div>
   )
