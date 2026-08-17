@@ -88,6 +88,10 @@ import {
   parseAndClampPieces,
   resolveLoadedArrangementForPieces,
   resolvePiecesAndArrangementForSubmit,
+  sanitizeNumberOfPieces,
+  type LoadedArrangement,
+  type LoadedArrangementFormValue,
+  type MoveType,
 } from '@/lib/load-details-options'
 import { buildPermitCargoSnapshot } from '@/lib/permit-cargo-snapshot'
 import { isDevEnvironment } from '@/lib/dev-mode'
@@ -122,6 +126,76 @@ type StopKey = 'origin' | `drop-${string}`
 
 function dropStopKey(drop: DropStop): StopKey {
   return `drop-${drop.id}`
+}
+
+type CargoLoadDetailsPrefill = {
+  cargoDescription?: string
+  cargoManufacturer?: string
+  cargoMakeModel?: string
+  cargoSerialNumber?: string
+  numberOfPieces?: number
+  loadedArrangement?: LoadedArrangementFormValue
+  moveType?: MoveType
+  loadWeightLbs?: string
+  loadLengthFt?: string
+  loadWidthFt?: string
+  loadHeightFt?: string
+}
+
+function optionalPrefillText(value: unknown): string | undefined {
+  if (value == null) return undefined
+  return String(value)
+}
+
+function optionalPrefillDim(value: unknown): string | undefined {
+  if (value == null || value === '') return undefined
+  if (typeof value === 'number' && !Number.isFinite(value)) return undefined
+  return String(value)
+}
+
+/** Map persisted cargo snapshot onto Load details fields. Does not invent envelope dims. */
+function cargoSnapshotToLoadDetailsPatch(cargo: unknown): CargoLoadDetailsPrefill {
+  if (!cargo || typeof cargo !== 'object') return {}
+  const src = cargo as Record<string, unknown>
+  const patch: CargoLoadDetailsPrefill = {}
+
+  const description = optionalPrefillText(src.description)
+  if (description !== undefined) patch.cargoDescription = description
+  const manufacturer = optionalPrefillText(src.manufacturer)
+  if (manufacturer !== undefined) patch.cargoManufacturer = manufacturer
+  const makeModel = optionalPrefillText(src.makeModel)
+  if (makeModel !== undefined) patch.cargoMakeModel = makeModel
+  const serialNumber = optionalPrefillText(src.serialNumber)
+  if (serialNumber !== undefined) patch.cargoSerialNumber = serialNumber
+  if (src.numberOfPieces != null) {
+    patch.numberOfPieces = sanitizeNumberOfPieces(src.numberOfPieces)
+  }
+  if (
+    typeof src.loadedArrangement === 'string' &&
+    (LOADED_ARRANGEMENT_OPTIONS as readonly string[]).includes(src.loadedArrangement)
+  ) {
+    patch.loadedArrangement = src.loadedArrangement as LoadedArrangement
+  }
+  if (
+    typeof src.moveType === 'string' &&
+    (MOVE_TYPE_OPTIONS as readonly string[]).includes(src.moveType)
+  ) {
+    patch.moveType = src.moveType as MoveType
+  }
+
+  const load = src.load && typeof src.load === 'object' ? (src.load as Record<string, unknown>) : null
+  if (load) {
+    const weightLbs = optionalPrefillDim(load.weightLbs)
+    if (weightLbs !== undefined) patch.loadWeightLbs = weightLbs
+    const lengthFt = optionalPrefillDim(load.lengthFt)
+    if (lengthFt !== undefined) patch.loadLengthFt = lengthFt
+    const widthFt = optionalPrefillDim(load.widthFt)
+    if (widthFt !== undefined) patch.loadWidthFt = widthFt
+    const heightFt = optionalPrefillDim(load.heightFt)
+    if (heightFt !== undefined) patch.loadHeightFt = heightFt
+  }
+
+  return patch
 }
 
 type PermitPrimary = {
@@ -891,6 +965,20 @@ export default function PermitTestPage() {
                 },
               ]
 
+        const cargoPatch = cargoSnapshotToLoadDetailsPatch(data.cargo)
+        const equipment =
+          data.equipment && typeof data.equipment === 'object'
+            ? (data.equipment as Record<string, unknown>)
+            : null
+        const savedRigId =
+          (typeof equipment?.selectedRigId === 'string' && equipment.selectedRigId) ||
+          (typeof equipment?.profileId === 'string' && equipment.profileId) ||
+          ''
+        // Same path as ?rigId= — do not clobber an explicit URL rig.
+        if (savedRigId && !pendingRigIdRef.current) {
+          pendingRigIdRef.current = savedRigId
+        }
+
         setFormData((prev) => ({
           ...prev,
           origin: {
@@ -917,6 +1005,7 @@ export default function PermitTestPage() {
           length: Number(data.length) || prev.length,
           width: Number(data.width) || prev.width,
           height: Number(data.height) || prev.height,
+          ...cargoPatch,
         }))
         setAgentResult(null)
         setResult(null)
@@ -2977,7 +3066,13 @@ export default function PermitTestPage() {
     <div className="w-full min-w-0">
       <AppHeader user={user} ownOrganizationId={ownOrganizationId} />
 
-      <div className="max-w-3xl mx-auto px-4 py-6 sm:px-8 sm:pb-8 w-full min-w-0">
+      <div
+        className={`max-w-3xl mx-auto px-4 py-6 sm:px-8 w-full min-w-0 ${
+          !autoRouteEnabled
+            ? 'pb-[calc(10.5rem+env(safe-area-inset-bottom,0px))] sm:pb-[calc(7rem+env(safe-area-inset-bottom,0px))]'
+            : 'sm:pb-8'
+        }`}
+      >
       <ActiveCarrierBanner ownOrganizationId={ownOrganizationId} />
 
       <div className="mb-6">
@@ -3129,24 +3224,6 @@ export default function PermitTestPage() {
       </div>
 
       <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
-        {!autoRouteEnabled && (
-          <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 px-4 py-3 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center gap-3 shadow-sm">
-            <div className="min-w-0 flex-1">
-              <div className="font-semibold text-amber-950 text-sm sm:text-base">Review mode</div>
-              <p className="text-xs sm:text-sm text-amber-900 mt-0.5">
-                Change any field freely — analysis will not run until you tap Run analysis.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleRunAnalysis}
-              disabled={loading}
-              className="shrink-0 min-h-[44px] px-5 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 disabled:opacity-50 touch-manipulation"
-            >
-              {loading ? 'Running…' : 'Run analysis'}
-            </button>
-          </div>
-        )}
         {/* Form Card Wrapper for polished look */}
         <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 space-y-8 shadow-sm min-w-0">
         {/* Validation Errors */}
@@ -4831,6 +4908,31 @@ export default function PermitTestPage() {
       </div>
       )}
       </div>{/* max-w-3xl content shell */}
+
+      {/* Fixed bottom: sticky fails under overflow-x-clip ancestors; fixed stays in viewport. */}
+      {!autoRouteEnabled && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-amber-400 bg-amber-50 shadow-[0_-8px_24px_rgba(0,0,0,0.12)]"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
+        >
+          <div className="max-w-3xl mx-auto px-4 pt-3 sm:px-8 sm:pt-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-amber-950 text-sm sm:text-base">Review mode</div>
+              <p className="text-xs sm:text-sm text-amber-900 mt-0.5">
+                Change any field freely — analysis will not run until you tap Run analysis.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleRunAnalysis}
+              disabled={loading}
+              className="shrink-0 min-h-[44px] px-5 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 disabled:opacity-50 touch-manipulation"
+            >
+              {loading ? 'Running…' : 'Run analysis'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
