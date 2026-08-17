@@ -3067,10 +3067,8 @@ export default function PermitTestPage() {
       <AppHeader user={user} ownOrganizationId={ownOrganizationId} />
 
       <div
-        className={`max-w-3xl mx-auto px-4 py-6 sm:px-8 w-full min-w-0 ${
-          !autoRouteEnabled
-            ? 'pb-[calc(10.5rem+env(safe-area-inset-bottom,0px))] sm:pb-[calc(7rem+env(safe-area-inset-bottom,0px))]'
-            : 'sm:pb-8'
+        className={`max-w-3xl mx-auto px-4 sm:px-8 w-full min-w-0 pb-6 sm:pb-8 ${
+          !autoRouteEnabled ? 'pt-[9.5rem] sm:pt-24' : 'pt-6'
         }`}
       >
       <ActiveCarrierBanner ownOrganizationId={ownOrganizationId} />
@@ -4909,13 +4907,10 @@ export default function PermitTestPage() {
       )}
       </div>{/* max-w-3xl content shell */}
 
-      {/* Fixed bottom: sticky fails under overflow-x-clip ancestors; fixed stays in viewport. */}
+      {/* Fixed under AppHeader (sticky top-0 z-50, ~56/64px). fixed avoids overflow-x-clip sticky bugs. */}
       {!autoRouteEnabled && (
-        <div
-          className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-amber-400 bg-amber-50 shadow-[0_-8px_24px_rgba(0,0,0,0.12)]"
-          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
-        >
-          <div className="max-w-3xl mx-auto px-4 pt-3 sm:px-8 sm:pt-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="fixed left-0 right-0 z-40 top-14 sm:top-16 border-b-2 border-amber-400 bg-amber-50 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+          <div className="max-w-3xl mx-auto px-4 py-3 sm:px-8 sm:py-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="min-w-0 flex-1">
               <div className="font-semibold text-amber-950 text-sm sm:text-base">Review mode</div>
               <p className="text-xs sm:text-sm text-amber-900 mt-0.5">
