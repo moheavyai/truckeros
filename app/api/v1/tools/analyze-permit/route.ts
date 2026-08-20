@@ -28,7 +28,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const auth = await authenticateAgentRequest(request)
-    if (!auth.ok) {
+    // Explicit === false so TypeScript narrows to AgentAuthFailure (has status/error)
+    if (auth.ok === false) {
       statusCode = auth.status
       return NextResponse.json(
         { ok: false, error: auth.error, tool: TOOL_NAME },
