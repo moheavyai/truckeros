@@ -2040,6 +2040,8 @@ export default function ProfilePage() {
   const showTeamSection = shouldShowTeamSection(effectiveOwnProfile, teamMembers)
   // Write/manage gates: prefer acting SSoT for home org over raw home user_roles alone.
   const canWriteProfile = canWriteTeamData(actingPermissionActor)
+  // Owner/Admin only — matches /settings/api-keys gate
+  const canManageApiKeys = hasManagementAccess(actingPermissionActor)
   const canEditRoles =
     editingTarget.kind !== 'self'
       ? canManageMemberPermissions(actingPermissionActor)
@@ -2242,10 +2244,22 @@ export default function ProfilePage() {
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10 min-w-0">
         {!showOwnerBootstrapSetup && (
           <div className="mb-8">
-            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900">Member Profile</h1>
-            <p className={`${bodyTextClass} mt-1.5 text-[15px]`}>
-              Keep carrier and driver details ready for permits and team coordination.
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div className="min-w-0">
+                <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900">Member Profile</h1>
+                <p className={`${bodyTextClass} mt-1.5 text-[15px]`}>
+                  Keep carrier and driver details ready for permits and team coordination.
+                </p>
+              </div>
+              {canManageApiKeys && (
+                <a
+                  href="/settings/api-keys"
+                  className="inline-flex items-center justify-center min-h-[44px] shrink-0 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 touch-manipulation"
+                >
+                  Manage API keys
+                </a>
+              )}
+            </div>
             {showAssignedRoleBadges && (
               <p className={`mt-3 text-sm ${bodyTextClass}`}>
                 Your assigned roles:{' '}
