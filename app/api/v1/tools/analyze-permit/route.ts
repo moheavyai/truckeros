@@ -4,6 +4,9 @@
  * Agent-facing entry point for the MoHeavy Permit Engine.
  * Reuses processPermitRequest. Auth via API key (mh_live_...) or user JWT.
  * Required scope: analyze_permit
+ *
+ * Geocoding: when origin/destination omit lat/lon, resolve city/state/street/zip
+ * server-side. Explicit originLat/Lon still win (highway waypoints, etc.).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -14,6 +17,7 @@ import {
   authenticateAgentRequest,
   recordAgentUsage,
 } from '@/lib/agent-api-auth'
+import { resolveLocationToCoords } from '@/lib/geocode-for-agent'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -28,7 +32,6 @@ export async function POST(request: NextRequest) {
 
   try {
     const auth = await authenticateAgentRequest(request)
-    // Explicit === false so TypeScript narrows to AgentAuthFailure (has status/error)
     if (auth.ok === false) {
       statusCode = auth.status
       return NextResponse.json(
@@ -72,6 +75,50 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Prefer explicit coords; otherwise geocode city/state/street/zip/query
+    const originResolved = await resolveLocationToCoords({
+      query: body.origin?.query,
+      street: body.origin?.street,
+      city: body.origin?.city,
+      state: body.origin?.state,
+      zip: body.origin?.zip,
+      lat: body.originLat != null ? Number(body.originLat) : undefined,
+      lon: body.originLon != null ? Number(body.originLon) : undefined,
+    })
+
+    const destinationResolved = await resolveLocationToCoords({
+      query: body.destination?.query,
+      street: body.destination?.street,
+      city: body.destination?.city,
+      state: body.destination?.state,
+      zip: body.destination?.zip,
+      lat: body.destinationLat != null ? Number(body.destinationLat) : undefined,
+      lon: body.destinationLon != null ? Number(body.destinationLon) : undefined,
+    })
+
+    if (!originResolved || !destinationResolved) {
+      statusCode = 400
+      const missing: string[] = []
+      if (!originResolved) missing.push('origin')
+      if (!destinationResolved) missing.push('destination')
+      return NextResponse.json(
+        {
+          ok: false,
+          tool: TOOL_NAME,
+          error: `Could not geocode ${missing.join(' and ')}. Provide city+state, a full address, or explicit lat/lon.`,
+          geocode: {
+            origin: originResolved
+              ? { ok: true, source: originResolved.source }
+              : { ok: false },
+            destination: destinationResolved
+              ? { ok: true, source: destinationResolved.source }
+              : { ok: false },
+          },
+        },
+        { status: 400 }
+      )
+    }
+
     const loadDetails: LoadDetails = {
       origin: {
         query: body.origin?.query || '',
@@ -94,12 +141,10 @@ export async function POST(request: NextRequest) {
       length: Number(body.length),
       width: Number(body.width),
       height: Number(body.height),
-      originLat: body.originLat != null ? Number(body.originLat) : undefined,
-      originLon: body.originLon != null ? Number(body.originLon) : undefined,
-      destinationLat:
-        body.destinationLat != null ? Number(body.destinationLat) : undefined,
-      destinationLon:
-        body.destinationLon != null ? Number(body.destinationLon) : undefined,
+      originLat: originResolved.lat,
+      originLon: originResolved.lon,
+      destinationLat: destinationResolved.lat,
+      destinationLon: destinationResolved.lon,
       drops: dropsResult.drops.length > 0 ? dropsResult.drops : undefined,
       manualRoute: Array.isArray(body.manualRoute) ? body.manualRoute : undefined,
       manualWaypoints: Array.isArray(body.manualWaypoints)
@@ -151,6 +196,24 @@ export async function POST(request: NextRequest) {
       ok: true,
       tool: TOOL_NAME,
       organization_id: organizationId,
+      geocode: {
+        origin: {
+          source: originResolved.source,
+          lat: originResolved.lat,
+          lon: originResolved.lon,
+          ...(originResolved.displayName
+            ? { display_name: originResolved.displayName }
+            : {}),
+        },
+        destination: {
+          source: destinationResolved.source,
+          lat: destinationResolved.lat,
+          lon: destinationResolved.lon,
+          ...(destinationResolved.displayName
+            ? { display_name: destinationResolved.displayName }
+            : {}),
+        },
+      },
       result,
     })
   } catch (error: any) {
