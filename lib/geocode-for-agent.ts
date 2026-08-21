@@ -54,6 +54,14 @@ function hasValidCoords(lat?: number, lon?: number): boolean {
   )
 }
 
+/** GeocodeDto stores lat/lon as strings from Nominatim. */
+function parseDtoCoords(dto: GeocodeDto): { lat: number; lon: number } | null {
+  const lat = Number(dto.lat)
+  const lon = Number(dto.lon)
+  if (!hasValidCoords(lat, lon)) return null
+  return { lat, lon }
+}
+
 function normalizeState(raw?: string): string | null {
   if (!raw) return null
   const t = raw.trim().toUpperCase()
@@ -182,11 +190,14 @@ export async function resolveLocationToCoords(
 
   const ranked = rankResults(dtos, stateCode ?? rankingContext.state ?? null, rankingContext)
   const best = ranked[0]
-  if (!best || !hasValidCoords(best.lat, best.lon)) return null
+  if (!best) return null
+
+  const coords = parseDtoCoords(best)
+  if (!coords) return null
 
   return {
-    lat: best.lat,
-    lon: best.lon,
+    lat: coords.lat,
+    lon: coords.lon,
     source: 'geocoded',
     displayName: best.display_name,
   }
