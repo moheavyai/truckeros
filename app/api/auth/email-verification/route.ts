@@ -9,12 +9,11 @@ import {
   EMAIL_VERIFY_TOKEN_TTL_MS,
   buildConfirmEmailMessage,
   buildConfirmEmailUrl,
-  generateEmailToken,
-  hashEmailToken,
   isEmailVerified,
   isEmailVerifyCooldownActive,
   resolveEmailVerifyOrigin,
 } from '@/lib/email-verification'
+import { generateEmailToken, hashEmailToken } from '@/lib/email-verification-crypto'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
