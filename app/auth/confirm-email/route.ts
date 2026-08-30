@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerSupabase } from '@/lib/supabase/server'
-import { hashEmailToken } from '@/lib/email-verification'
+import { hashEmailToken } from '@/lib/email-verification-crypto'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
