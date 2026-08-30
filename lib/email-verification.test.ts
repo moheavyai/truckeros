@@ -4,6 +4,7 @@ import {
   emailVerifyCooldownRemainingMs,
   isEmailVerified,
   isEmailVerifyCooldownActive,
+  shouldAutoSendFirstVerificationEmail,
 } from './email-verification'
 import { generateEmailToken, hashEmailToken } from './email-verification-crypto'
 
@@ -17,7 +18,7 @@ describe('isEmailVerified', () => {
     expect(isEmailVerified(undefined)).toBe(false)
     expect(isEmailVerified({ verified_at: null })).toBe(false)
     expect(isEmailVerified({ verified_at: '' })).toBe(false)
-    expect(isEmailVerified({})).toBe(false)
+    expect(isEmailVerified({ })).toBe(false)
   })
 })
 
@@ -62,5 +63,22 @@ describe('email verify cooldown math', () => {
     expect(emailVerifyCooldownRemainingMs(lastSent, sentMs + EMAIL_VERIFY_COOLDOWN_MS + 5_000)).toBe(
       0
     )
+  })
+})
+
+describe('shouldAutoSendFirstVerificationEmail', () => {
+  it('sends only when unverified and nothing has been sent yet', () => {
+    expect(shouldAutoSendFirstVerificationEmail({ verified: false, lastSentAt: null })).toBe(true)
+    expect(shouldAutoSendFirstVerificationEmail({ verified: false, lastSentAt: undefined })).toBe(true)
+  })
+
+  it('does not send when already verified or a letter was already requested', () => {
+    expect(shouldAutoSendFirstVerificationEmail({ verified: true, lastSentAt: null })).toBe(false)
+    expect(
+      shouldAutoSendFirstVerificationEmail({
+        verified: false,
+        lastSentAt: '2026-08-30T12:00:00.000Z',
+      })
+    ).toBe(false)
   })
 })

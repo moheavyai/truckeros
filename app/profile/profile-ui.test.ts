@@ -79,6 +79,8 @@ describe('Profile page UI', () => {
     expect(source).toContain('Verified')
     expect(source).toContain('Account email')
     expect(source).toContain('EMAIL_UNVERIFIED_HINT')
+    expect(source).toContain('shouldAutoSendFirstVerificationEmail')
+    expect(source).toContain('last_sent_at')
     expect(source).toContain('user?.email')
     const statusCard = source.slice(
       source.indexOf('function AccountEmailStatusCard'),

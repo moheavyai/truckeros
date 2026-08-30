@@ -24,6 +24,7 @@ import {
   EMAIL_UNVERIFIED_HINT,
   getEmailVerificationStatus,
   postEmailVerificationSend,
+  shouldAutoSendFirstVerificationEmail,
 } from '@/lib/email-verification'
 import { resolveActingRolesFromInputs } from '@/lib/nav-actor'
 import {
@@ -769,7 +770,28 @@ export default function ProfilePage() {
         const body = await response.json().catch(() => ({}))
         if (cancelled) return
         if (response.ok) {
-          setAccountEmailVerified(Boolean(body.verified))
+          const verified = Boolean(body.verified)
+          setAccountEmailVerified(verified)
+          if (
+            shouldAutoSendFirstVerificationEmail({
+              verified,
+              lastSentAt: body.last_sent_at || null,
+            })
+          ) {
+            const sendRes = await postEmailVerificationSend(session.access_token)
+            if (cancelled) return
+            if (sendRes.ok) {
+              const sendBody = await sendRes.json().catch(() => ({}))
+              if (sendBody.verified) {
+                setAccountEmailVerified(true)
+              } else {
+                setSaveMessage({
+                  type: 'success',
+                  text: 'Confirmation email sent. Check your inbox and spam folder.',
+                })
+              }
+            }
+          }
         }
       } catch {
         // Fail closed: leave unverified until a successful status read.
