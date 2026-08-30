@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import {
+  EMAIL_NOT_VERIFIED_CODE,
+  EMAIL_NOT_VERIFIED_FILING_ERROR,
+  isEmailVerified,
+} from '@/lib/email-verification'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -31,6 +36,21 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+    const recordApproval = body.record_approval === true
+    if (recordApproval) {
+      const { data: verifyRow } = await supabase
+        .from('email_verifications')
+        .select('verified_at')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (!isEmailVerified(verifyRow)) {
+        return NextResponse.json(
+          { error: EMAIL_NOT_VERIFIED_FILING_ERROR, code: EMAIL_NOT_VERIFIED_CODE },
+          { status: 403 }
+        )
+      }
+    }
+
     // Verify the user owns the permit_request
     const { data: pr, error: prError } = await supabase
       .from('permit_requests')
@@ -41,8 +61,6 @@ export async function POST(request: NextRequest) {
     if (prError || !pr || pr.user_id !== user.id) {
       return NextResponse.json({ error: 'You do not own this permit request' }, { status: 403 })
     }
-
-    const recordApproval = body.record_approval === true
 
     const { data: existing } = await supabase
       .from('portal_submissions')

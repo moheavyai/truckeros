@@ -35,6 +35,12 @@ import {
   type MoFilingStep,
 } from '@/lib/portal-assistant'
 import { getPlaybook } from '@/lib/portal-playbooks'
+import {
+  EMAIL_VERIFY_GATE_BODY,
+  EMAIL_VERIFY_GATE_TITLE,
+  getEmailVerificationStatus,
+  postEmailVerificationSend,
+} from '@/lib/email-verification'
 import { formatLoadDisplay } from '@/lib/parse-dimension'
 import {
   formatPortalAddress,
@@ -156,6 +162,9 @@ const cardMetaClass =
 export default function PortalAssistPage() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [emailVerified, setEmailVerified] = useState(false)
+  const [sendingEmailVerify, setSendingEmailVerify] = useState(false)
+  const [emailVerifyMessage, setEmailVerifyMessage] = useState<string | null>(null)
   const [pageError, setPageError] = useState<string | null>(null)
 
   // Dynamic from config — true extensibility (no hard-coded lists elsewhere)
@@ -363,6 +372,21 @@ export default function PortalAssistPage() {
           return
         }
         setUser(session.user)
+
+        try {
+          const verifyRes = await getEmailVerificationStatus(session.access_token)
+          const verifyBody = await verifyRes.json().catch(() => ({}))
+          const verified = Boolean(verifyRes.ok && verifyBody.verified)
+          setEmailVerified(verified)
+          if (!verified) {
+            setLoading(false)
+            return
+          }
+        } catch {
+          setEmailVerified(false)
+          setLoading(false)
+          return
+        }
 
         // Parse requestId + review step from URL without useSearchParams (avoids extra Suspense)
         let requestId: string | null = null
@@ -1062,6 +1086,36 @@ export default function PortalAssistPage() {
     return st
   }
 
+  const handleResendPortalEmailVerify = async () => {
+    if (sendingEmailVerify || emailVerified) return
+    const supabase = createClient()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (!session?.access_token) return
+    setSendingEmailVerify(true)
+    setEmailVerifyMessage(null)
+    try {
+      const response = await postEmailVerificationSend(session.access_token)
+      const body = await response.json().catch(() => ({}))
+      if (response.ok && body.verified) {
+        setEmailVerified(true)
+        return
+      }
+      if (!response.ok) {
+        setEmailVerifyMessage(
+          typeof body.error === 'string' ? body.error : 'Could not send confirmation email.'
+        )
+        return
+      }
+      setEmailVerifyMessage('Confirmation email sent. Check your inbox and spam folder.')
+    } catch {
+      setEmailVerifyMessage('Could not send confirmation email.')
+    } finally {
+      setSendingEmailVerify(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -1070,6 +1124,39 @@ export default function PortalAssistPage() {
           message="Loading Portal Assistant..." 
           subMessage="Preparing secure prefill, credentials vault, and status tracking"
         />
+      </div>
+    )
+  }
+
+  if (!emailVerified) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <AppHeader user={user} />
+        <main className="max-w-xl mx-auto px-6 py-8">
+          <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 px-5 py-6 shadow-sm">
+            <h1 className="text-xl font-semibold text-amber-950">{EMAIL_VERIFY_GATE_TITLE}</h1>
+            <p className="mt-2 text-sm text-amber-900">{EMAIL_VERIFY_GATE_BODY}</p>
+            <div className="mt-4 flex flex-col sm:flex-row gap-3">
+              <a
+                href="/profile"
+                className="inline-flex items-center justify-center min-h-[44px] rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-900"
+              >
+                Go to Profile
+              </a>
+              <button
+                type="button"
+                onClick={() => void handleResendPortalEmailVerify()}
+                disabled={sendingEmailVerify}
+                className="inline-flex items-center justify-center min-h-[44px] rounded-xl border border-amber-400 bg-white px-4 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-100 disabled:opacity-50"
+              >
+                {sendingEmailVerify ? 'Sending…' : 'Resend confirmation email'}
+              </button>
+            </div>
+            {emailVerifyMessage && (
+              <p className="mt-3 text-sm text-amber-900">{emailVerifyMessage}</p>
+            )}
+          </div>
+        </main>
       </div>
     )
   }

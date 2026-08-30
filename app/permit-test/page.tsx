@@ -94,6 +94,10 @@ import {
   type MoveType,
 } from '@/lib/load-details-options'
 import { buildPermitCargoSnapshot } from '@/lib/permit-cargo-snapshot'
+import {
+  EMAIL_VERIFY_APPROVE_TITLE,
+  getEmailVerificationStatus,
+} from '@/lib/email-verification'
 import { isDevEnvironment } from '@/lib/dev-mode'
 import {
   formatRoutePreferenceAsSpecialInstructions,
@@ -472,6 +476,8 @@ export default function PermitTestPage() {
   const [loadingDrivers, setLoadingDrivers] = useState(false)
   const autoSelectDriverDoneRef = useRef(false)
   const [loadingAuth, setLoadingAuth] = useState(true)
+  const [emailVerified, setEmailVerified] = useState(false)
+  const [emailVerifyGateError, setEmailVerifyGateError] = useState<string | null>(null)
   const router = useRouter()
   const { workspaceMode, effectiveOrganizationId, activeOrganization } =
     useOrganizationContext(ownOrganizationId)
@@ -565,6 +571,13 @@ export default function PermitTestPage() {
         router.push('/login')
       } else {
         setUser(session.user)
+        try {
+          const verifyRes = await getEmailVerificationStatus(session.access_token)
+          const verifyBody = await verifyRes.json().catch(() => ({}))
+          setEmailVerified(Boolean(verifyRes.ok && verifyBody.verified))
+        } catch {
+          setEmailVerified(false)
+        }
         const { data: profile } = await supabase
           .from('member_profiles')
           .select('*')
@@ -2360,6 +2373,12 @@ export default function PermitTestPage() {
     // Always derive the primary option correctly (supports both single and multi-option shapes)
     const primary = getPrimary(agentResult, null)
 
+    if (routeRequiresPermit(primary) && !emailVerified) {
+      setEmailVerifyGateError(EMAIL_VERIFY_APPROVE_TITLE)
+      return
+    }
+    setEmailVerifyGateError(null)
+
     setLoading(true)
 
     try {
@@ -2479,6 +2498,12 @@ export default function PermitTestPage() {
   // Approve a specific route option (from the list of alternatives)
   const handleApproveSpecificOption = async (option: any) => {
     if (!option || !agentResult) return;
+
+    if (routeRequiresPermit(option) && !emailVerified) {
+      setEmailVerifyGateError(EMAIL_VERIFY_APPROVE_TITLE)
+      return
+    }
+    setEmailVerifyGateError(null)
 
     setLoading(true)
 
@@ -4318,13 +4343,24 @@ export default function PermitTestPage() {
                       </button>
                       <button
                         onClick={handleApproveAndSave}
-                        disabled={loading || changeRouteBusy || !routeRequiresPermit(primary)}
+                        disabled={
+                          loading ||
+                          changeRouteBusy ||
+                          !routeRequiresPermit(primary) ||
+                          (routeRequiresPermit(primary) && !emailVerified)
+                        }
                         className={`font-semibold px-8 py-3 rounded-lg text-lg disabled:bg-gray-400 disabled:text-gray-200 disabled:cursor-not-allowed ${
                           routeRequiresPermit(primary)
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                             : 'bg-gray-300 text-gray-500'
                         }`}
-                        title={!routeRequiresPermit(primary) ? 'No permit needed — Portal Assist is disabled for legal routes' : undefined}
+                        title={
+                          !routeRequiresPermit(primary)
+                            ? 'No permit needed — Portal Assist is disabled for legal routes'
+                            : !emailVerified
+                              ? EMAIL_VERIFY_APPROVE_TITLE
+                              : undefined
+                        }
                       >
                         {/* Only Approve save uses "Saving…"; change-route uses changeRouteBusy + "Updating route…" */}
                         {loading && !changeRouteBusy ? 'Saving…' : 'Approve & Continue to Portal Assist'}
@@ -4344,6 +4380,11 @@ export default function PermitTestPage() {
                         {showChangeRouteInput ? 'Cancel' : 'Change Route'}
                       </button>
                     </div>
+                    {emailVerifyGateError && (
+                      <p className="text-center text-sm font-medium text-amber-900" role="status">
+                        {emailVerifyGateError}
+                      </p>
+                    )}
 
                     {changeRouteBusy && (
                       <p className="text-center text-sm font-medium text-blue-700" role="status" aria-live="polite">

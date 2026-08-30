@@ -371,4 +371,22 @@ describe('Permit test page — axle weight distribution', () => {
       /resolveRigBaseLengthFt\(selectedRigSnapshot,\s*formData\.trailerLengthFt\)\s*\|\|/
     )
   })
+
+  it('disables Approve when unverified; analysis path is untouched', () => {
+    const source = readPermitPageSource()
+    expect(source).toContain('getEmailVerificationStatus')
+    expect(source).toContain('EMAIL_VERIFY_APPROVE_TITLE')
+    expect(source).toContain('routeRequiresPermit(primary) && !emailVerified')
+
+    const approveSave = approveAndSaveHandlerSlice(source)
+    expect(approveSave).toContain('!emailVerified')
+    expect(approveSave).toContain("router.push(`/portal-assist?requestId=${requestId}&step=review`)")
+
+    expect(source).toContain('/api/optimize-route')
+    const analysisSlice = source.slice(
+      source.indexOf('const runRouteAnalysis'),
+      source.indexOf('const handleApproveAndSave')
+    )
+    expect(analysisSlice).not.toContain('emailVerified')
+  })
 })

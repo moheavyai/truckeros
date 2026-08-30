@@ -6,6 +6,7 @@ const mockGetUser = vi.fn()
 const mockPermitSelect = vi.fn()
 const mockExistingSelect = vi.fn()
 const mockUpsert = vi.fn()
+const mockEmailVerificationSelect = vi.fn()
 
 function chainable(result: { data?: any; error?: any }) {
   const chain: any = {
@@ -22,6 +23,7 @@ vi.mock('@supabase/supabase-js', () => ({
   createClient: vi.fn(() => ({
     auth: { getUser: mockGetUser },
     from: vi.fn((table: string) => {
+      if (table === 'email_verifications') return mockEmailVerificationSelect()
       if (table === 'permit_requests') return mockPermitSelect()
       if (table === 'portal_submissions') {
         if (mockExistingSelect.mock.calls.length === 0 && mockUpsert.mock.calls.length === 0) {
@@ -51,6 +53,9 @@ describe('POST /api/portal-submissions', () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } } })
     mockPermitSelect.mockReturnValue(
       chainable({ data: { id: 'req-1', user_id: 'user-1' }, error: null })
+    )
+    mockEmailVerificationSelect.mockReturnValue(
+      chainable({ data: { verified_at: '2026-01-01T00:00:00.000Z' }, error: null })
     )
   })
 
@@ -155,5 +160,26 @@ describe('POST /api/portal-submissions', () => {
       expect.objectContaining({ permit_request_id: 'req-1', state_code: 'TX' }),
       { onConflict: 'permit_request_id,state_code' }
     )
+  })
+
+  it('returns 403 EMAIL_NOT_VERIFIED when record_approval and inbox is unverified', async () => {
+    mockEmailVerificationSelect.mockReturnValue(
+      chainable({ data: { verified_at: null }, error: null })
+    )
+
+    const response = await POST(
+      makePost({
+        permit_request_id: 'req-1',
+        state_code: 'TX',
+        status: 'prefilled',
+        record_approval: true,
+      })
+    )
+
+    expect(response.status).toBe(403)
+    const body = await response.json()
+    expect(body.code).toBe('EMAIL_NOT_VERIFIED')
+    expect(body.error).toMatch(/confirm your email/i)
+    expect(mockUpsert).not.toHaveBeenCalled()
   })
 })

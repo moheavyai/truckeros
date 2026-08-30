@@ -22,6 +22,7 @@ import {
 } from '@/lib/onboarding'
 import { fetchActorTeamContext } from '@/lib/roster-profile-link'
 import { buildConsentPayload } from '@/lib/legal'
+import { postEmailVerificationSend } from '@/lib/email-verification'
 import type { User } from '@supabase/supabase-js'
 
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'recovery'
@@ -197,10 +198,8 @@ export default function LoginPage() {
     [candidatePostLoginPath, hasExplicitRedirect]
   )
 
-  const redirectAuthenticated = useCallback(
+  const performAuthenticatedRedirect = useCallback(
     async (user: User) => {
-      if (redirectingRef.current || recoveryActiveRef.current) return
-      redirectingRef.current = true
       try {
         clearPostLoginRedirect()
         const path = await resolveLandingPath(user)
@@ -212,6 +211,17 @@ export default function LoginPage() {
       }
     },
     [resolveLandingPath, router]
+  )
+
+  const redirectAuthenticated = useCallback(
+    async (user: User, opts?: { alreadyLatched?: boolean }) => {
+      if (!opts?.alreadyLatched) {
+        if (redirectingRef.current || recoveryActiveRef.current) return
+        redirectingRef.current = true
+      }
+      await performAuthenticatedRedirect(user)
+    },
+    [performAuthenticatedRedirect]
   )
 
   useEffect(() => {
@@ -382,8 +392,11 @@ export default function LoginPage() {
       }
 
       if (data.session?.user) {
+        // Latch before onAuthStateChange can double-push the same session.
+        redirectingRef.current = true
+        void postEmailVerificationSend(data.session.access_token).catch(() => {})
         await recordUserConsent(data.session.user.id)
-        await redirectAuthenticated(data.session.user)
+        await redirectAuthenticated(data.session.user, { alreadyLatched: true })
         return
       }
 
