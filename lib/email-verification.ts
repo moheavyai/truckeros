@@ -1,5 +1,3 @@
-import { createHash, randomBytes } from 'node:crypto'
-
 export const EMAIL_VERIFY_COOLDOWN_MS = 60_000
 export const EMAIL_VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000
 export const EMAIL_VERIFY_FROM = 'MoHeavy AI <noreply@moheavy.com>'
@@ -29,14 +27,6 @@ export function isEmailVerified(
   row: { verified_at?: string | null } | null | undefined
 ): boolean {
   return Boolean(row?.verified_at)
-}
-
-export function hashEmailToken(rawToken: string): string {
-  return createHash('sha256').update(rawToken, 'utf8').digest('hex')
-}
-
-export function generateEmailToken(): string {
-  return randomBytes(32).toString('base64url')
 }
 
 export function isEmailVerifyCooldownActive(

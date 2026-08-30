@@ -2,11 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   EMAIL_VERIFY_COOLDOWN_MS,
   emailVerifyCooldownRemainingMs,
-  generateEmailToken,
-  hashEmailToken,
   isEmailVerified,
   isEmailVerifyCooldownActive,
 } from './email-verification'
+import { generateEmailToken, hashEmailToken } from './email-verification-crypto'
 
 describe('isEmailVerified', () => {
   it('is true when verified_at is a timestamp', () => {
