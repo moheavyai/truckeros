@@ -29,6 +29,14 @@ export function isEmailVerified(
   return Boolean(row?.verified_at)
 }
 
+export function shouldAutoSendFirstVerificationEmail(params: {
+  verified?: boolean
+  lastSentAt?: string | null
+}): boolean {
+  if (params.verified) return false
+  return !params.lastSentAt
+}
+
 export function isEmailVerifyCooldownActive(
   lastSentAt: string | null | undefined,
   nowMs = Date.now()
@@ -86,6 +94,7 @@ export function postEmailVerificationSend(
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({ action: 'send' }),
+    keepalive: true,
   })
 }
 
