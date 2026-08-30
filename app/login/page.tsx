@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import BrandedLoader from '@/components/BrandedLoader'
 import ErrorDisplay from '@/components/ErrorDisplay'
 import {
+  buildEmailRedirectTo,
   clearPostLoginRedirect,
   DEFAULT_POST_LOGIN_PATH,
   persistPostLoginRedirect,
@@ -26,6 +27,8 @@ import type { User } from '@supabase/supabase-js'
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'recovery'
 
 const PASSWORD_HINT = 'Min 8 characters, 1 uppercase, 1 special character'
+const CHECK_EMAIL_MESSAGE =
+  'Account created. Check your email for the confirmation link (and spam). After you confirm, return here and sign in.'
 
 /** Shared auth field styles — strong mobile borders + readable text/placeholders.
  *  Matches the permit-test mobile contrast pattern so fields stay legible under
@@ -46,6 +49,19 @@ function validatePassword(password: string): string | null {
   return null
 }
 
+function isUnconfirmedEmailError(message: string | null | undefined): boolean {
+  if (!message) return false
+  const lower = message.toLowerCase()
+  return lower.includes('email not confirmed') || lower.includes('confirm your email')
+}
+
+function humanizeAuthError(message: string): string {
+  if (isUnconfirmedEmailError(message)) {
+    return 'This account exists but the email is not confirmed yet. Check your inbox (and spam), or resend the confirmation email below.'
+  }
+  return message
+}
+
 function readInitialMode(): AuthMode {
   if (typeof window === 'undefined') return 'signin'
   try {
@@ -53,6 +69,7 @@ function readInitialMode(): AuthMode {
     const mode = (params.get('mode') || '').toLowerCase()
     if (mode === 'signup' || mode === 'create' || mode === 'register') return 'signup'
     if (mode === 'forgot' || mode === 'reset') return 'forgot'
+    if (mode === 'recovery') return 'recovery'
   } catch {
     // ignore
   }
@@ -85,6 +102,7 @@ export default function LoginPage() {
   const [checkingSession, setCheckingSession] = useState(true)
   const [authError, setAuthError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [needsConfirmationResend, setNeedsConfirmationResend] = useState(false)
   const router = useRouter()
   const redirectingRef = useRef(false)
   const modeInitializedRef = useRef(false)
@@ -93,7 +111,24 @@ export default function LoginPage() {
   useEffect(() => {
     if (modeInitializedRef.current) return
     modeInitializedRef.current = true
-    setMode(readInitialMode())
+    const initial = readInitialMode()
+    setMode(initial)
+    if (initial === 'recovery') recoveryActiveRef.current = true
+
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const incomingError = params.get('error_description') || params.get('error')
+      if (incomingError) {
+        const decoded = decodeURIComponent(incomingError.replace(/\+/g, ' '))
+        setAuthError(humanizeAuthError(decoded))
+        if (isUnconfirmedEmailError(decoded)) setNeedsConfirmationResend(true)
+      }
+      if (params.get('confirmed') === '1') {
+        setSuccessMessage('Email confirmed. Sign in to continue.')
+      }
+    } catch {
+      // ignore malformed query
+    }
   }, [])
 
   const candidatePostLoginPath = useMemo(() => {
@@ -221,6 +256,7 @@ export default function LoginPage() {
     setMode(next)
     setAuthError(null)
     setSuccessMessage(null)
+    setNeedsConfirmationResend(false)
     setPassword('')
     setConfirmPassword('')
     if (next !== 'signup') setAcceptedLegal(false)
@@ -231,6 +267,7 @@ export default function LoginPage() {
     setLoading(true)
     setAuthError(null)
     setSuccessMessage(null)
+    setNeedsConfirmationResend(false)
 
     if (!email.trim() || !password) {
       setAuthError('Enter your email and password to sign in.')
@@ -247,7 +284,8 @@ export default function LoginPage() {
       })
 
       if (error) {
-        setAuthError(error.message)
+        setAuthError(humanizeAuthError(error.message))
+        if (isUnconfirmedEmailError(error.message)) setNeedsConfirmationResend(true)
         return
       }
 
@@ -261,6 +299,7 @@ export default function LoginPage() {
         setAuthError(
           'Login succeeded but no active session was found. Please try again or confirm your email if required.'
         )
+        setNeedsConfirmationResend(true)
       }
     } catch (err: any) {
       const message = err?.message || 'An unexpected error occurred during login.'
@@ -269,7 +308,8 @@ export default function LoginPage() {
           'Unable to connect to the authentication service. Please try again in a moment.'
         )
       } else {
-        setAuthError(message)
+        setAuthError(humanizeAuthError(message))
+        if (isUnconfirmedEmailError(message)) setNeedsConfirmationResend(true)
       }
     } finally {
       setLoading(false)
@@ -281,6 +321,7 @@ export default function LoginPage() {
     setLoading(true)
     setAuthError(null)
     setSuccessMessage(null)
+    setNeedsConfirmationResend(false)
 
     const trimmedEmail = email.trim()
     if (!trimmedEmail || !password) {
@@ -315,9 +356,10 @@ export default function LoginPage() {
 
       const emailRedirectTo =
         typeof window !== 'undefined'
-          ? pathToPersist
-            ? `${window.location.origin}/login?redirect=${encodeURIComponent(pathToPersist)}`
-            : `${window.location.origin}/login`
+          ? buildEmailRedirectTo(window.location.origin, {
+              type: 'signup',
+              next: pathToPersist,
+            })
           : undefined
 
       const { data, error } = await supabase.auth.signUp({
@@ -335,7 +377,7 @@ export default function LoginPage() {
       })
 
       if (error) {
-        setAuthError(error.message)
+        setAuthError(humanizeAuthError(error.message))
         return
       }
 
@@ -346,9 +388,8 @@ export default function LoginPage() {
       }
 
       // Email confirmation required — consent is already in user_metadata.
-      setSuccessMessage(
-        'Account created. Check your email for the confirmation link. After you confirm, return here and sign in.'
-      )
+      setSuccessMessage(CHECK_EMAIL_MESSAGE)
+      setNeedsConfirmationResend(true)
       setMode('signin')
       setPassword('')
       setConfirmPassword('')
@@ -360,7 +401,7 @@ export default function LoginPage() {
           'Unable to connect to the authentication service. Please try again in a moment.'
         )
       } else {
-        setAuthError(message)
+        setAuthError(humanizeAuthError(message))
       }
     } finally {
       setLoading(false)
@@ -384,7 +425,9 @@ export default function LoginPage() {
 
     try {
       const redirectTo =
-        typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined
+        typeof window !== 'undefined'
+          ? buildEmailRedirectTo(window.location.origin, { type: 'recovery' })
+          : undefined
 
       const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
         redirectTo,
@@ -409,6 +452,46 @@ export default function LoginPage() {
       } else {
         setAuthError(message)
       }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResendConfirmation = async () => {
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail) {
+      setAuthError('Enter the email address you used to create the account, then resend.')
+      return
+    }
+
+    setLoading(true)
+    setAuthError(null)
+    setSuccessMessage(null)
+
+    const supabase = createClient()
+    try {
+      const emailRedirectTo =
+        typeof window !== 'undefined'
+          ? buildEmailRedirectTo(window.location.origin, { type: 'signup' })
+          : undefined
+
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: trimmedEmail,
+        options: emailRedirectTo ? { emailRedirectTo } : undefined,
+      })
+
+      if (error) {
+        setAuthError(humanizeAuthError(error.message))
+        return
+      }
+
+      setSuccessMessage(
+        'Confirmation email sent. Check your inbox and spam folder, then use the link to finish signing in.'
+      )
+      setNeedsConfirmationResend(true)
+    } catch (err: any) {
+      setAuthError(err?.message || 'Unable to resend confirmation email. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -471,6 +554,8 @@ export default function LoginPage() {
   const isSignUp = mode === 'signup'
   const isForgot = mode === 'forgot'
   const isRecovery = mode === 'recovery'
+  const showResend =
+    needsConfirmationResend && !isRecovery && !isForgot && Boolean(email.trim())
 
   const title = isRecovery
     ? 'Set a new password'
@@ -682,6 +767,17 @@ export default function LoginPage() {
                   'Sign in'
                 )}
               </button>
+
+              {showResend && (
+                <button
+                  type="button"
+                  onClick={() => void handleResendConfirmation()}
+                  disabled={loading}
+                  className="text-sm text-gray-700 hover:text-black w-full"
+                >
+                  Resend confirmation email
+                </button>
+              )}
             </form>
           )}
 
