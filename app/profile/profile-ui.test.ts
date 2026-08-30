@@ -72,6 +72,22 @@ function handleSaveSlice(source: string) {
 }
 
 describe('Profile page UI', () => {
+  it('shows login-email verification status, not carrier_email', () => {
+    const source = readProfileSource()
+    expect(source).toContain('Confirm your email')
+    expect(source).toContain('Resend confirmation email')
+    expect(source).toContain('Verified')
+    expect(source).toContain('Account email')
+    expect(source).toContain('EMAIL_UNVERIFIED_HINT')
+    expect(source).toContain('user?.email')
+    const statusCard = source.slice(
+      source.indexOf('function AccountEmailStatusCard'),
+      source.indexOf('function todayIsoDate')
+    )
+    expect(statusCard).not.toContain('carrier_email')
+    expect(statusCard).not.toContain('driver_email')
+  })
+
   it('shows success toast when arriving with ?invite=accepted', () => {
     const source = readProfileSource()
     expect(source).toContain("params.get('invite') === 'accepted'")

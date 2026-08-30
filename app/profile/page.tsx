@@ -20,6 +20,11 @@ import {
   shouldShowTeamSection,
 } from '@/lib/member-profile-permissions'
 import { isForcedCarrierOwner } from '@/lib/forced-carrier-owner'
+import {
+  EMAIL_UNVERIFIED_HINT,
+  getEmailVerificationStatus,
+  postEmailVerificationSend,
+} from '@/lib/email-verification'
 import { resolveActingRolesFromInputs } from '@/lib/nav-actor'
 import {
   canSeeSetupGuidance,
@@ -220,6 +225,61 @@ const DRIVER_CONTACT_FIELDS: FieldConfig[] = [
   { key: 'emergency_contact', label: 'Emergency Contact', placeholder: 'Name, relationship, phone' },
 ]
 
+function AccountEmailStatusCard({
+  email,
+  verified,
+  justVerified,
+  verifyError,
+  sending,
+  onResend,
+  fieldHintClass,
+  fieldLabelClass,
+}: {
+  email?: string | null
+  verified: boolean
+  justVerified: boolean
+  verifyError: boolean
+  sending: boolean
+  onResend: () => void
+  fieldHintClass: string
+  fieldLabelClass: string
+}) {
+  return (
+    <div className="rounded-xl border border-gray-300 sm:border-gray-200 bg-gray-50 px-4 py-3 mb-4">
+      <div className={fieldLabelClass}>Account email</div>
+      <div className="mt-1 text-sm font-medium text-gray-900 break-all">{email || '—'}</div>
+      {justVerified && (
+        <p className="mt-2 text-sm text-emerald-800">Email confirmed. Portal Assist is unlocked.</p>
+      )}
+      {verifyError && !verified && (
+        <p className="mt-2 text-sm text-amber-900">That confirmation link is invalid or expired. Request a new email below.</p>
+      )}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {verified ? (
+          <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+            Verified
+          </span>
+        ) : (
+          <>
+            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+              Confirm your email
+            </span>
+            <button
+              type="button"
+              onClick={onResend}
+              disabled={sending || verified}
+              className="inline-flex items-center justify-center min-h-[44px] rounded-xl border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-50 touch-manipulation"
+            >
+              {sending ? 'Sending…' : 'Resend confirmation email'}
+            </button>
+          </>
+        )}
+      </div>
+      {!verified && <p className={`mt-2 ${fieldHintClass}`}>{EMAIL_UNVERIFIED_HINT}</p>}
+    </div>
+  )
+}
+
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10)
 }
@@ -364,6 +424,10 @@ function UserRolesCheckboxGrid({
 
 export default function ProfilePage() {
   const [user, setUser] = useState<User | null>(null)
+  const [accountEmailVerified, setAccountEmailVerified] = useState(false)
+  const [accountEmailJustVerified, setAccountEmailJustVerified] = useState(false)
+  const [accountEmailVerifyError, setAccountEmailVerifyError] = useState(false)
+  const [sendingAccountEmail, setSendingAccountEmail] = useState(false)
   const [loading, setLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingCarrier, setSavingCarrier] = useState(false)
@@ -542,6 +606,47 @@ export default function ProfilePage() {
     }
   }, [])
 
+  const handleResendAccountEmail = useCallback(async () => {
+    if (accountEmailVerified || sendingAccountEmail) return
+    const supabase = createClient()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (!session?.access_token) return
+    setSendingAccountEmail(true)
+    try {
+      const response = await postEmailVerificationSend(session.access_token)
+      const body = await response.json().catch(() => ({}))
+      if (response.ok && body.verified) {
+        setAccountEmailVerified(true)
+        setSaveMessage({ type: 'success', text: 'Email is already confirmed.' })
+        return
+      }
+      if (response.status === 429) {
+        setSaveMessage({
+          type: 'warning',
+          text: typeof body.error === 'string' ? body.error : 'Please wait a minute before requesting another confirmation email.',
+        })
+        return
+      }
+      if (!response.ok) {
+        setSaveMessage({
+          type: 'error',
+          text: typeof body.error === 'string' ? body.error : 'Could not send confirmation email.',
+        })
+        return
+      }
+      setSaveMessage({
+        type: 'success',
+        text: 'Confirmation email sent. Check your inbox and spam folder.',
+      })
+    } catch {
+      setSaveMessage({ type: 'error', text: 'Could not send confirmation email.' })
+    } finally {
+      setSendingAccountEmail(false)
+    }
+  }, [accountEmailVerified, sendingAccountEmail])
+
   const loadTeamInvites = useCallback(async (accessToken: string) => {
     const response = await fetch('/api/team-invites', {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -627,6 +732,13 @@ export default function ProfilePage() {
       setSaveMessage({ type: 'success', text: 'Invite accepted. Welcome to the team.' })
       window.history.replaceState({}, '', ONBOARDING_PATH)
     }
+    if (params.get('verified') === '1') {
+      setAccountEmailJustVerified(true)
+      setAccountEmailVerified(true)
+    }
+    if (params.get('verify_error') === '1') {
+      setAccountEmailVerifyError(true)
+    }
     if (params.get('carrier_connection') === 'accepted') {
       setSaveMessage({
         type: 'success',
@@ -644,6 +756,28 @@ export default function ProfilePage() {
     }
     setGuidedStepsDismissed(readOnboardingGuidedDismissed(user.id))
     setRoleWelcomeSeen(readRoleWelcomeSeen(user.id))
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!user?.id) return
+    let cancelled = false
+    const supabase = createClient()
+    void supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session?.access_token || cancelled) return
+      try {
+        const response = await getEmailVerificationStatus(session.access_token)
+        const body = await response.json().catch(() => ({}))
+        if (cancelled) return
+        if (response.ok) {
+          setAccountEmailVerified(Boolean(body.verified))
+        }
+      } catch {
+        // Fail closed: leave unverified until a successful status read.
+      }
+    })
+    return () => {
+      cancelled = true
+    }
   }, [user?.id])
 
   useEffect(() => {
@@ -2326,6 +2460,16 @@ export default function ProfilePage() {
               <div className="space-y-6">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900 mb-3">Your Contact Info</h3>
+                  <AccountEmailStatusCard
+                    email={user?.email}
+                    verified={accountEmailVerified}
+                    justVerified={accountEmailJustVerified}
+                    verifyError={accountEmailVerifyError}
+                    sending={sendingAccountEmail}
+                    onResend={() => void handleResendAccountEmail()}
+                    fieldHintClass={fieldHintClass}
+                    fieldLabelClass={fieldLabelClass}
+                  />
                   <div className="grid sm:grid-cols-2 gap-4">
                     {BOOTSTRAP_CONTACT_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
                       <div key={key}>
@@ -2623,6 +2767,19 @@ export default function ProfilePage() {
                 </button>
               </div>
             </div>
+
+            {isEditingOwnProfileTarget() && (
+              <AccountEmailStatusCard
+                email={user?.email}
+                verified={accountEmailVerified}
+                justVerified={accountEmailJustVerified}
+                verifyError={accountEmailVerifyError}
+                sending={sendingAccountEmail}
+                onResend={() => void handleResendAccountEmail()}
+                fieldHintClass={fieldHintClass}
+                fieldLabelClass={fieldLabelClass}
+              />
+            )}
 
             {showDriverRestrictedWarning && (
               <div

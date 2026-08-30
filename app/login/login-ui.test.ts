@@ -82,4 +82,13 @@ describe('Login page redirect handling', () => {
     // Must not hard-code a misleading always-show "check your email" alert on the session path
     expect(handleSignUp).not.toMatch(/alert\(['"]Account created!/)
   })
+
+  it('has a send/resend helper and latches redirectingRef before session signup navigation', () => {
+    const source = readLoginSource()
+    expect(source).toContain('postEmailVerificationSend')
+    const handleSignUp = source.slice(source.indexOf('const handleSignUp'))
+    expect(handleSignUp).toContain('redirectingRef.current = true')
+    expect(handleSignUp).toContain('postEmailVerificationSend')
+    expect(source).toContain('if (redirectingRef.current || recoveryActiveRef.current) return')
+  })
 })
