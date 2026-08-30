@@ -8,6 +8,9 @@ export const DEFAULT_POST_LOGIN_PATH = '/dashboard'
 
 export const POST_LOGIN_REDIRECT_STORAGE_KEY = 'truckeros_post_login_redirect'
 
+/** Route that exchanges the Supabase PKCE `code` for a session. */
+export const AUTH_CALLBACK_PATH = '/auth/callback'
+
 const C0_AND_DEL = /[\u0000-\u001f\u007f]/
 
 /**
@@ -18,20 +21,15 @@ export function isLoginRedirectPath(pathname: string): boolean {
   return pathOnly === '/login' || pathOnly.startsWith('/login/')
 }
 
-/**
- * Returns a safe in-app path from a raw redirect query value, or the default.
- * Rejects protocol-relative URLs, external URLs, login loops, and control chars.
- */
-export function resolvePostLoginRedirect(
+function sanitizeRelativePath(
   raw: string | null | undefined,
-  fallback: string = DEFAULT_POST_LOGIN_PATH
+  fallback: string
 ): string {
   if (raw == null) return fallback
 
   let candidate = String(raw).trim()
   if (!candidate) return fallback
 
-  // Decode once if the value was percent-encoded (common with nested redirects).
   try {
     if (candidate.includes('%')) {
       candidate = decodeURIComponent(candidate)
@@ -42,21 +40,51 @@ export function resolvePostLoginRedirect(
 
   candidate = candidate.trim()
 
-  // Reject C0 controls / DEL (e.g. /%09//evil.com after decode).
   if (C0_AND_DEL.test(candidate)) return fallback
-
-  // Must be a root-relative path
   if (!candidate.startsWith('/')) return fallback
-  // Block protocol-relative and scheme URLs (//evil.com, /\\evil.com)
   if (candidate.startsWith('//') || candidate.startsWith('/\\')) return fallback
   if (candidate.includes('://')) return fallback
-  // Block backslash tricks
   if (candidate.includes('\\')) return fallback
 
-  // Avoid /login ↔ /login redirect loops when already authenticated
-  if (isLoginRedirectPath(candidate)) return fallback
-
   return candidate
+}
+
+/**
+ * Returns a safe in-app path from a raw redirect query value, or the default.
+ * Rejects protocol-relative URLs, external URLs, login loops, and control chars.
+ */
+export function resolvePostLoginRedirect(
+  raw: string | null | undefined,
+  fallback: string = DEFAULT_POST_LOGIN_PATH
+): string {
+  const candidate = sanitizeRelativePath(raw, fallback)
+  if (candidate !== fallback && isLoginRedirectPath(candidate)) return fallback
+  return candidate
+}
+
+/**
+ * Safe destination after `/auth/callback` exchanges a PKCE code.
+ * Allows `/login` (needed so recovery + confirmation land on the form).
+ */
+export function resolveAuthCallbackNext(raw: string | null | undefined): string {
+  return sanitizeRelativePath(raw, '/login')
+}
+
+export type AuthEmailRedirectType = 'signup' | 'recovery'
+
+/**
+ * Builds the URL we pass to Supabase as emailRedirectTo / reset redirectTo.
+ * Always points at `/auth/callback` so the PKCE `code` is exchanged server-side.
+ */
+export function buildEmailRedirectTo(
+  origin: string,
+  options?: { next?: string | null; type?: AuthEmailRedirectType }
+): string {
+  const url = new URL(AUTH_CALLBACK_PATH, origin)
+  if (options?.type) url.searchParams.set('type', options.type)
+  const next = resolveAuthCallbackNext(options?.next ?? null)
+  if (next && next !== '/login') url.searchParams.set('next', next)
+  return url.toString()
 }
 
 export function readRedirectSearchParam(
