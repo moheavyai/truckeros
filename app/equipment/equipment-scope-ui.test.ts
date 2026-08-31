@@ -12,6 +12,16 @@ function readEquipmentSource() {
 }
 
 describe('Equipment page — smart trailer types + axle groups', () => {
+  it('declares AxleSpacingsInputs at module scope so axle fields keep focus', () => {
+    const source = readEquipmentSource()
+    const componentIdx = source.indexOf('function AxleSpacingsInputs')
+    const pageIdx = source.indexOf('export default function EquipmentPage')
+    expect(componentIdx).toBeGreaterThan(-1)
+    expect(pageIdx).toBeGreaterThan(-1)
+    expect(componentIdx).toBeLessThan(pageIdx)
+    expect(source).toContain('NO_TRACTOR_ANALYSIS_HINT')
+  })
+
   it('wires trailer-types module and smart datalist dropdown', () => {
     const source = readEquipmentSource()
     expect(source).toContain("from '@/lib/trailer-types'")

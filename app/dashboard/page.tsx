@@ -26,6 +26,7 @@ import {
   type MemberPermissionConfig,
 } from '@/lib/team-permissions'
 import { isOwnerOperatorSelected } from '@/lib/member-profile'
+import { canRunRouteAnalysis, NO_TRACTOR_ANALYSIS_HINT } from '@/lib/analysis-readiness'
 import type { MemberProfile, UserRole } from '@/types/member-profile'
 
 /** Mobile-first contrast: stronger borders/text on small screens; softer from sm: up (matches permit-test / portal-assist). */
@@ -77,6 +78,7 @@ export default function Dashboard() {
   const [profileSnapshot, setProfileSnapshot] = useState<MemberProfile | null>(null)
   const [teamMemberCount, setTeamMemberCount] = useState(1)
   const [hasEquipment, setHasEquipment] = useState(false)
+  const [tractorCount, setTractorCount] = useState(0)
   const [guidedDismissed, setGuidedDismissed] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
   const [selectedRequest, setSelectedRequest] = useState<any | null>(null)
@@ -197,7 +199,7 @@ export default function Dashboard() {
         // Soft setup metrics: home org only (not active Service Mode client).
         const orgId = typedProfile?.organization_id ?? null
         if (orgId && canManageSetup) {
-          const [{ count: memberCount }, { count: equipCount }] = await Promise.all([
+          const [{ count: memberCount }, { count: equipCount }, { count: tractorRows }] = await Promise.all([
             supabase
               .from('member_profiles')
               .select('id', { count: 'exact', head: true })
@@ -206,13 +208,29 @@ export default function Dashboard() {
               .from('equipment_profiles')
               .select('id', { count: 'exact', head: true })
               .eq('organization_id', orgId),
+            supabase
+              .from('equipment_profiles')
+              .select('id', { count: 'exact', head: true })
+              .eq('organization_id', orgId)
+              .eq('type', 'tractor'),
           ])
           if (cancelled) return
           setTeamMemberCount(memberCount ?? 1)
           setHasEquipment((equipCount ?? 0) > 0)
+          setTractorCount(tractorRows ?? 0)
         } else {
           setTeamMemberCount(1)
           setHasEquipment(false)
+          let tractorQuery = supabase
+            .from('equipment_profiles')
+            .select('id', { count: 'exact', head: true })
+            .eq('type', 'tractor')
+          tractorQuery = orgId
+            ? tractorQuery.eq('organization_id', orgId)
+            : tractorQuery.eq('user_id', session.user.id)
+          const { count: tractorRows } = await tractorQuery
+          if (cancelled) return
+          setTractorCount(tractorRows ?? 0)
         }
 
         // Fetch real recent requests (only after confirming the user is logged in)
@@ -346,6 +364,7 @@ export default function Dashboard() {
     welcomeTools.find((t) => t.primary) ??
     welcomeTools[0]
   const secondaryTools = welcomeTools.filter((t) => t.id !== primaryTool?.id)
+  const analysisHref = canRunRouteAnalysis({ tractorCount }) ? '/permit-test' : '/equipment'
 
   const displayFirstName = firstNameFromProfile(profileSnapshot, user?.email)
   const mostRecentRequest = recentRequests[0] ?? null
@@ -413,7 +432,7 @@ export default function Dashboard() {
         <div className="mb-10 flex flex-wrap gap-3">
           {primaryTool && (
             <a
-              href={primaryTool.href}
+              href={primaryTool.id === 'permit_analysis' ? analysisHref : primaryTool.href}
               className={buttonPrimaryClass}
             >
               <span>{primaryTool.label}</span>
@@ -628,9 +647,12 @@ export default function Dashboard() {
               ) : (
                 <div className={`py-8 text-center text-sm ${mutedTextClass}`}>
                   <p>No analyses yet. Run your first route analysis to see history here.</p>
-                  <a href="/permit-test" className="inline-block mt-3 text-sm font-semibold text-black underline underline-offset-2">
+                  <a href={analysisHref} className="inline-block mt-3 text-sm font-semibold text-black underline underline-offset-2">
                     Start New Route Analysis
                   </a>
+                  {!canRunRouteAnalysis({ tractorCount }) && (
+                    <p className="mt-2 text-xs text-amber-800">{NO_TRACTOR_ANALYSIS_HINT}</p>
+                  )}
                 </div>
               )}
             </div>

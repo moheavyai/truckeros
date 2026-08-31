@@ -56,6 +56,12 @@ describe('Dashboard page — onboarding + role tools', () => {
     // Full tools still used for stats / recent activity
     expect(source).toMatch(/tools\.some\(\(t\) => t\.id === 'history' \|\| t\.id === 'permit_analysis'\)/)
     expect(source).toContain('getVisibleDashboardTools')
+    expect(source).toContain('canRunRouteAnalysis')
+    expect(source).toContain("eq('type', 'tractor')")
+    expect(source).toContain('analysisHref')
+    expect(source).toContain("primaryTool.id === 'permit_analysis' ? analysisHref")
+    expect(source).toContain('href={analysisHref}')
+    expect(source).toContain('NO_TRACTOR_ANALYSIS_HINT')
   })
 
   it('activity card opens drawer; detail offers Portal Assist and Re-do review prefill', () => {

@@ -307,6 +307,10 @@ describe('Profile page UI', () => {
     expect(bootstrapCard).toContain('Owner Operator')
     expect(bootstrapCard).toContain('getOwnerBootstrapOwnerOperatorHint')
     expect(bootstrapCard).toContain('disabled={isSaving || isLoadingMember}')
+    expect(bootstrapCard).toContain('text-red-600')
+    expect(bootstrapCard).toContain('id="bootstrap-owner-operator"')
+    expect(handleSaveSlice(source)).toContain("scrollIntoView({ behavior: 'smooth', block: 'center' })")
+    expect(source).toContain('required: true')
     expect(source).toMatch(
       /const editingLabel[\s\S]*showOwnerBootstrapSetup[\s\S]*\? null/
     )

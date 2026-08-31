@@ -190,6 +190,17 @@ type FieldConfig = {
   label: string
   type?: string
   placeholder?: string
+  required?: boolean
+}
+
+function mapBootstrapValidationMessageToField(message: string): keyof MemberProfileFormData {
+  const lower = message.toLowerCase()
+  if (lower.includes('company name')) return 'company_name'
+  if (lower.includes('full name')) return 'driver_full_name'
+  if (lower.includes('email')) return 'driver_email'
+  if (lower.includes('company phone')) return 'carrier_phone'
+  if (lower.includes('cell phone')) return 'driver_phone'
+  return 'driver_full_name'
 }
 
 const CARRIER_FIELDS: FieldConfig[] = [
@@ -204,15 +215,15 @@ const CARRIER_FIELDS: FieldConfig[] = [
 ]
 
 const BOOTSTRAP_CONTACT_FIELDS: FieldConfig[] = [
-  { key: 'driver_full_name', label: 'Full Name', placeholder: 'Jane Doe' },
-  { key: 'driver_email', label: 'Email', type: 'email', placeholder: 'you@company.com' },
+  { key: 'driver_full_name', label: 'Full Name', placeholder: 'Jane Doe', required: true },
+  { key: 'driver_email', label: 'Email', type: 'email', placeholder: 'you@company.com', required: true },
   { key: 'carrier_phone', label: 'Company Phone', type: 'tel', placeholder: '(555) 123-4567' },
   { key: 'driver_phone', label: 'Cell Phone', type: 'tel', placeholder: '(555) 987-6543' },
 ]
 
 const BOOTSTRAP_CARRIER_FIELDS: FieldConfig[] = CARRIER_FIELDS.filter(
   (field) => field.key !== 'carrier_phone' && field.key !== 'carrier_email'
-)
+).map((field) => (field.key === 'company_name' ? { ...field, required: true } : field))
 
 const DRIVER_IDENTITY_FIELDS: FieldConfig[] = [
   { key: 'driver_full_name', label: 'Full Name', placeholder: 'Jane Doe' },
@@ -1692,6 +1703,10 @@ export default function ProfilePage() {
       const bootstrapValidation = validateBootstrapSelfSave(form)
       if (bootstrapValidation.ok === false) {
         setSaveMessage({ type: 'error', text: bootstrapValidation.message })
+        const fieldKey = mapBootstrapValidationMessageToField(bootstrapValidation.message)
+        const el = document.getElementById(`bootstrap-${fieldKey}`)
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        if (el instanceof HTMLElement) el.focus()
         return
       }
       formForSave = bootstrapValidation.form
@@ -1702,6 +1717,9 @@ export default function ProfilePage() {
       )
       if (!forcedCarrierOwner && roleCheck.ok === false) {
         setSaveMessage({ type: 'error', text: roleCheck.message })
+        const el = document.getElementById('bootstrap-owner-operator')
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        if (el instanceof HTMLElement) el.focus()
         return
       }
     } else if (
@@ -2493,10 +2511,11 @@ export default function ProfilePage() {
                     fieldLabelClass={fieldLabelClass}
                   />
                   <div className="grid sm:grid-cols-2 gap-4">
-                    {BOOTSTRAP_CONTACT_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
+                    {BOOTSTRAP_CONTACT_FIELDS.map(({ key, label, type = 'text', placeholder, required }) => (
                       <div key={key}>
                         <label htmlFor={`bootstrap-${key}`} className={fieldLabelClass}>
                           {label}
+                          {required ? <span className="text-red-600">*</span> : null}
                         </label>
                         <input
                           id={`bootstrap-${key}`}
@@ -2515,10 +2534,11 @@ export default function ProfilePage() {
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900 mb-3">Carrier Details</h3>
                   <div className="grid sm:grid-cols-2 gap-4">
-                    {BOOTSTRAP_CARRIER_FIELDS.map(({ key, label, type = 'text', placeholder }) => (
+                    {BOOTSTRAP_CARRIER_FIELDS.map(({ key, label, type = 'text', placeholder, required }) => (
                       <div key={key} className={key === 'carrier_address' ? 'sm:col-span-2' : ''}>
                         <label htmlFor={`bootstrap-${key}`} className={fieldLabelClass}>
                           {label}
+                          {required ? <span className="text-red-600">*</span> : null}
                         </label>
                         <input
                           id={`bootstrap-${key}`}
@@ -2537,6 +2557,7 @@ export default function ProfilePage() {
                 <div className={`pt-4 border-t ${softDividerBorderClass}`}>
                   <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-300 sm:border-gray-200 px-4 py-3 hover:bg-gray-50 transition">
                     <input
+                      id="bootstrap-owner-operator"
                       type="checkbox"
                       checked={ownerOperatorSelected}
                       onChange={(e) => toggleOwnerOperator(e.target.checked)}

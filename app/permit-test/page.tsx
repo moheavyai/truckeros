@@ -94,6 +94,7 @@ import {
   type MoveType,
 } from '@/lib/load-details-options'
 import { buildPermitCargoSnapshot } from '@/lib/permit-cargo-snapshot'
+import { canRunRouteAnalysis, NO_TRACTOR_ANALYSIS_HINT } from '@/lib/analysis-readiness'
 import {
   EMAIL_VERIFY_APPROVE_TITLE,
   getEmailVerificationStatus,
@@ -1124,6 +1125,7 @@ export default function PermitTestPage() {
   // Required so VehicleDiagram receives overall_length_ft, fifth_wheel, axle data etc. for full rig graphics.
   const [tractors, setTractors] = useState<Tractor[]>([])
   const [trailers, setTrailers] = useState<Trailer[]>([])
+  const [tractorsLoaded, setTractorsLoaded] = useState(false)
 
   // === Load Pilot Voice Agent (Week 1 Item 6) ===
   // Uses Web Speech API (SpeechRecognition + SpeechSynthesis)
@@ -1434,6 +1436,7 @@ export default function PermitTestPage() {
   // that VehicleDiagram + computeRigDimensions require to render a *full* tractor + trailer rig instead of falling back to trailer-only.
   async function loadRigTractorsAndTrailers() {
     if (!user) return
+    setTractorsLoaded(false)
     try {
       const supabase = createClient()
       const scope = resolveEquipmentScope({
@@ -1545,6 +1548,8 @@ export default function PermitTestPage() {
       )
     } catch (e) {
       console.warn('[permit-test] loadRigTractorsAndTrailers unexpected error', e)
+    } finally {
+      setTractorsLoaded(true)
     }
   }
 
@@ -1997,8 +2002,8 @@ export default function PermitTestPage() {
       newErrors['carrier'] = 'Please select a carrier in the workspace bar'
     }
 
-    if (showDriverPickerUi && !selectedDriverKey) {
-      newErrors['driver'] = 'Please select a driver'
+    if (!canRunRouteAnalysis({ tractorCount: tractors.length })) {
+      newErrors['equipment'] = NO_TRACTOR_ANALYSIS_HINT
     }
 
     setErrors(newErrors)
@@ -2342,6 +2347,12 @@ export default function PermitTestPage() {
     }
 
     if (!coordsReady || !dimsReady) return
+    if (!tractorsLoaded) return
+    if (!canRunRouteAnalysis({ tractorCount: tractors.length })) {
+      setRouteProgress('idle')
+      setRouteProgressDetail(NO_TRACTOR_ANALYSIS_HINT)
+      return
+    }
 
     // Manual review mode (reject / redo): never auto-fire; user must click Run analysis
     if (!autoRouteEnabled) {
@@ -2363,7 +2374,7 @@ export default function PermitTestPage() {
     formData.origin.query, formData.origin.city, formData.origin.state,
     formData.drops,
     formData.weight, formData.length, formData.width, formData.height,
-    isGeocoding, manualRoute, autoRouteEnabled,
+    isGeocoding, manualRoute, autoRouteEnabled, tractorsLoaded, tractors.length,
   ])
 
   // New function: Approve & Save (Human Approval Gate)
@@ -3279,6 +3290,14 @@ export default function PermitTestPage() {
             </ul>
           </div>
         )}
+        {tractorsLoaded && !canRunRouteAnalysis({ tractorCount: tractors.length }) && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+            {NO_TRACTOR_ANALYSIS_HINT}{' '}
+            <a href="/equipment" className="font-semibold underline underline-offset-2">
+              Add a tractor
+            </a>
+          </div>
+        )}
 
         {/* Permit driver & carrier — picker in carrier mode and service mode (carrier from header) */}
         <section className="space-y-4">
@@ -3288,6 +3307,7 @@ export default function PermitTestPage() {
       ? `1. Driver — ${formatDriverSummaryLine(pickPermitCarrierDriverFields(formData))}`
       : '1. Driver'}
   </h2>
+            <p className="text-xs text-gray-500 mt-0.5">Driver optional for analysis.</p>
 </div>
 
           {workspaceMode === 'service' && !effectiveOrganizationId && (
