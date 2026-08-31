@@ -215,11 +215,6 @@ function resolvePositions(count: 0 | 1 | 2): {
   return { positions: [] }
 }
 
-function isSecondaryOnlyRoadClasses(roadClasses?: RoadClassHint[]): boolean {
-  if (!roadClasses || roadClasses.length === 0) return false
-  return roadClasses.every((c) => c === 'state_highway' || c === 'local')
-}
-
 function bandAppliesToRoadClass(band: EscortRuleBand, hint: RoadClassHint): boolean {
   if (!band.roadClasses || band.roadClasses.length === 0) return true
   return band.roadClasses.includes(hint)
@@ -247,16 +242,16 @@ function selectApplicableBands(
     return { bands: inScope, capToPossible: false }
   }
 
-  const leftoverSecondary = matched.filter((b) => isSecondaryOnlyRoadClasses(b.roadClasses))
   const tripIsMajor = roadClassHint === 'interstate' || roadClassHint === 'us_highway'
-  if (!tripIsMajor || leftoverSecondary.length === 0) {
+  if (!tripIsMajor || matched.length === 0) {
     return { bands: [], capToPossible: false }
   }
 
-  if (leftoverSecondary.some(isHardKeepBand)) {
-    return { bands: leftoverSecondary, capToPossible: false }
+  const hardLeftover = matched.filter(isHardKeepBand)
+  if (hardLeftover.length > 0) {
+    return { bands: hardLeftover, capToPossible: false }
   }
-  return { bands: leftoverSecondary, capToPossible: true }
+  return { bands: matched, capToPossible: true }
 }
 
 function buildWarning(detail: {

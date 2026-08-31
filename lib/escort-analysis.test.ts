@@ -532,6 +532,103 @@ describe('analyzeEscortRequirements', () => {
     expect(result.escortDetails[0].positionMode).toBe('fixed')
   })
 
+  it('caps a 12ft may_require band scoped to state/US when the trip is interstate', () => {
+    const rule = baseRule('WY', {
+      escort_threshold_width_ft: 16,
+      escort_rules: {
+        source: 'test',
+        bands: [
+          {
+            when: { minWidthFt: 12 },
+            requirement: 'may_require',
+            count: 1,
+            roadClasses: ['state_highway', 'us_highway'],
+            notes: 'WY-12-state-us-cap-note',
+          },
+        ],
+      },
+    })
+
+    const result = analyzeEscortRequirements({
+      routeCorridor: ['WY'],
+      load: { width: 12, length: 74, height: 13.5, weight: 80000 },
+      ruleMap: new Map([['WY', rule]]),
+      highways: ['I-80'],
+    })
+
+    expect(result.escortRequiredStates).toEqual([])
+    expect(result.escortPossibleStates).toEqual(['WY'])
+    expect(result.escortDetails[0].requirementLevel).toBe('may_require')
+    expect(result.escortDetails[0].escortCount).toBe(1)
+    expect(result.escortDetails[0].positionMode).toBe('relocates')
+    expect(result.escortDetails[0].roadClassHint).toBe('interstate')
+    expect(result.escortDetails[0].notes).toBe('WY-12-state-us-cap-note')
+  })
+
+  it('caps a 12ft leftover LE band on interstate and strips LE', () => {
+    const rule = baseRule('KS', {
+      escort_threshold_width_ft: 16,
+      escort_rules: {
+        source: 'test',
+        bands: [
+          {
+            when: { minWidthFt: 12 },
+            requirement: 'required',
+            count: 1,
+            types: ['law_enforcement'],
+            roadClasses: ['state_highway', 'local'],
+            notes: 'KS-12-leftover-le',
+          },
+        ],
+      },
+    })
+
+    const result = analyzeEscortRequirements({
+      routeCorridor: ['KS'],
+      load: { width: 12, length: 74, height: 13.5, weight: 80000 },
+      ruleMap: new Map([['KS', rule]]),
+      highways: ['I-70'],
+    })
+
+    expect(result.escortRequiredStates).toEqual([])
+    expect(result.escortPossibleStates).toEqual(['KS'])
+    expect(result.escortDetails[0].requirementLevel).toBe('may_require')
+    expect(result.escortDetails[0].escortCount).toBe(1)
+    expect(result.escortDetails[0].escortTypes).not.toContain('law_enforcement')
+    expect(result.escortDetails[0].warning).not.toMatch(/LE/)
+  })
+
+  it('elevates unscoped 12ft may_require with LE types to required on interstate', () => {
+    const rule = baseRule('KS', {
+      escort_threshold_width_ft: 16,
+      escort_rules: {
+        source: 'test',
+        bands: [
+          {
+            when: { minWidthFt: 12 },
+            requirement: 'may_require',
+            count: 1,
+            types: ['law_enforcement'],
+          },
+        ],
+      },
+    })
+
+    const result = analyzeEscortRequirements({
+      routeCorridor: ['KS'],
+      load: { width: 12, length: 74, height: 13.5, weight: 80000 },
+      ruleMap: new Map([['KS', rule]]),
+      highways: ['I-70'],
+    })
+
+    expect(result.escortRequiredStates).toEqual(['KS'])
+    expect(result.escortPossibleStates).toEqual([])
+    expect(result.escortDetails[0].requirementLevel).toBe('required')
+    expect(result.escortDetails[0].escortCount).toBe(1)
+    expect(result.escortDetails[0].escortTypes).toContain('law_enforcement')
+    expect(result.escortDetails[0].warning).toMatch(/LE/)
+  })
+
   it('15ft8 with no highways stays required after deleting the local invert', () => {
     const heightFt = parseDimensionInput("15'8")!.feetDecimal
 

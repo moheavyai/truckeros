@@ -19,6 +19,17 @@ describe('Permit test escort copy', () => {
     expect(source).toContain('Escort required')
   })
 
+  it('prefers escortDetails for hard/possible chips and spreads possible into fallbackStates', () => {
+    const source = readFileSync(permitPagePath, 'utf8')
+    expect(source).toMatch(
+      /escortDetail\s*\?\s*escortDetail\.requirementLevel === 'required'/
+    )
+    expect(source).toMatch(
+      /escortDetail\s*\?\s*escortDetail\.requirementLevel === 'may_require'/
+    )
+    expect(source).toContain('...(primary.escortPossibleStates || [])')
+  })
+
   it('card titles relocates copy without Type/Position/Needed', () => {
     const source = readFileSync(cardPath, 'utf8')
     expect(source).toContain("'Escorts required'")
