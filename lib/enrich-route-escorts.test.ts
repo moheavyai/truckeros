@@ -46,9 +46,12 @@ describe('enrich-route-escorts', () => {
       ruleMap
     )
 
-    expect(enriched.escortRequiredStates).toEqual(['NE'])
+    expect(enriched.escortRequiredStates).toEqual([])
+    expect(enriched.escortPossibleStates).toEqual(['NE'])
     expect(enriched.escortWarnings?.length).toBe(1)
     expect(enriched.escortDetails?.length).toBe(1)
+    expect(enriched.escortDetails?.[0].requirementLevel).toBe('may_require')
+    expect(enriched.escortDetails?.[0].positionMode).toBe('relocates')
   })
 
   it('enriches primary and alternatives from OR-Tools response shape', async () => {
@@ -63,8 +66,10 @@ describe('enrich-route-escorts', () => {
       { width: widthFt, length: 74, height: 13.5, weight: 80000 }
     )
 
-    expect(enriched.primary?.escortRequiredStates).toEqual(['NE'])
-    expect(enriched.alternatives?.[0]?.escortRequiredStates).toEqual(['NE'])
+    expect(enriched.primary?.escortRequiredStates).toEqual([])
+    expect(enriched.primary?.escortPossibleStates).toEqual(['NE'])
+    expect(enriched.alternatives?.[0]?.escortRequiredStates).toEqual([])
+    expect(enriched.alternatives?.[0]?.escortPossibleStates).toEqual(['NE'])
   })
 
   it('loads state rules for corridor states', async () => {

@@ -130,6 +130,7 @@ export interface AnalyzedRouteOption {
 
   // Richer intelligence from state_permit_rules + DOT corridor data
   escortRequiredStates: string[]
+  escortPossibleStates: string[]
   escortWarnings?: string[]
   escortDetails?: StateEscortDetail[]
   curfewNotes: string[]
@@ -312,6 +313,7 @@ async function buildRouteCorridor(load: LoadDetails): Promise<Array<{
   borderCrossings?: BorderCrossing[]
   permitRequiredStates: string[]
   escortRequiredStates?: string[]
+  escortPossibleStates?: string[]
   escortWarnings?: string[]
   escortDetails?: StateEscortDetail[]
   curfewNotes?: string[]
@@ -502,10 +504,12 @@ async function analyzeCorridor(
   let rules: StatePermitRule[] | null = null
   let escortAnalysis: {
     escortRequiredStates: string[]
+    escortPossibleStates: string[]
     escortWarnings: string[]
     escortDetails: StateEscortDetail[]
   } = {
     escortRequiredStates: [],
+    escortPossibleStates: [],
     escortWarnings: [],
     escortDetails: [],
   }
@@ -539,7 +543,10 @@ async function analyzeCorridor(
       ruleMap,
       highways: corridor.highways || [],
     })
-    const escortStateSet = new Set(escortAnalysis.escortRequiredStates)
+    const escortStateSet = new Set([
+      ...escortAnalysis.escortRequiredStates,
+      ...escortAnalysis.escortPossibleStates,
+    ])
 
     // Per-state evaluation (much more accurate than global checks)
     routeCorridor.forEach(state => {
@@ -631,15 +638,19 @@ async function analyzeCorridor(
 
     // Summary notes (Canadian-aware)
     const permitCount = permitRequiredStates.size
-    const escortCount = escortAnalysis.escortRequiredStates.length
+    const requiredEscortCount = escortAnalysis.escortRequiredStates.length
+    const possibleEscortCount = escortAnalysis.escortPossibleStates.length
 
     if (permitCount > 0) {
       const hasCanadian = Array.from(permitRequiredStates).some(isCanadian)
       const term = hasCanadian ? 'jurisdiction(s)' : 'state(s)'
       notes.push(`Permit required in ${permitCount} ${term} along this route.`)
     }
-    if (escortCount > 0) {
-      notes.push(`Escort(s) likely required in ${escortCount} jurisdiction(s).`)
+    if (requiredEscortCount > 0) {
+      notes.push(`Escort(s) required in ${requiredEscortCount} jurisdiction(s).`)
+    }
+    if (possibleEscortCount > 0) {
+      notes.push(`Escort(s) possible in ${possibleEscortCount} jurisdiction(s).`)
     }
 
     // ============================================================
@@ -747,6 +758,7 @@ async function analyzeCorridor(
     borderCrossings: corridor.borderCrossings || [],
     permitRequiredStates: Array.from(permitRequiredStates).sort(),
     escortRequiredStates: escortAnalysis.escortRequiredStates,
+    escortPossibleStates: escortAnalysis.escortPossibleStates,
     escortWarnings: escortAnalysis.escortWarnings,
     escortDetails: escortAnalysis.escortDetails,
     curfewNotes: Array.from(new Set(curfewNotes)),
@@ -810,6 +822,7 @@ export async function processPermitRequest(loadDetails: LoadDetails): Promise<Pe
       borderCrossings: option.borderCrossings || [],
       permitRequiredStates: option.permitRequiredStates,
       escortRequiredStates: option.escortRequiredStates || [],
+      escortPossibleStates: option.escortPossibleStates || [],
       escortWarnings: option.escortWarnings || [],
       escortDetails: option.escortDetails || [],
       curfewNotes: option.curfewNotes || [],

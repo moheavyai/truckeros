@@ -25,6 +25,7 @@ export const BASELINE_HEIGHT_POLE_STRONG_FT = 15.5 // 15'6"
 
 export type EscortRequirementLevel = 'none' | 'may_require' | 'required'
 export type EscortPosition = 'lead' | 'chase'
+export type EscortPositionMode = 'relocates' | 'fixed'
 export type EscortVehicleType = 'civilian' | 'law_enforcement'
 export type HeightPoleLevel = 'none' | 'recommended' | 'required'
 export type RoadClassHint = 'interstate' | 'us_highway' | 'state_highway' | 'local' | 'mixed'
@@ -72,6 +73,7 @@ export interface StateEscortDetail {
   heightPoleLevel: HeightPoleLevel
   requirementLevel: EscortRequirementLevel
   positions: EscortPosition[]
+  positionMode?: EscortPositionMode
   escortTypes: EscortVehicleType[]
   roadClassHint?: RoadClassHint
   highwayContext?: string
@@ -89,12 +91,14 @@ export interface EscortAnalysisInput {
 
 export interface EscortAnalysisResult {
   escortRequiredStates: string[]
+  escortPossibleStates: string[]
   escortWarnings: string[]
   escortDetails: StateEscortDetail[]
 }
 
 const EMPTY_RESULT: EscortAnalysisResult = {
   escortRequiredStates: [],
+  escortPossibleStates: [],
   escortWarnings: [],
   escortDetails: [],
 }
@@ -184,8 +188,11 @@ function formatHighwayContext(highways?: string[]): {
 
   const hasInterstate = majors.some((h) => /^I-/i.test(h))
   const hasUs = majors.some((h) => /^US /i.test(h))
-  const roadClassHint: RoadClassHint =
-    hasInterstate && hasUs ? 'mixed' : hasInterstate ? 'interstate' : hasUs ? 'us_highway' : 'mixed'
+  const roadClassHint: RoadClassHint = hasInterstate
+    ? 'interstate'
+    : hasUs
+      ? 'us_highway'
+      : 'mixed'
 
   return {
     text: `on ${majors.join(', ')}`,
@@ -199,10 +206,52 @@ function clampCount(n: number): 0 | 1 | 2 {
   return 2
 }
 
-function defaultPositions(count: 0 | 1 | 2): EscortPosition[] {
-  if (count >= 2) return ['lead', 'chase']
-  if (count === 1) return ['chase']
-  return []
+function resolvePositions(count: 0 | 1 | 2): {
+  positions: EscortPosition[]
+  positionMode?: EscortPositionMode
+} {
+  if (count >= 2) return { positions: ['lead', 'chase'], positionMode: 'fixed' }
+  if (count === 1) return { positions: ['lead', 'chase'], positionMode: 'relocates' }
+  return { positions: [] }
+}
+
+function bandAppliesToRoadClass(band: EscortRuleBand, hint: RoadClassHint): boolean {
+  if (!band.roadClasses || band.roadClasses.length === 0) return true
+  return band.roadClasses.includes(hint)
+}
+
+/** 14'+ / long / tall pole / LE-named — do not cap these to 12'-class possible. */
+function isHardKeepBand(band: EscortRuleBand): boolean {
+  const w = band.when.minWidthFt
+  const len = band.when.minLengthFt
+  if (band.heightPole === 'required') return true
+  if (w != null && w >= BASELINE_TWO_ESCORT_WIDTH_FT) return true
+  if (len != null && len >= BASELINE_TWO_ESCORT_LENGTH_FT) return true
+  if ((band.types || []).includes('law_enforcement') && (w == null || w >= BASELINE_TWO_ESCORT_WIDTH_FT)) {
+    return true
+  }
+  return false
+}
+
+function selectApplicableBands(
+  matched: EscortRuleBand[],
+  roadClassHint: RoadClassHint
+): { bands: EscortRuleBand[]; capToPossible: boolean } {
+  const inScope = matched.filter((b) => bandAppliesToRoadClass(b, roadClassHint))
+  if (inScope.length > 0) {
+    return { bands: inScope, capToPossible: false }
+  }
+
+  const tripIsMajor = roadClassHint === 'interstate' || roadClassHint === 'us_highway'
+  if (!tripIsMajor || matched.length === 0) {
+    return { bands: [], capToPossible: false }
+  }
+
+  const hardLeftover = matched.filter(isHardKeepBand)
+  if (hardLeftover.length > 0) {
+    return { bands: hardLeftover, capToPossible: false }
+  }
+  return { bands: matched, capToPossible: true }
 }
 
 function buildWarning(detail: {
@@ -211,6 +260,7 @@ function buildWarning(detail: {
   escortCount: 0 | 1 | 2
   heightPoleLevel: HeightPoleLevel
   positions: EscortPosition[]
+  positionMode?: EscortPositionMode
   escortTypes: EscortVehicleType[]
   highwayContext?: string
 }): string {
@@ -221,20 +271,12 @@ function buildWarning(detail: {
       detail.requirementLevel === 'required' ? 'required' : 'typically required'
     parts.push(`2+ escorts ${level}`)
   } else if (detail.escortCount === 1) {
-    const level =
-      detail.requirementLevel === 'required' ? 'required' : 'recommended / may be required'
-    parts.push(`1 escort ${level}`)
+    const level = detail.requirementLevel === 'required' ? 'required' : 'possible'
+    parts.push(`1 escort ${level} · chase on 4-lane · lead on 2-lane`)
   }
 
-  if (detail.positions.length > 0) {
-    parts.push(`position: ${detail.positions.join(' + ')}`)
-  }
-
-  if (detail.escortTypes.length > 0) {
-    const label = detail.escortTypes
-      .map((t) => (t === 'law_enforcement' ? 'LE' : 'civilian'))
-      .join(' / ')
-    parts.push(label)
+  if (detail.escortTypes.includes('law_enforcement')) {
+    parts.push('LE')
   }
 
   if (detail.heightPoleLevel === 'required') {
@@ -329,15 +371,11 @@ function analyzeFromThresholds(
     if (requirementLevel === 'none') requirementLevel = 'may_require'
   }
 
-  if (roadClassHint === 'local' && requirementLevel === 'required' && escortCount < 2) {
-    requirementLevel = 'may_require'
-  }
-
   if (escortCount === 0 && heightPoleLevel === 'none') {
     return null
   }
 
-  const positions = defaultPositions(escortCount)
+  const { positions, positionMode } = resolvePositions(escortCount)
   const escortTypes: EscortVehicleType[] =
     escortCount > 0 ? ['civilian'] : []
 
@@ -347,6 +385,7 @@ function analyzeFromThresholds(
     escortCount,
     heightPoleLevel,
     positions,
+    positionMode,
     escortTypes,
     highwayContext,
   }
@@ -358,6 +397,7 @@ function analyzeFromThresholds(
     heightPoleLevel,
     requirementLevel,
     positions,
+    positionMode,
     escortTypes,
     roadClassHint,
     highwayContext,
@@ -380,18 +420,23 @@ function analyzeFromStructuredBands(
   const bands = structured.bands || []
   if (bands.length === 0) return null
 
+  const matchedBands = bands.filter((band) => bandMatches(band, load))
+  if (matchedBands.length === 0) return null
+
+  const { bands: applicable, capToPossible } = selectApplicableBands(
+    matchedBands,
+    roadClassHint
+  )
+  if (applicable.length === 0) return null
+
   const triggers: string[] = []
   let escortCount: 0 | 1 | 2 = 0
   let requirementLevel: EscortRequirementLevel = 'none'
   let heightPoleLevel: HeightPoleLevel = 'none'
-  const positionsSet = new Set<EscortPosition>()
   const typesSet = new Set<EscortVehicleType>()
   const notes: string[] = []
-  let matched = false
 
-  for (const band of bands) {
-    if (!bandMatches(band, load)) continue
-    matched = true
+  for (const band of applicable) {
     const { when } = band
     if (when.minWidthFt != null && load.width >= when.minWidthFt) {
       triggers.push(
@@ -427,30 +472,24 @@ function analyzeFromStructuredBands(
       heightPoleLevel = 'recommended'
     }
 
-    for (const pos of band.positions || []) positionsSet.add(pos)
     for (const typ of band.types || []) typesSet.add(typ)
     if (band.notes) notes.push(band.notes)
   }
 
-  if (!matched) return null
-
-  // Tall + height-pole-required bands elevate to hard required.
+  if (typesSet.has('law_enforcement')) {
+    requirementLevel = 'required'
+  }
   if (heightPoleLevel === 'required' && requirementLevel === 'may_require') {
     requirementLevel = 'required'
   }
 
-  if (
-    roadClassHint === 'local' &&
-    requirementLevel === 'required' &&
-    escortCount < 2
-  ) {
+  if (capToPossible) {
     requirementLevel = 'may_require'
+    escortCount = 1
+    typesSet.delete('law_enforcement')
   }
 
-  const positions =
-    positionsSet.size > 0
-      ? (Array.from(positionsSet) as EscortPosition[])
-      : defaultPositions(escortCount)
+  const { positions, positionMode } = resolvePositions(escortCount)
   const escortTypes =
     typesSet.size > 0
       ? (Array.from(typesSet) as EscortVehicleType[])
@@ -464,6 +503,7 @@ function analyzeFromStructuredBands(
     escortCount,
     heightPoleLevel,
     positions,
+    positionMode,
     escortTypes,
     highwayContext,
   }
@@ -475,6 +515,7 @@ function analyzeFromStructuredBands(
     heightPoleLevel,
     requirementLevel,
     positions,
+    positionMode,
     escortTypes,
     roadClassHint,
     highwayContext,
@@ -516,11 +557,7 @@ export function analyzeEscortRequirements(input: EscortAnalysisInput): EscortAna
   const singleState = input.routeCorridor.length === 1
   const hwy = formatHighwayContext(input.highways)
   const highwayCtx = singleState ? hwy.text : undefined
-  const roadClassHint: RoadClassHint = singleState
-    ? hwy.roadClassHint
-    : input.highways && input.highways.length > 0
-      ? formatHighwayContext(input.highways).roadClassHint
-      : 'mixed'
+  const roadClassHint = hwy.roadClassHint
 
   const escortDetails: StateEscortDetail[] = []
 
@@ -531,18 +568,26 @@ export function analyzeEscortRequirements(input: EscortAnalysisInput): EscortAna
       input.load,
       rule,
       highwayCtx,
-      singleState ? roadClassHint : 'mixed'
+      roadClassHint
     )
     if (detail) {
       escortDetails.push(detail)
     }
   }
 
-  const escortRequiredStates = escortDetails.map((d) => d.stateCode).sort()
+  const escortRequiredStates = escortDetails
+    .filter((d) => d.requirementLevel === 'required')
+    .map((d) => d.stateCode)
+    .sort()
+  const escortPossibleStates = escortDetails
+    .filter((d) => d.requirementLevel === 'may_require')
+    .map((d) => d.stateCode)
+    .sort()
   const escortWarnings = escortDetails.map((d) => d.warning)
 
   return {
     escortRequiredStates,
+    escortPossibleStates,
     escortWarnings,
     escortDetails,
   }

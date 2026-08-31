@@ -176,8 +176,9 @@ describe('POST /api/optimize-route', () => {
       ...ortoolsPayload,
       primary: {
         ...ortoolsPayload.primary,
-        escortRequiredStates: ['NE'],
-        escortWarnings: ['NE: 1 escort recommended'],
+        escortRequiredStates: [],
+        escortPossibleStates: ['NE'],
+        escortWarnings: ['NE: 1 escort possible · chase on 4-lane · lead on 2-lane'],
       },
     }
 
@@ -210,8 +211,11 @@ describe('POST /api/optimize-route', () => {
     expect(res.status).toBe(200)
     expect(mockEnrichOrToolsResponseWithEscorts).toHaveBeenCalledTimes(1)
     expect(mockEnrichOrToolsResponseWithScale).toHaveBeenCalledTimes(1)
-    expect(body.primary.escortRequiredStates).toEqual(['NE'])
-    expect(body.primary.escortWarnings).toContain('NE: 1 escort recommended')
+    expect(body.primary.escortRequiredStates).toEqual([])
+    expect(body.primary.escortPossibleStates).toEqual(['NE'])
+    expect(body.primary.escortWarnings).toContain(
+      'NE: 1 escort possible · chase on 4-lane · lead on 2-lane'
+    )
     expect(mockProcessPermitRequest).not.toHaveBeenCalled()
   })
 })

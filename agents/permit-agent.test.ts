@@ -373,9 +373,13 @@ describe('permit-agent escort integration', () => {
 
     expect(result.status).toBe('pending_review')
     const option = result.options[0]
-    expect(option.escortRequiredStates).toEqual(['NE', 'SD'])
+    expect(option.escortRequiredStates).toEqual([])
+    expect(option.escortPossibleStates).toEqual(['NE', 'SD'])
     expect(option.escortWarnings?.length).toBe(2)
-    expect(option.notes.some((n) => n.includes('Escort(s) likely required in 2'))).toBe(true)
+    expect(option.escortDetails?.every((d) => d.requirementLevel === 'may_require')).toBe(true)
+    expect(option.escortDetails?.every((d) => d.positionMode === 'relocates')).toBe(true)
+    expect(option.notes.some((n) => /likely required/i.test(n))).toBe(false)
+    expect(option.notes.some((n) => n.includes('Escort(s) possible in 2'))).toBe(true)
     expect(option.notes.some((n) => n.startsWith('NE:'))).toBe(false)
   })
 
@@ -395,6 +399,9 @@ describe('permit-agent escort integration', () => {
     expect(result.status).toBe('pending_review')
     const option = result.options[0]
     expect(option.escortRequiredStates).toEqual(['NE'])
-    expect(option.escortWarnings?.some((w) => /height pole recommended/i.test(w))).toBe(true)
+    expect(option.escortPossibleStates).toEqual([])
+    expect(option.escortDetails?.[0].requirementLevel).toBe('required')
+    expect(option.escortDetails?.[0].positionMode).toBe('relocates')
+    expect(option.escortWarnings?.some((w) => /height pole required/i.test(w))).toBe(true)
   })
 })
