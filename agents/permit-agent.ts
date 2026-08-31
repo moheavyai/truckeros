@@ -130,7 +130,7 @@ export interface AnalyzedRouteOption {
 
   // Richer intelligence from state_permit_rules + DOT corridor data
   escortRequiredStates: string[]
-  escortPossibleStates?: string[]
+  escortPossibleStates: string[]
   escortWarnings?: string[]
   escortDetails?: StateEscortDetail[]
   curfewNotes: string[]
@@ -638,16 +638,19 @@ async function analyzeCorridor(
 
     // Summary notes (Canadian-aware)
     const permitCount = permitRequiredStates.size
-    const escortCount =
-      escortAnalysis.escortRequiredStates.length + escortAnalysis.escortPossibleStates.length
+    const requiredEscortCount = escortAnalysis.escortRequiredStates.length
+    const possibleEscortCount = escortAnalysis.escortPossibleStates.length
 
     if (permitCount > 0) {
       const hasCanadian = Array.from(permitRequiredStates).some(isCanadian)
       const term = hasCanadian ? 'jurisdiction(s)' : 'state(s)'
       notes.push(`Permit required in ${permitCount} ${term} along this route.`)
     }
-    if (escortCount > 0) {
-      notes.push(`Escort(s) likely required in ${escortCount} jurisdiction(s).`)
+    if (requiredEscortCount > 0) {
+      notes.push(`Escort(s) required in ${requiredEscortCount} jurisdiction(s).`)
+    }
+    if (possibleEscortCount > 0) {
+      notes.push(`Escort(s) possible in ${possibleEscortCount} jurisdiction(s).`)
     }
 
     // ============================================================

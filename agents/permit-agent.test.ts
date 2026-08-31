@@ -376,7 +376,10 @@ describe('permit-agent escort integration', () => {
     expect(option.escortRequiredStates).toEqual([])
     expect(option.escortPossibleStates).toEqual(['NE', 'SD'])
     expect(option.escortWarnings?.length).toBe(2)
-    expect(option.notes.some((n) => n.includes('Escort(s) likely required in 2'))).toBe(true)
+    expect(option.escortDetails?.every((d) => d.requirementLevel === 'may_require')).toBe(true)
+    expect(option.escortDetails?.every((d) => d.positionMode === 'relocates')).toBe(true)
+    expect(option.notes.some((n) => /likely required/i.test(n))).toBe(false)
+    expect(option.notes.some((n) => n.includes('Escort(s) possible in 2'))).toBe(true)
     expect(option.notes.some((n) => n.startsWith('NE:'))).toBe(false)
   })
 

@@ -220,6 +220,45 @@ function isSecondaryOnlyRoadClasses(roadClasses?: RoadClassHint[]): boolean {
   return roadClasses.every((c) => c === 'state_highway' || c === 'local')
 }
 
+function bandAppliesToRoadClass(band: EscortRuleBand, hint: RoadClassHint): boolean {
+  if (!band.roadClasses || band.roadClasses.length === 0) return true
+  return band.roadClasses.includes(hint)
+}
+
+/** 14'+ / long / tall pole / LE-named — do not cap these to 12'-class possible. */
+function isHardKeepBand(band: EscortRuleBand): boolean {
+  const w = band.when.minWidthFt
+  const len = band.when.minLengthFt
+  if (band.heightPole === 'required') return true
+  if (w != null && w >= BASELINE_TWO_ESCORT_WIDTH_FT) return true
+  if (len != null && len >= BASELINE_TWO_ESCORT_LENGTH_FT) return true
+  if ((band.types || []).includes('law_enforcement') && (w == null || w >= BASELINE_TWO_ESCORT_WIDTH_FT)) {
+    return true
+  }
+  return false
+}
+
+function selectApplicableBands(
+  matched: EscortRuleBand[],
+  roadClassHint: RoadClassHint
+): { bands: EscortRuleBand[]; capToPossible: boolean } {
+  const inScope = matched.filter((b) => bandAppliesToRoadClass(b, roadClassHint))
+  if (inScope.length > 0) {
+    return { bands: inScope, capToPossible: false }
+  }
+
+  const leftoverSecondary = matched.filter((b) => isSecondaryOnlyRoadClasses(b.roadClasses))
+  const tripIsMajor = roadClassHint === 'interstate' || roadClassHint === 'us_highway'
+  if (!tripIsMajor || leftoverSecondary.length === 0) {
+    return { bands: [], capToPossible: false }
+  }
+
+  if (leftoverSecondary.some(isHardKeepBand)) {
+    return { bands: leftoverSecondary, capToPossible: false }
+  }
+  return { bands: leftoverSecondary, capToPossible: true }
+}
+
 function buildWarning(detail: {
   stateCode: string
   requirementLevel: EscortRequirementLevel
@@ -237,13 +276,8 @@ function buildWarning(detail: {
       detail.requirementLevel === 'required' ? 'required' : 'typically required'
     parts.push(`2+ escorts ${level}`)
   } else if (detail.escortCount === 1) {
-    if (detail.positionMode === 'relocates') {
-      parts.push('1 escort · chase on 4-lane · lead on 2-lane')
-    } else {
-      const level =
-        detail.requirementLevel === 'required' ? 'required' : 'recommended / may be required'
-      parts.push(`1 escort ${level}`)
-    }
+    const level = detail.requirementLevel === 'required' ? 'required' : 'possible'
+    parts.push(`1 escort ${level} · chase on 4-lane · lead on 2-lane`)
   }
 
   if (detail.escortTypes.includes('law_enforcement')) {
@@ -391,17 +425,23 @@ function analyzeFromStructuredBands(
   const bands = structured.bands || []
   if (bands.length === 0) return null
 
+  const matchedBands = bands.filter((band) => bandMatches(band, load))
+  if (matchedBands.length === 0) return null
+
+  const { bands: applicable, capToPossible } = selectApplicableBands(
+    matchedBands,
+    roadClassHint
+  )
+  if (applicable.length === 0) return null
+
   const triggers: string[] = []
   let escortCount: 0 | 1 | 2 = 0
   let requirementLevel: EscortRequirementLevel = 'none'
   let heightPoleLevel: HeightPoleLevel = 'none'
   const typesSet = new Set<EscortVehicleType>()
   const notes: string[] = []
-  const matchedBands: EscortRuleBand[] = []
 
-  for (const band of bands) {
-    if (!bandMatches(band, load)) continue
-    matchedBands.push(band)
+  for (const band of applicable) {
     const { when } = band
     if (when.minWidthFt != null && load.width >= when.minWidthFt) {
       triggers.push(
@@ -441,24 +481,17 @@ function analyzeFromStructuredBands(
     if (band.notes) notes.push(band.notes)
   }
 
-  if (matchedBands.length === 0) return null
-
-  // Tall + height-pole-required bands elevate to hard required.
+  if (typesSet.has('law_enforcement')) {
+    requirementLevel = 'required'
+  }
   if (heightPoleLevel === 'required' && requirementLevel === 'may_require') {
     requirementLevel = 'required'
   }
 
-  const onlySecondaryScoped = matchedBands.every((b) =>
-    isSecondaryOnlyRoadClasses(b.roadClasses)
-  )
-  if (
-    onlySecondaryScoped &&
-    (roadClassHint === 'interstate' || roadClassHint === 'us_highway')
-  ) {
-    if (requirementLevel === 'required') {
-      requirementLevel = 'may_require'
-    }
+  if (capToPossible) {
+    requirementLevel = 'may_require'
     escortCount = 1
+    typesSet.delete('law_enforcement')
   }
 
   const { positions, positionMode } = resolvePositions(escortCount)

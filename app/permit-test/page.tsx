@@ -4492,13 +4492,12 @@ export default function PermitTestPage() {
                           const escortDetail = primary.escortDetails?.find(
                             (d: { stateCode?: string }) => d.stateCode === state
                           )
-                          const escortHard =
-                            escortDetail?.requirementLevel === 'required' ||
-                            primary.escortRequiredStates?.includes(state)
-                          const escortPossible =
-                            !escortHard &&
-                            (escortDetail?.requirementLevel === 'may_require' ||
-                              primary.escortPossibleStates?.includes(state))
+                          const escortHard = escortDetail
+                            ? escortDetail.requirementLevel === 'required'
+                            : primary.escortRequiredStates?.includes(state)
+                          const escortPossible = escortDetail
+                            ? escortDetail.requirementLevel === 'may_require'
+                            : primary.escortPossibleStates?.includes(state)
                           const isFirst = index === 0
                           const isLast = index === primary.routeCorridor.length - 1
                           return (
@@ -4533,10 +4532,13 @@ export default function PermitTestPage() {
                         <div className="w-3 h-3 bg-red-500 rounded-full" /> <span className="text-gray-600">Permit required</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 bg-orange-500 rounded-full" /> <span className="text-gray-600">Escort required</span>
+                        <div className="w-3 h-3 bg-red-700 rounded-full" /> <span className="text-gray-600">Escort required</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 bg-orange-500 rounded-full" /> <span className="text-gray-600">Escort possible</span>
                       </div>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-1 text-[10px]">{primary.routeCorridor.map((state:string,idx:number)=>{const requires=stateRequiresPermit(primary,state);return <span key={idx} className={`px-1.5 py-0.5 rounded font-mono ${requires?'bg-red-500 text-white':'bg-gray-200 text-gray-700'}`}>{state}{requires?' needed':''}</span>})}</div>
+                    <div className="mt-2 flex flex-wrap gap-1 text-[10px]">{primary.routeCorridor.map((state:string,idx:number)=>{const requires=stateRequiresPermit(primary,state);return <span key={idx} className={`px-1.5 py-0.5 rounded font-mono ${requires?'bg-red-500 text-white':'bg-gray-200 text-gray-700'}`}>{state}{requires?' permit':''}</span>})}</div>
                   </div>
                 )}
 
@@ -4615,10 +4617,12 @@ export default function PermitTestPage() {
                     <div className="grid gap-3 md:grid-cols-2">
                       {primary.permitRequiredStates.map((state: string, idx: number) => {
                         const stateReasons = (primary.reasons || []).filter((r: string) => r.startsWith(`${state}:`))
-                        const escortHard =
-                          primary.escortRequiredStates?.includes(state) ||
-                          primary.escortDetails?.find((d: { stateCode?: string }) => d.stateCode === state)
-                            ?.requirementLevel === 'required'
+                        const escortDetail = primary.escortDetails?.find(
+                          (d: { stateCode?: string }) => d.stateCode === state
+                        )
+                        const escortHard = escortDetail
+                          ? escortDetail.requirementLevel === 'required'
+                          : primary.escortRequiredStates?.includes(state)
                         return (
                           <div key={idx} className="border border-red-200 bg-red-50 rounded-lg p-4">
                             <div className="flex items-center justify-between mb-2">
@@ -4695,7 +4699,10 @@ export default function PermitTestPage() {
                       <EscortRequirementsCard
                         details={primary.escortDetails}
                         fallbackWarnings={primary.escortWarnings}
-                        fallbackStates={primary.escortRequiredStates}
+                        fallbackStates={[
+                          ...(primary.escortRequiredStates || []),
+                          ...(primary.escortPossibleStates || []),
+                        ]}
                       />
                     )}
 
