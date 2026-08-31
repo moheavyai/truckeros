@@ -58,6 +58,23 @@ export function parseDimensionInput(raw: string): ParsedDimension | null {
   return null
 }
 
+/** Heights above this (feet) are almost certainly inches typed without a unit. */
+export const IMPLAUSIBLE_HEIGHT_FEET = 20
+
+export function isImplausibleHeightFeet(n: number): boolean {
+  return Number.isFinite(n) && n > IMPLAUSIBLE_HEIGHT_FEET
+}
+
+/** Warn only — parseDimensionInput still treats a bare number as feet. */
+export function implausibleHeightHint(feet: number): string {
+  if (!isImplausibleHeightFeet(feet)) return ''
+  if (feet === 60) {
+    const asInches = formatDimensionDisplay(60 / 12)
+    return `60 looks like 60 feet. If you meant 60 inches (${asInches}), enter 60" or ${asInches}.`
+  }
+  return 'above typical OSOW height. Confirm feet vs inches...'
+}
+
 /** Format decimal feet as clean 8' 6" / 60' 0" display. */
 export function formatDimensionDisplay(feetDecimal: number): string {
   if (!feetDecimal || feetDecimal <= 0) return ''

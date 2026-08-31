@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { formatDimensionDisplay, formatLoadDisplay } from './parse-dimension'
+import {
+  formatDimensionDisplay,
+  formatLoadDisplay,
+  implausibleHeightHint,
+  isImplausibleHeightFeet,
+  parseDimensionInput,
+} from './parse-dimension'
 
 describe('formatDimensionDisplay', () => {
   it('rounds decimal feet to nearest inch without repeating decimals', () => {
@@ -35,5 +41,27 @@ describe('formatLoadDisplay', () => {
     const display = formatLoadDisplay({ weightLbs: 0, lengthFt: null })
     expect(display.weight).toBe('—')
     expect(display.dimensionsLine).toBe('—')
+  })
+})
+
+describe('implausible height warning', () => {
+  it('does not flag typical OSOW heights', () => {
+    expect(isImplausibleHeightFeet(13.5)).toBe(false)
+    expect(isImplausibleHeightFeet(20)).toBe(false)
+  })
+
+  it('flags heights above 20 feet including a bare 60', () => {
+    expect(isImplausibleHeightFeet(20.1)).toBe(true)
+    expect(isImplausibleHeightFeet(60)).toBe(true)
+  })
+
+  it('explains that bare 60 is 60 feet, not 60 inches', () => {
+    const hint = implausibleHeightHint(60)
+    expect(hint).toMatch(/60 inches/)
+    expect(hint).toMatch(/5' 0"/)
+  })
+
+  it('does not change parse rules: bare 60 is 60 feet', () => {
+    expect(parseDimensionInput('60')?.feetDecimal).toBe(60)
   })
 })

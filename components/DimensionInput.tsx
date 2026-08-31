@@ -1,7 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { parseDimensionInput, formatDimensionDisplay } from '@/lib/parse-dimension'
+import {
+  parseDimensionInput,
+  formatDimensionDisplay,
+  isImplausibleHeightFeet,
+  implausibleHeightHint,
+} from '@/lib/parse-dimension'
 
 type DimensionInputProps = {
   value: number | string
@@ -95,6 +100,11 @@ export default function DimensionInput({
         }}
         className="border border-gray-500 sm:border-gray-300 text-gray-900 placeholder:text-gray-500 bg-white p-1.5 rounded w-full text-sm font-mono"
       />
+      {label &&
+        /height/i.test(label) &&
+        isImplausibleHeightFeet(numeric) && (
+          <p className="mt-1 text-[11px] text-amber-800">{implausibleHeightHint(numeric)}</p>
+        )}
     </div>
   )
 }

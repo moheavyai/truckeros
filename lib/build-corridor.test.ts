@@ -913,3 +913,54 @@ describe('same-state corridor resilience', () => {
     expect(new Set(corridor).size).toBe(1)
   })
 })
+
+describe('completeCorridorWithHighways same-state / I-44 must not invent TN', () => {
+  it('keeps a Missouri-only hop on I-44 in Missouri', () => {
+    expect(completeCorridorWithHighways(['MO'], ['I-44'])).toEqual(['MO'])
+    expect(completeCorridorWithHighways(['MO'], ['I-44', 'I-55', 'US 71'])).toEqual(['MO'])
+    expect(completeCorridorWithHighways(['MO', 'MO'], ['I-44'])).toEqual(['MO'])
+  })
+
+  it('keeps Kansas-only I-70/I-35 in Kansas', () => {
+    expect(completeCorridorWithHighways(['KS'], ['I-70', 'I-35'])).toEqual(['KS'])
+  })
+
+  it('may insert TN on a southeast long-haul that already includes MO', () => {
+    const se = completeCorridorWithHighways(['KS', 'MO', 'GA', 'FL'], ['I-44', 'I-24'])
+    expect(se).toContain('TN')
+    expect(se[0]).toBe('KS')
+    expect(se[se.length - 1]).toBe('FL')
+  })
+
+  it('does not insert TN on I-55 north MO→IL', () => {
+    expect(completeCorridorWithHighways(['MO', 'IL'], ['I-55'])).toEqual(['MO', 'IL'])
+  })
+
+  it('Willard MO → Lamar MO steps stay in Missouri', () => {
+    const steps = [
+      {
+        ref: 'I 44',
+        maneuver: { location: [-93.42853, 37.30505] },
+        geometry: {
+          coordinates: [
+            [-93.42853, 37.30505],
+            [-93.8, 37.35],
+          ],
+        },
+      },
+      {
+        ref: 'US 71',
+        maneuver: { location: [-94.27687, 37.49505] },
+        geometry: {
+          coordinates: [
+            [-94.0, 37.4],
+            [-94.27687, 37.49505],
+          ],
+        },
+      },
+    ]
+    const fromSteps = buildCorridorFromSteps(steps, 'MO', 'MO')
+    expect(fromSteps).toEqual(['MO'])
+    expect(completeCorridorWithHighways(fromSteps, ['I-44', 'US 71'])).toEqual(['MO'])
+  })
+})

@@ -204,12 +204,20 @@ export async function buildIntelligentCorridor(
     // Strengthen corridor using existing heuristic (unchanged behavior)
     states = completeCorridorWithHighways(states, highways)
 
+    const originCode = normalizeCorridorStateCode(originState)
+    const destCode = normalizeCorridorStateCode(destState)
+    if (originCode && destCode && originCode === destCode) {
+      states = [originCode]
+    }
+
     // Structured border crossings derived from the same steps/geometry that produced this corridor.
     // Single-state correctly yields []. Multi-state yields one entry per state transition.
     const borderCrossings =
-      steps && steps.length > 0 && states.length >= 2
-        ? extractBorderCrossingsFromSteps(steps)
-        : []
+      originCode && destCode && originCode === destCode
+        ? []
+        : steps && steps.length > 0 && states.length >= 2
+          ? extractBorderCrossingsFromSteps(steps)
+          : []
 
     corridors.push({
       routeCorridor: states,
@@ -697,6 +705,10 @@ export function fillCorridorGapsFromGeometry(corridor: string[], steps: any[]): 
  * Drop middle corridor states that never appear in dense geometry.
  * Keeps origin/dest bookends. Heuristic inserts (I-35→OK, etc.) that the
  * route never actually traversed get removed so portal state count stays honest.
+ *
+ * Same-state extras (e.g. MO-TN from I-44 on a Missouri-only hop) must be
+ * prevented in completeCorridorWithHighways. This function keeps bookends, so
+ * a two-state [MO, TN] corridor cannot drop TN here.
  */
 export function skipNonTraversedStates(corridor: string[], steps: any[]): string[] {
   if (!corridor || corridor.length < 3 || !steps || steps.length === 0) return corridor
@@ -1222,12 +1234,36 @@ function curateMajorHighways(highways: string[]): string[] {
   return result
 }
 
+function normalizeCorridorStateCode(raw?: string): string | undefined {
+  if (!raw) return undefined
+  let code = raw.toUpperCase().trim()
+  if (code.length > 2) {
+    const abbr = getStateAbbreviation(raw)
+    if (abbr) code = abbr
+  }
+  if (code.length === 2 && US_STATE_CODES.has(code)) return code
+  return undefined
+}
+
+/** Southeast destinations that make an I-44 / I-55 / I-24 MO→TN splice plausible. Not IL (I-55 north). */
+const TN_SPLICE_DESTINATIONS = new Set(['TN', 'KY', 'AL', 'GA', 'NC', 'SC', 'FL', 'VA', 'MS'])
+
 /**
  * Temporary helper to fill common missing states based on major highways.
  * This bridges gaps until we have better mapping data.
  */
 export function completeCorridorWithHighways(states: string[], highways: string[]): string[] {
   const result = [...states]
+  const uniqueTwoLetter = [
+    ...new Set(
+      result
+        .map((s) => normalizeCorridorStateCode(s))
+        .filter((s): s is string => Boolean(s))
+    ),
+  ]
+  // Intra-state hop: never invent I-35/I-40/I-44/I-55/I-24/OK-MT/east-coast inserts.
+  if (uniqueTwoLetter.length === 1) return uniqueTwoLetter
+
   const hwySet = new Set(highways)
 
   // Local tolerant normalize for enriched OSRM highways (e.g. "I-35 (entry ...)" ) so the 3 documented
@@ -1267,7 +1303,12 @@ export function completeCorridorWithHighways(states: string[], highways: string[
       const ksIdx = result.indexOf('KS')
       if (ksIdx !== -1) result.splice(ksIdx + 1, 0, 'MO')
     }
-    if (!result.includes('TN') && result.includes('MO')) {
+    // TN after MO only when the corridor already heads southeast (not IL / same-state MO).
+    if (
+      !result.includes('TN') &&
+      result.includes('MO') &&
+      result.some((s) => TN_SPLICE_DESTINATIONS.has(s))
+    ) {
       const moIdx = result.indexOf('MO')
       result.splice(moIdx + 1, 0, 'TN')
     }
