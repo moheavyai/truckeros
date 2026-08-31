@@ -14,6 +14,7 @@ export interface RouteOptionEscortFields {
   routeCorridor?: string[]
   highways?: string[]
   escortRequiredStates?: string[]
+  escortPossibleStates?: string[]
   escortWarnings?: string[]
   escortDetails?: EscortAnalysisResult['escortDetails']
 }
@@ -61,6 +62,7 @@ export function enrichRouteOptionWithEscorts<T extends RouteOptionEscortFields>(
   return {
     ...option,
     escortRequiredStates: escortAnalysis.escortRequiredStates,
+    escortPossibleStates: escortAnalysis.escortPossibleStates,
     escortWarnings: escortAnalysis.escortWarnings,
     escortDetails: escortAnalysis.escortDetails,
   }

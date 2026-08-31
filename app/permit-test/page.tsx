@@ -4492,11 +4492,13 @@ export default function PermitTestPage() {
                           const escortDetail = primary.escortDetails?.find(
                             (d: { stateCode?: string }) => d.stateCode === state
                           )
-                          const needsEscort =
-                            primary.escortRequiredStates?.includes(state) ||
+                          const escortHard =
                             escortDetail?.requirementLevel === 'required' ||
-                            escortDetail?.requirementLevel === 'may_require'
-                          const escortHard = escortDetail?.requirementLevel === 'required'
+                            primary.escortRequiredStates?.includes(state)
+                          const escortPossible =
+                            !escortHard &&
+                            (escortDetail?.requirementLevel === 'may_require' ||
+                              primary.escortPossibleStates?.includes(state))
                           const isFirst = index === 0
                           const isLast = index === primary.routeCorridor.length - 1
                           return (
@@ -4508,9 +4510,9 @@ export default function PermitTestPage() {
                                 <span className={requires ? 'text-red-600' : 'text-emerald-600'}>
                                   {requires ? 'PERMIT' : 'OK'}
                                 </span>
-                                {needsEscort && (
+                                {(escortHard || escortPossible) && (
                                   <div className={`text-[9px] font-semibold ${escortHard ? 'text-red-700' : 'text-orange-600'}`}>
-                                    {escortHard ? 'ESCORT REQ' : 'ESCORT?'}
+                                    {escortHard ? 'ESCORT REQ' : 'POSSIBLE'}
                                   </div>
                                 )}
                               </div>
@@ -4613,15 +4615,18 @@ export default function PermitTestPage() {
                     <div className="grid gap-3 md:grid-cols-2">
                       {primary.permitRequiredStates.map((state: string, idx: number) => {
                         const stateReasons = (primary.reasons || []).filter((r: string) => r.startsWith(`${state}:`))
-                        const needsEscort = primary.escortRequiredStates?.includes(state)
+                        const escortHard =
+                          primary.escortRequiredStates?.includes(state) ||
+                          primary.escortDetails?.find((d: { stateCode?: string }) => d.stateCode === state)
+                            ?.requirementLevel === 'required'
                         return (
                           <div key={idx} className="border border-red-200 bg-red-50 rounded-lg p-4">
                             <div className="flex items-center justify-between mb-2">
                               <span className="font-bold text-lg text-red-800">{state}</span>
                               <div className="flex gap-1.5">
                                 <span className="text-xs px-2 py-0.5 bg-red-200 text-red-700 rounded">PERMIT REQUIRED</span>
-                                {needsEscort && (
-                                  <span className="text-xs px-2 py-0.5 bg-orange-200 text-orange-700 rounded font-medium">ESCORT NEEDED</span>
+                                {escortHard && (
+                                  <span className="text-xs px-2 py-0.5 bg-orange-200 text-orange-700 rounded font-medium">ESCORT REQ</span>
                                 )}
                               </div>
                             </div>
@@ -4678,13 +4683,14 @@ export default function PermitTestPage() {
                 )}
 
                 {/* Route Restrictions & Requirements (from strengthened state rules DB) */}
-                {(primary.escortRequiredStates?.length > 0 || primary.escortWarnings?.length > 0 || primary.curfewNotes?.length > 0 || primary.specialNotes?.length > 0) && (
+                {(primary.escortRequiredStates?.length > 0 || primary.escortPossibleStates?.length > 0 || primary.escortWarnings?.length > 0 || primary.curfewNotes?.length > 0 || primary.specialNotes?.length > 0) && (
                   <div className="p-4 border rounded-lg bg-white">
                     <h3 className="font-semibold mb-3 text-gray-700">Route Restrictions &amp; Requirements</h3>
 
                     {/* Escort Summary — structured required vs may-require */}
                     {(primary.escortDetails?.length > 0 ||
                       primary.escortRequiredStates?.length > 0 ||
+                      primary.escortPossibleStates?.length > 0 ||
                       primary.escortWarnings?.length > 0) && (
                       <EscortRequirementsCard
                         details={primary.escortDetails}
@@ -4865,7 +4871,8 @@ export default function PermitTestPage() {
                             <div className="font-medium">{option.routeCorridor?.join(' → ') || 'Route'}</div>
                             <div className="text-sm text-gray-600">
                               {option.permitRequiredStates?.length || 0} state(s) require permit
-                              {option.escortRequiredStates?.length > 0 && ` • ${option.escortRequiredStates.length} escort(s)`}
+                              {(option.escortRequiredStates?.length > 0 || option.escortPossibleStates?.length > 0) &&
+                                ` • ${(option.escortRequiredStates?.length || 0) + (option.escortPossibleStates?.length || 0)} escort(s)`}
                               {' '}• Est. ${option.estimatedCost ?? 0}
                             </div>
                           </div>
