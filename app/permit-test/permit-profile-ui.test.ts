@@ -166,15 +166,17 @@ describe('Permit test page — member profile autofill UI', () => {
     expect(handler).toContain('setShowDriverPicker(false)')
   })
 
-  it('requires selectedDriverKey when driver picker is shown during validateForm', () => {
-    const validateForm = validateFormSlice(readPermitPageSource())
+  it('does not require a driver for analysis; tractor is required', () => {
+    const source = readPermitPageSource()
+    const validateForm = validateFormSlice(source)
 
-    expect(validateForm).toContain('showDriverPickerUi')
-    expect(validateForm).toContain('!selectedDriverKey')
-    expect(validateForm).toContain("newErrors['driver']")
-    expect(validateForm).toContain('Please select a driver')
+    expect(validateForm).not.toContain('Please select a driver')
     expect(validateForm).toContain("newErrors['carrier']")
     expect(validateForm).toContain('workspace bar')
+    expect(validateForm).toContain("newErrors['equipment']")
+    expect(validateForm).toContain('NO_TRACTOR_ANALYSIS_HINT')
+    expect(source).toContain('Driver optional for analysis')
+    expect(source).toContain('canRunRouteAnalysis')
   })
 
   it('clears stale driver selection after roster reload and on workspace/carrier scope change', () => {

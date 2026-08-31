@@ -26,6 +26,7 @@ import {
   sortRigsForDisplay,
 } from '@/types/equipment'
 import { formatDimensionDisplay } from '@/lib/parse-dimension'
+import { canRunRouteAnalysis, NO_TRACTOR_ANALYSIS_HINT } from '@/lib/analysis-readiness'
 import { formatLicensePlateDisplay } from '@/lib/license-plate'
 import { normalizeLicensePlateState } from '@/lib/us-states'
 import DimensionInput from '@/components/DimensionInput'
@@ -84,6 +85,125 @@ const metricChipClass =
   'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-900 border border-emerald-200'
 const metricChipMutedClass =
   'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700 border border-gray-300 sm:border-gray-200'
+
+function getAxleSpacingLabel(
+  isTractor: boolean,
+  numAxles: number | null | undefined,
+  idx: number,
+  trailerType?: string | null
+) {
+  const n = Math.max(isTractor ? 3 : 2, Number(numAxles) || (isTractor ? 3 : 2))
+  if (!isTractor) {
+    const roleSummary = assignAxleGroups(null, [{ num_axles: n, trailer_type: trailerType }])
+    const gType: AxleGroupType = roleSummary.axleTypes[0] || 'trailer'
+    const groupLabel = AXLE_GROUP_LABELS[gType]
+    return {
+      main: `${idx + 1}-${idx + 2}`,
+      desc: `${groupLabel}: between axles ${idx + 1} & ${idx + 2}`,
+    }
+  }
+  if (idx === 0) {
+    return {
+      main: '1-2',
+      desc: 'Steer → Drives (group gap)',
+    }
+  }
+  const d1 = idx
+  const d2 = idx + 1
+  return {
+    main: `${idx + 1}-${idx + 2}`,
+    desc: `Drives: between axles ${d1 + 1}–${d2 + 1}`,
+  }
+}
+
+function AxleSpacingsInputs({
+  numAxles,
+  spacings,
+  onChangeSpacing,
+  isTractor,
+  trailerType,
+  kingpinToFirstAxleIn,
+  onChangeKingpinToFirst,
+  hasLiftAxle,
+  fieldLabelClass,
+  fieldHintClass,
+  inputClass,
+}: {
+  numAxles: number | null | undefined
+  spacings: any
+  onChangeSpacing: (idx: number, value: number | null) => void
+  isTractor: boolean
+  trailerType?: string | null
+  kingpinToFirstAxleIn?: number | null
+  onChangeKingpinToFirst?: (value: number | null) => void
+  hasLiftAxle?: boolean | null
+  fieldLabelClass: string
+  fieldHintClass: string
+  inputClass: string
+}) {
+  const n = Number(numAxles) || (isTractor ? 3 : 2)
+  const expected = Math.max(0, n - 1)
+  if (expected <= 0 && isTractor) return null
+  const arr = normalizeAxleSpacingSlots(spacings, expected)
+  const groupLine = isTractor
+    ? formatAxleGroupSummaryLine(assignAxleGroups({ num_axles: n }, []))
+    : formatAxleGroupSummaryLine(assignAxleGroups(null, [{ num_axles: n, trailer_type: trailerType }]))
+  const rearPin = !isTractor && isRearPinTrailerType(trailerType)
+  const kpLabel = rearPin ? 'Pin → 1st Axle (in)' : 'Kingpin → 1st Axle (in)'
+  return (
+    <div className="md:col-span-3">
+      <label className={fieldLabelClass}>
+        {isTractor ? 'Tractor axle spacings (inches)' : 'Trailer axle geometry (inches)'}
+      </label>
+      <div className={`${fieldHintClass} mt-0.5 mb-1`}>
+        {groupLine}
+        {hasLiftAxle ? ' · Lift axle' : ''}
+      </div>
+      {!isTractor && onChangeKingpinToFirst && (
+        <div className="mb-2 max-w-[11rem]">
+          <div className={`${fieldHintClass} leading-tight`}>{kpLabel}</div>
+          <div className={`${fieldHintClass} leading-tight mb-0.5`}>
+            {rearPin ? 'Rear pin to first axle center' : 'Kingpin to first axle center'}
+          </div>
+          <input
+            type="number"
+            value={kingpinToFirstAxleIn && kingpinToFirstAxleIn > 0 ? kingpinToFirstAxleIn : ''}
+            onChange={(e) => {
+              const val = e.target.value.trim() === '' ? null : parseFloat(e.target.value)
+              onChangeKingpinToFirst(val && Number.isFinite(val) && val > 0 ? val : null)
+            }}
+            placeholder="480"
+            className={inputClass}
+          />
+        </div>
+      )}
+      {expected > 0 && (
+        <div className="mt-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+          {Array.from({ length: expected }).map((_, idx) => {
+            const { main, desc } = getAxleSpacingLabel(isTractor, n, idx, trailerType)
+            const v = arr[idx]
+            return (
+              <div key={idx}>
+                <div className={`${fieldHintClass} leading-tight font-medium text-gray-700`}>{main}</div>
+                <div className={`${fieldHintClass} leading-tight mb-0.5`}>{desc}</div>
+                <input
+                  type="number"
+                  value={v && v > 0 ? v : ''}
+                  onChange={(e) => {
+                    const val = e.target.value.trim() === '' ? null : parseFloat(e.target.value)
+                    onChangeSpacing(idx, val && Number.isFinite(val) && val > 0 ? val : null)
+                  }}
+                  placeholder={String(isTractor ? (idx === 0 ? 220 : 48) : 49)}
+                  className={inputClass}
+                />
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function EquipmentPage() {
   const [user, setUser] = useState<any>(null)
@@ -454,37 +574,6 @@ export default function EquipmentPage() {
     return nums.map((n) => String(n > 0 ? n : 0))
   }
 
-  function getAxleSpacingLabel(
-    isTractor: boolean,
-    numAxles: number | null | undefined,
-    idx: number,
-    trailerType?: string | null
-  ) {
-    const n = Math.max(isTractor ? 3 : 2, Number(numAxles) || (isTractor ? 3 : 2))
-    if (!isTractor) {
-      const roleSummary = assignAxleGroups(null, [{ num_axles: n, trailer_type: trailerType }])
-      const gType: AxleGroupType = roleSummary.axleTypes[0] || 'trailer'
-      const groupLabel = AXLE_GROUP_LABELS[gType]
-      return {
-        main: `${idx + 1}-${idx + 2}`,
-        desc: `${groupLabel}: between axles ${idx + 1} & ${idx + 2}`,
-      }
-    }
-    // Tractor: full consecutive gaps for all axles (steer + drives)
-    if (idx === 0) {
-      return {
-        main: '1-2',
-        desc: 'Steer → Drives (group gap)',
-      }
-    }
-    const d1 = idx   // drive index for the "from"
-    const d2 = idx + 1
-    return {
-      main: `${idx + 1}-${idx + 2}`,
-      desc: `Drives: between axles ${d1 + 1}–${d2 + 1}`,
-    }
-  }
-
   function resizeAxleSpacings(current: any, newNum: number | null, isTractor: boolean): number[] {
     const n = Math.max(isTractor ? 2 : 1, Number(newNum) || (isTractor ? 3 : 2))
     const expected = Math.max(0, n - 1) // full inter-axle gaps (tractor includes 1-2 steer→drive)
@@ -514,94 +603,6 @@ export default function EquipmentPage() {
     if (!(s12 > 0)) return null
     const wb = s12 + (s23 > 0 ? s23 / 2 : 0)
     return wb > 0 ? Math.round(wb * 10) / 10 : null
-  }
-
-  // Dynamic, clearly-labeled axle spacing inputs.
-  // For tractors: (num_axles - 1) fields starting with 1-2 (Steer to 1st Drive), then 2-3, 3-4…
-  // For trailers: optional kingpin→1st axle + (num_axles - 1) inter-axle 1-2, 2-3… by role group.
-  // Wheelbase for tractor is auto-computed in real time from the first two spacings.
-  function AxleSpacingsInputs({
-    numAxles,
-    spacings,
-    onChangeSpacing,
-    isTractor,
-    trailerType,
-    kingpinToFirstAxleIn,
-    onChangeKingpinToFirst,
-    hasLiftAxle,
-  }: {
-    numAxles: number | null | undefined
-    spacings: any
-    onChangeSpacing: (idx: number, value: number | null) => void
-    isTractor: boolean
-    trailerType?: string | null
-    kingpinToFirstAxleIn?: number | null
-    onChangeKingpinToFirst?: (value: number | null) => void
-    hasLiftAxle?: boolean | null
-  }) {
-    const n = Number(numAxles) || (isTractor ? 3 : 2)
-    const expected = Math.max(0, n - 1)
-    if (expected <= 0 && isTractor) return null
-    // Fixed-length slots so clearing gap 2-3 does not shift 3-4 into the 2-3 field.
-    const arr = normalizeAxleSpacings(spacings, expected)
-    const groupLine = isTractor
-      ? formatAxleGroupSummaryLine(assignAxleGroups({ num_axles: n }, []))
-      : formatAxleGroupSummaryLine(assignAxleGroups(null, [{ num_axles: n, trailer_type: trailerType }]))
-    const rearPin = !isTractor && isRearPinTrailerType(trailerType)
-    const kpLabel = rearPin ? 'Pin → 1st Axle (in)' : 'Kingpin → 1st Axle (in)'
-    return (
-      <div className="md:col-span-3">
-        <label className={fieldLabelTinyClass}>
-          {isTractor ? 'Tractor axle spacings (inches)' : 'Trailer axle geometry (inches)'}
-        </label>
-        <div className={`${fieldHintTinyClass} mt-0.5 mb-1`}>
-          {groupLine}
-          {hasLiftAxle ? ' · Lift axle' : ''}
-        </div>
-        {!isTractor && onChangeKingpinToFirst && (
-          <div className="mb-2 max-w-[11rem]">
-            <div className={`${fieldHintTinyClass} leading-tight`}>{kpLabel}</div>
-            <div className={`${fieldHintTinyClass} leading-tight mb-0.5`}>
-              {rearPin ? 'Rear pin to first axle center' : 'Kingpin to first axle center'}
-            </div>
-            <input
-              type="number"
-              value={kingpinToFirstAxleIn && kingpinToFirstAxleIn > 0 ? kingpinToFirstAxleIn : ''}
-              onChange={(e) => {
-                const val = e.target.value.trim() === '' ? null : parseFloat(e.target.value)
-                onChangeKingpinToFirst(val && Number.isFinite(val) && val > 0 ? val : null)
-              }}
-              placeholder="480"
-              className={inputClass}
-            />
-          </div>
-        )}
-        {expected > 0 && (
-          <div className="mt-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-            {Array.from({ length: expected }).map((_, idx) => {
-              const { main, desc } = getAxleSpacingLabel(isTractor, n, idx, trailerType)
-              const v = arr[idx]
-              return (
-                <div key={idx}>
-                  <div className={`${fieldHintTinyClass} leading-tight font-medium text-gray-700`}>{main}</div>
-                  <div className={`${fieldHintTinyClass} leading-tight mb-0.5`}>{desc}</div>
-                  <input
-                    type="number"
-                    value={v && v > 0 ? v : ''}
-                    onChange={(e) => {
-                      const val = e.target.value.trim() === '' ? null : parseFloat(e.target.value)
-                      onChangeSpacing(idx, val && Number.isFinite(val) && val > 0 ? val : null)
-                    }}
-                    placeholder={String(isTractor ? (idx === 0 ? 220 : 48) : 49)}
-                    className={inputClass}
-                  />
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    )
   }
 
   // Tiny centralized predicate so "missing optional table" handling is not duplicated
@@ -1089,7 +1090,13 @@ export default function EquipmentPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2 sm:gap-3 shrink-0">
-            <a href="/permit-test" className={buttonPrimaryClass}>New Analysis →</a>
+            {canRunRouteAnalysis({ tractorCount: tractors.length }) ? (
+              <a href="/permit-test" className={buttonPrimaryClass}>New Analysis →</a>
+            ) : (
+              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 max-w-xs">
+                {NO_TRACTOR_ANALYSIS_HINT}
+              </p>
+            )}
           </div>
         </div>
 
@@ -1414,6 +1421,9 @@ export default function EquipmentPage() {
                       setEditingTractor({ ...editingTractor, axle_spacings: next, wheelbase_in: wb })
                     }}
                     isTractor
+                    fieldLabelClass={fieldLabelTinyClass}
+                    fieldHintClass={fieldHintTinyClass}
+                    inputClass={inputClass}
                   />
                 </div>
 
@@ -1674,6 +1684,9 @@ export default function EquipmentPage() {
                       setEditingTrailer({ ...editingTrailer, kingpin_to_first_axle_in: val })
                     }
                     hasLiftAxle={editingTrailer.has_lift_axle}
+                    fieldLabelClass={fieldLabelTinyClass}
+                    fieldHintClass={fieldHintTinyClass}
+                    inputClass={inputClass}
                   />
                 </div>
 
