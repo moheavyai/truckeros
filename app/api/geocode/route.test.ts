@@ -110,6 +110,152 @@ describe('GET /api/geocode', () => {
     expect(body.userMessage).toContain('No location found')
   })
 
+  it('ranks the KS building after a weak MO first hit', async () => {
+    const moRoad = {
+      lat: '39.05524',
+      lon: '-94.60311',
+      display_name: 'West 40th Street, Kansas City, Missouri, United States',
+      address: {
+        road: 'West 40th Street',
+        city: 'Kansas City',
+        state: 'Missouri',
+        'ISO3166-2-lvl4': 'US-MO',
+        postcode: '64111',
+      },
+      importance: 0.72,
+    }
+    const ksBuilding = {
+      lat: '39.0572565',
+      lon: '-94.8600719',
+      display_name:
+        'Forterra Pipe & Precast, 23600 West 40th Street, Bonner Springs, Johnson County, Kansas, 66012, United States',
+      address: {
+        house_number: '23600',
+        road: 'West 40th Street',
+        city: 'Bonner Springs',
+        state: 'Kansas',
+        'ISO3166-2-lvl4': 'US-KS',
+        postcode: '66012',
+      },
+      importance: 0.31,
+    }
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo) => {
+        const href = String(input)
+        const hasKansasCity = /kansas(\+|%20|\s)+city/i.test(href)
+        const has23600 = /23600/.test(href)
+        const body = has23600 && !hasKansasCity ? [ksBuilding] : [moRoad]
+        return { ok: true, status: 200, json: async () => body }
+      })
+    )
+
+    const req = new NextRequest(
+      'http://localhost/api/geocode?q=23600%20w%2040th%20st,%20kansas%20city,%20ks&state=KS&limit=1'
+    )
+    const res = await GET(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(Number(body[0].lat)).toBeCloseTo(39.05726, 4)
+    expect(Number(body[0].lon)).toBeCloseTo(-94.86007, 4)
+    expect(body[0].address?.house_number).toBe('23600')
+    expect(body[0].address?.['ISO3166-2-lvl4']).toBe('US-KS')
+    expect(body).toHaveLength(1)
+    const fetchMock = vi.mocked(fetch)
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(0)
+    for (const call of fetchMock.mock.calls) {
+      expect(String(call[0])).toContain('limit=5')
+    }
+  })
+
+  it('returns 429 not 404 when Nominatim 429s after a weak MO batch', async () => {
+    const moRoad = {
+      lat: '39.05524',
+      lon: '-94.60311',
+      display_name: 'West 40th Street, Kansas City, Missouri, United States',
+      address: {
+        road: 'West 40th Street',
+        city: 'Kansas City',
+        state: 'Missouri',
+        'ISO3166-2-lvl4': 'US-MO',
+        postcode: '64111',
+      },
+    }
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo) => {
+        const href = String(input)
+        if (/kansas(\+|%20|\s)+city/i.test(href)) {
+          return { ok: true, status: 200, json: async () => [moRoad] }
+        }
+        return { ok: false, status: 429, json: async () => ({}) }
+      })
+    )
+
+    const req = new NextRequest(
+      'http://localhost/api/geocode?q=23600%20w%2040th%20st,%20kansas%20city,%20ks&state=KS&limit=1'
+    )
+    const res = await GET(req)
+    const body = await res.json()
+    expect(res.status).toBe(429)
+    expect(res.headers.get('Retry-After')).toBeTruthy()
+    expect(body.userMessage).toMatch(/busy/i)
+  })
+
+  it('does not treat a MO house+street hit as strong when only state=KS is on the query param', async () => {
+    const moHouse = {
+      lat: '39.05524',
+      lon: '-94.60311',
+      display_name: '23600 West 40th Street, Kansas City, Missouri, United States',
+      address: {
+        house_number: '23600',
+        road: 'West 40th Street',
+        city: 'Kansas City',
+        state: 'Missouri',
+        'ISO3166-2-lvl4': 'US-MO',
+      },
+    }
+    const ksBuilding = {
+      lat: '39.0572565',
+      lon: '-94.8600719',
+      display_name:
+        'Forterra Pipe & Precast, 23600 West 40th Street, Bonner Springs, Johnson County, Kansas, 66012, United States',
+      address: {
+        house_number: '23600',
+        road: 'West 40th Street',
+        city: 'Bonner Springs',
+        state: 'Kansas',
+        'ISO3166-2-lvl4': 'US-KS',
+        postcode: '66012',
+      },
+    }
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo) => {
+        const href = String(input)
+        const hasKansasCity = /kansas(\+|%20|\s)+city/i.test(href)
+        return {
+          ok: true,
+          status: 200,
+          json: async () => (hasKansasCity ? [moHouse] : [ksBuilding]),
+        }
+      })
+    )
+
+    const req = new NextRequest(
+      'http://localhost/api/geocode?q=23600%20w%2040th%20st,%20kansas%20city&state=KS&limit=1'
+    )
+    const res = await GET(req)
+    const body = await res.json()
+    expect(res.status).toBe(200)
+    expect(Number(body[0].lat)).toBeCloseTo(39.05726, 4)
+    expect(body[0].address?.['ISO3166-2-lvl4']).toBe('US-KS')
+  })
+
   it('returns 429 when rate limited', async () => {
     vi.stubGlobal(
       'fetch',

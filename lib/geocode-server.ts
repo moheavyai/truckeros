@@ -123,12 +123,121 @@ export function resultMatchesState(result: GeocodeDto, stateCode: string): boole
 
 export type GeocodeRankingContext = Partial<ParsedGeocodeQuery>
 
+/** Kansas City, KS and Kansas City, MO are different cities. */
+const KANSAS_CITY_TWIN_STATE: Record<string, string> = { KS: 'MO', MO: 'KS' }
+
+function opposingKansasCityState(context: GeocodeRankingContext): string | null {
+  const requested = context.state ? normalizeStateCode(context.state) : null
+  if (!requested) return null
+  if ((context.city || '').trim().toLowerCase() !== 'kansas city') return null
+  return KANSAS_CITY_TWIN_STATE[requested] || null
+}
+
+function hasStateMetadata(result: GeocodeDto): boolean {
+  const addr = result.address || {}
+  return Boolean(addr['ISO3166-2-lvl4'] || addr.state || addr.state_code)
+}
+
+function looksLikeKansasCity(result: GeocodeDto): boolean {
+  const city = resultCityName(result.address).trim().toLowerCase()
+  if (city === 'kansas city') return true
+  return /kansas\s+city/i.test(String(result.display_name || ''))
+}
+
+function displayLooksLikeState(display: string, stateCode: string): boolean {
+  const name = STATE_CODE_TO_NAME[stateCode]
+  if (name && new RegExp(`,\\s*${name}(?!\\s+City)\\b`, 'i').test(display)) return true
+  return new RegExp(`,\\s*${stateCode}\\b`, 'i').test(display)
+}
+
+export function isKansasCityTwinMiss(result: GeocodeDto, context: GeocodeRankingContext): boolean {
+  const other = opposingKansasCityState(context)
+  if (!other) return false
+  if (resultMatchesState(result, other)) return true
+  if (!looksLikeKansasCity(result)) return false
+  const display = String(result.display_name || '')
+  if (displayLooksLikeState(display, other)) return true
+  const requested = context.state ? normalizeStateCode(context.state) : null
+  if (requested && !hasStateMetadata(result) && !displayLooksLikeState(display, requested)) {
+    return true
+  }
+  return false
+}
+
+function passesRequestedState(
+  result: GeocodeDto,
+  requestedState: string,
+  context: GeocodeRankingContext,
+): boolean {
+  if (resultMatchesState(result, requestedState)) return true
+  if (hasStateMetadata(result)) return false
+  return !isKansasCityTwinMiss(result, { ...context, state: requestedState })
+}
+
+export function mergeGeocodeRankingContext(
+  parsed: GeocodeRankingContext,
+  hints: { state?: string | null; zip?: string | null; city?: string | null; street?: string | null },
+): GeocodeRankingContext {
+  const hintZip = (hints.zip || '').trim()
+  return {
+    ...parsed,
+    state: parsed.state ?? normalizeStateCode(hints.state ?? null) ?? null,
+    zip: parsed.zip ?? (hintZip || null),
+    city: parsed.city || hints.city || '',
+    street: parsed.street || hints.street || '',
+  }
+}
+
 function cityMatchesResult(city: string, addr: GeocodeDto['address']): boolean {
   if (!city || !addr) return false
   const target = city.trim().toLowerCase()
   const resultCity = resultCityName(addr).trim().toLowerCase()
   return resultCity === target || resultCity.includes(target) || target.includes(resultCity)
 }
+
+export function queryHouseNumber(street?: string | null): string | null {
+  if (!street) return null
+  const match = street.trim().match(/^(\d{1,6})\b/)
+  return match ? match[1] : null
+}
+
+function streetWithoutHouse(street: string): string {
+  return street.replace(/^\d{1,6}\s+/, '').trim()
+}
+
+const POSTCODE_TOKEN_RE = /^(\d{5})(?:-\d{4})?$/
+
+export function resultHasHouseNumber(result: GeocodeDto, house: string): boolean {
+  if (!house) return false
+  const addr = result.address || {}
+  if (String(addr.house_number || '').trim() === house) return true
+  const road = String(addr.road || addr.street || '')
+  if (new RegExp(`^${house}\\b`).test(road)) return true
+  const postcode = String(addr.postcode || '').trim()
+  const zip5 = postcode.match(POSTCODE_TOKEN_RE)?.[1]
+  if (zip5 && zip5 === house) return false
+  let display = String(result.display_name || '')
+  if (postcode) display = display.replace(new RegExp(`\\b${postcode}\\b`), ' ')
+  if (zip5) display = display.replace(new RegExp(`\\b${zip5}\\b`), ' ')
+  return new RegExp(`\\b${house}\\b`).test(display)
+}
+
+function resultRoadName(result: GeocodeDto): string {
+  return result.address?.road || result.address?.street || ''
+}
+
+function streetsMatchForRank(queryStreet: string, result: GeocodeDto): boolean {
+  const road = resultRoadName(result)
+  if (road && roadNamesMatch(queryStreet, road)) return true
+  const q = streetWithoutHouse(queryStreet)
+  const r = streetWithoutHouse(road)
+  if (q && r && roadNamesMatch(q, r)) return true
+  const display = String(result.display_name || '')
+  if (display && (roadNamesMatch(queryStreet, display) || (q && roadNamesMatch(q, display)))) return true
+  return false
+}
+
+const ROAD_ONLY_HOUSE_PENALTY = 150
 
 /** Fuzzy score for ranking Nominatim candidates (higher is better). */
 export function scoreGeocodeResult(result: GeocodeDto, context: GeocodeRankingContext): number {
@@ -154,12 +263,13 @@ export function scoreGeocodeResult(result: GeocodeDto, context: GeocodeRankingCo
   }
 
   if (context.street) {
-    const road = addr.road || addr.street || ''
-    if (roadNamesMatch(context.street, road)) score += 60
+    if (streetsMatchForRank(context.street, result)) score += 60
 
-    const houseMatch = context.street.match(/^(\d{1,6})\b/)
-    const resultHouse = String(addr.house_number || '')
-    if (houseMatch && resultHouse && houseMatch[1] === resultHouse) score += 30
+    const house = queryHouseNumber(context.street)
+    if (house) {
+      if (resultHasHouseNumber(result, house)) score += 30
+      else score -= ROAD_ONLY_HOUSE_PENALTY
+    }
   } else if (context.normalized) {
     const norm = normalizeRoadName(context.normalized)
     const road = normalizeRoadName(addr.road || addr.street || '')
@@ -170,6 +280,22 @@ export function scoreGeocodeResult(result: GeocodeDto, context: GeocodeRankingCo
   if (Number.isFinite(importance)) score += importance * 10
 
   return score
+}
+
+export function isStrongGeocodeMatch(result: GeocodeDto, context: GeocodeRankingContext): boolean {
+  const requestedState = context.state ? normalizeStateCode(context.state) : null
+  if (requestedState) {
+    if (!resultMatchesState(result, requestedState)) return false
+    if (isKansasCityTwinMiss(result, { ...context, state: requestedState })) return false
+  }
+
+  const house = queryHouseNumber(context.street)
+  if (house && !resultHasHouseNumber(result, house)) return false
+
+  if (context.street && !streetsMatchForRank(context.street, result)) return false
+
+  // City/zip are not required: OSM city/zip often differ from mail city (Bonner Springs vs Kansas City).
+  return true
 }
 
 export function rankResults(
@@ -184,21 +310,31 @@ export function rankResults(
     state: context.state ?? stateCode ?? null,
   }
 
+  const requestedState = ctx.state ? normalizeStateCode(ctx.state) : null
   let pool = data
-  if (ctx.state) {
-    const inState = data.filter((r) => resultMatchesState(r, ctx.state!))
-    if (inState.length > 0) pool = inState
+  if (requestedState) {
+    pool = data.filter((r) => passesRequestedState(r, requestedState, ctx))
+    if (pool.length === 0) return []
   }
 
-  return [...pool].sort((a, b) => scoreGeocodeResult(b, ctx) - scoreGeocodeResult(a, ctx))
+  const house = queryHouseNumber(ctx.street)
+  return [...pool].sort((a, b) => {
+    if (house) {
+      const aHouse = resultHasHouseNumber(a, house) ? 1 : 0
+      const bHouse = resultHasHouseNumber(b, house) ? 1 : 0
+      if (aHouse !== bHouse) return bHouse - aHouse
+    }
+    return scoreGeocodeResult(b, ctx) - scoreGeocodeResult(a, ctx)
+  })
 }
 
 export function toGeocodeDto(result: Record<string, unknown>): GeocodeDto | null {
+  const rawAddr = (result.address || {}) as Record<string, string | undefined>
   const parsed = extractAddressFromGeocodeResult({
     lat: result.lat as string | number,
     lon: result.lon as string | number,
     display_name: result.display_name as string | undefined,
-    address: result.address as Record<string, string | undefined> | undefined,
+    address: rawAddr,
   })
   if (!parsed) return null
   return {
@@ -206,8 +342,10 @@ export function toGeocodeDto(result: Record<string, unknown>): GeocodeDto | null
     lon: String(parsed.lon),
     display_name: parsed.displayName,
     address: {
-      road: parsed.street,
+      house_number: rawAddr.house_number,
+      road: rawAddr.road || rawAddr.street || parsed.street,
       city: parsed.city,
+      state: rawAddr.state,
       state_code: parsed.state,
       postcode: parsed.zip,
       'ISO3166-2-lvl4': parsed.state ? `US-${parsed.state}` : undefined,

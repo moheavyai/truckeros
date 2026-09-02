@@ -9,135 +9,19 @@ import {
   LruGeocodeCache,
   TokenBucketRateLimiter,
   buildCacheKey,
-  rankResults,
-  stripNominatimResults,
+  mergeGeocodeRankingContext,
   validateGeocodeInput,
   type GeocodeDto,
 } from '@/lib/geocode-server'
 import { buildGeocodeSearchVariants, parseNaturalLanguageQuery } from '@/lib/geocode-query'
 import {
-  NOMINATIM_BASE_URL,
-  NOMINATIM_CONTACT_EMAIL,
-  nominatimHeaders,
-} from '@/lib/nominatim-config'
-import { STATE_CODE_TO_NAME } from '@/lib/us-states'
+  GEOCODE_NO_LOCATION_MESSAGE,
+  geocodeFailureStatus,
+  searchGeocodeWithVariants,
+} from '@/lib/geocode-search'
 
 const geocodeCache = new LruGeocodeCache()
 const rateLimiter = new TokenBucketRateLimiter(3, 1000)
-
-const SERVER_MAX_ATTEMPTS = 2
-const SERVER_BACKOFF_MS = [400, 900]
-
-type NominatimStrategy = 'structured' | 'freetext'
-
-type GeocodeAttemptOpts = {
-  query: string
-  city: string
-  street: string
-  stateParam: string | null
-  limit: string
-  strategies: NominatimStrategy[]
-}
-
-type RankableGeocodeDto = GeocodeDto & { importance?: number }
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function buildNominatimUrl(
-  strategy: NominatimStrategy,
-  opts: {
-    query: string
-    city: string
-    street: string
-    stateParam: string | null
-    limit: string
-  }
-): string {
-  const base = new URLSearchParams({
-    format: 'json',
-    limit: opts.limit,
-    countrycodes: 'us',
-    addressdetails: '1',
-    email: NOMINATIM_CONTACT_EMAIL,
-  })
-
-  if (strategy === 'structured' && opts.city && opts.stateParam) {
-    base.set('city', opts.city.trim())
-    base.set('state', STATE_CODE_TO_NAME[opts.stateParam])
-    base.set('country', 'United States')
-    if (opts.street.trim()) {
-      base.set('street', opts.street.trim())
-    }
-  } else {
-    base.set('q', opts.query)
-    if (opts.stateParam) {
-      base.set('state', STATE_CODE_TO_NAME[opts.stateParam])
-    }
-  }
-
-  return `${NOMINATIM_BASE_URL}/search?${base.toString()}`
-}
-
-async function fetchNominatimOnce(url: string): Promise<{ ok: boolean; status: number; data: Record<string, unknown>[] | null }> {
-  const res = await fetch(url, {
-    headers: nominatimHeaders(),
-  })
-
-  if (!res.ok) {
-    return { ok: false, status: res.status, data: null }
-  }
-
-  const data = await res.json()
-  return { ok: true, status: res.status, data: Array.isArray(data) ? data : [] }
-}
-
-async function geocodeWithRetry(
-  opts: GeocodeAttemptOpts,
-): Promise<{ data: Record<string, unknown>[] | null; lastStatus: number }> {
-  let lastStatus = 502
-
-  for (const strategy of opts.strategies) {
-    const url = buildNominatimUrl(strategy, opts)
-
-    for (let attempt = 0; attempt < SERVER_MAX_ATTEMPTS; attempt++) {
-      if (attempt > 0) {
-        await sleep(SERVER_BACKOFF_MS[attempt - 1] ?? 900)
-      }
-
-      try {
-        const result = await fetchNominatimOnce(url)
-        lastStatus = result.status
-
-        if (result.ok) {
-          const rows = result.data || []
-          if (rows.length > 0) {
-            return { data: rows, lastStatus: 200 }
-          }
-          break
-        }
-
-        if (result.status === 429 || result.status >= 500) {
-          continue
-        }
-
-        if (result.status === 400) {
-          console.warn(`Nominatim 400 for strategy=${strategy}`)
-          break
-        }
-
-        break
-      } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : String(error)
-        console.error(`Nominatim fetch error (attempt ${attempt + 1}):`, msg)
-        lastStatus = 502
-      }
-    }
-  }
-
-  return { data: null, lastStatus }
-}
 
 function clientIp(request: NextRequest): string {
   return (
@@ -190,9 +74,16 @@ export async function handleGeocodeGet(request: NextRequest) {
     return NextResponse.json(cached)
   }
 
-  const rankingContext = searchParams.get('q')
+  const parsed = searchParams.get('q')
     ? parseNaturalLanguageQuery(searchParams.get('q') || query)
     : parseNaturalLanguageQuery(query)
+
+  const rankingContext = mergeGeocodeRankingContext(parsed, {
+    state: stateParam,
+    zip,
+    city,
+    street,
+  })
 
   const variants = buildGeocodeSearchVariants({
     q: searchParams.get('q') || query,
@@ -202,58 +93,24 @@ export async function handleGeocodeGet(request: NextRequest) {
     state: stateParam,
   })
 
-  let data: Record<string, unknown>[] | null = null
-  let lastStatus = 502
+  const { ranked: rankedAll, lastStatus } = await searchGeocodeWithVariants({
+    variants,
+    rankingContext,
+    stateParam: stateParam ?? rankingContext.state ?? null,
+    streetFallback: street,
+  })
 
-  for (const variant of variants) {
-    const attempt = await geocodeWithRetry({
-      query: variant.query,
-      city: variant.city || city || '',
-      street: variant.street || street || '',
-      stateParam: variant.state ?? stateParam ?? null,
-      limit,
-      strategies: [...variant.strategies],
-    })
-
-    lastStatus = attempt.lastStatus
-    if (attempt.data && attempt.data.length > 0) {
-      data = attempt.data
-      Object.assign(rankingContext, variant.context)
-      break
-    }
-
-    if (lastStatus === 429) break
-  }
-
-  if (!data || data.length === 0) {
-    const userMessage =
-      lastStatus === 429 || lastStatus >= 500
-        ? GEOCODE_BUSY_USER_MESSAGE
-        : 'No location found. Try again or enter coordinates manually.'
-
+  if (rankedAll.length === 0) {
+    const status = geocodeFailureStatus(lastStatus)
+    const userMessage = status === 404 ? GEOCODE_NO_LOCATION_MESSAGE : GEOCODE_BUSY_USER_MESSAGE
     return NextResponse.json(
       { error: userMessage, userMessage },
-      { status: lastStatus === 429 ? 429 : 404 }
+      { status, headers: status === 429 ? { 'Retry-After': '1' } : undefined },
     )
   }
 
-  const dtos: RankableGeocodeDto[] = stripNominatimResults(data).map((dto, i) => {
-    const rawImportance = data[i]?.importance
-    return {
-      ...dto,
-      importance: typeof rawImportance === 'number' ? rawImportance : undefined,
-    }
-  })
-
-  let ranked: RankableGeocodeDto[] = rankResults(
-    dtos,
-    stateParam ?? rankingContext.state ?? null,
-    rankingContext,
-  ) as RankableGeocodeDto[]
-  if (limit === '1' && ranked.length > 1) {
-    ranked = [ranked[0]]
-  }
-
+  const maxResults = Number(limit) || 1
+  const ranked = rankedAll.length > maxResults ? rankedAll.slice(0, maxResults) : rankedAll
   const response: GeocodeDto[] = ranked.map(({ importance: _i, ...dto }) => dto)
 
   geocodeCache.set(cacheKey, response)
