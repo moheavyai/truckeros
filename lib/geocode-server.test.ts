@@ -5,6 +5,7 @@ import {
   clampLimit,
   isStrongGeocodeMatch,
   rankResults,
+  resultHasHouseNumber,
   scoreGeocodeResult,
   validateGeocodeInput,
   type GeocodeDto,
@@ -179,6 +180,45 @@ describe('Kansas City metro ranking', () => {
     const ranked = rankResults([ksWest40thRoad, ksForterraBuilding], 'KS', kcContext)
     expect(ranked[0].address?.house_number).toBe('23600')
     expect(Number(ranked[0].lat)).toBeCloseTo(39.05726, 4)
+  })
+
+  it('does not treat a ZIP+4 prefix in display_name as a house number', () => {
+    const zip4Road: GeocodeDto = {
+      lat: '39.1',
+      lon: '-94.7',
+      display_name: 'West 40th Street, Kansas City, Kansas, 66226, United States',
+      address: {
+        road: 'West 40th Street',
+        city: 'Kansas City',
+        state: 'Kansas',
+        'ISO3166-2-lvl4': 'US-KS',
+        postcode: '66226-1234',
+      },
+    }
+    expect(resultHasHouseNumber(zip4Road, '66226')).toBe(false)
+    expect(resultHasHouseNumber(ksForterraBuilding, '23600')).toBe(true)
+  })
+
+  it('drops a no-metadata Kansas City result from the KS pool', () => {
+    const kcNoState: GeocodeDto = {
+      lat: '39.05524',
+      lon: '-94.60311',
+      display_name: 'West 40th Street, Kansas City, United States',
+      address: {
+        road: 'West 40th Street',
+        city: 'Kansas City',
+      },
+    }
+    const ranked = rankResults([kcNoState, ksForterraBuilding], 'KS', kcContext)
+    expect(ranked).toHaveLength(1)
+    expect(ranked[0].address?.house_number).toBe('23600')
+    expect(rankResults([kcNoState], 'KS', kcContext)).toEqual([])
+
+    const kcLowerMo: GeocodeDto = {
+      ...kcNoState,
+      display_name: 'West 40th Street, Kansas City, mo, United States',
+    }
+    expect(rankResults([kcLowerMo], 'KS', kcContext)).toEqual([])
   })
 
   it('does not treat a MO house+street hit as strong when state is KS', () => {

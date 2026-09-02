@@ -147,7 +147,7 @@ function looksLikeKansasCity(result: GeocodeDto): boolean {
 function displayLooksLikeState(display: string, stateCode: string): boolean {
   const name = STATE_CODE_TO_NAME[stateCode]
   if (name && new RegExp(`,\\s*${name}(?!\\s+City)\\b`, 'i').test(display)) return true
-  return new RegExp(`,\\s*${stateCode}\\b`).test(display)
+  return new RegExp(`,\\s*${stateCode}\\b`, 'i').test(display)
 }
 
 export function isKansasCityTwinMiss(result: GeocodeDto, context: GeocodeRankingContext): boolean {
@@ -155,7 +155,13 @@ export function isKansasCityTwinMiss(result: GeocodeDto, context: GeocodeRanking
   if (!other) return false
   if (resultMatchesState(result, other)) return true
   if (!looksLikeKansasCity(result)) return false
-  return displayLooksLikeState(String(result.display_name || ''), other)
+  const display = String(result.display_name || '')
+  if (displayLooksLikeState(display, other)) return true
+  const requested = context.state ? normalizeStateCode(context.state) : null
+  if (requested && !hasStateMetadata(result) && !displayLooksLikeState(display, requested)) {
+    return true
+  }
+  return false
 }
 
 function passesRequestedState(
@@ -199,6 +205,8 @@ function streetWithoutHouse(street: string): string {
   return street.replace(/^\d{1,6}\s+/, '').trim()
 }
 
+const POSTCODE_TOKEN_RE = /^(\d{5})(?:-\d{4})?$/
+
 export function resultHasHouseNumber(result: GeocodeDto, house: string): boolean {
   if (!house) return false
   const addr = result.address || {}
@@ -206,9 +214,11 @@ export function resultHasHouseNumber(result: GeocodeDto, house: string): boolean
   const road = String(addr.road || addr.street || '')
   if (new RegExp(`^${house}\\b`).test(road)) return true
   const postcode = String(addr.postcode || '').trim()
-  if (postcode && postcode === house) return false
+  const zip5 = postcode.match(POSTCODE_TOKEN_RE)?.[1]
+  if (zip5 && zip5 === house) return false
   let display = String(result.display_name || '')
   if (postcode) display = display.replace(new RegExp(`\\b${postcode}\\b`), ' ')
+  if (zip5) display = display.replace(new RegExp(`\\b${zip5}\\b`), ' ')
   return new RegExp(`\\b${house}\\b`).test(display)
 }
 
