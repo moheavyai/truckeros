@@ -3,6 +3,7 @@ import {
   LruGeocodeCache,
   TokenBucketRateLimiter,
   clampLimit,
+  isStrongGeocodeMatch,
   rankResults,
   scoreGeocodeResult,
   validateGeocodeInput,
@@ -158,6 +159,51 @@ describe('Kansas City metro ranking', () => {
       state: 'KS',
     })
     expect(ranked).toEqual([])
+  })
+
+  it('prefers the KS building over an in-state road-only West 40th with matching city+zip', () => {
+    const ksWest40thRoad: GeocodeDto = {
+      lat: '39.0571',
+      lon: '-94.86',
+      display_name: 'West 40th Street, Kansas City, Kansas, 66226, United States',
+      address: {
+        road: 'West 40th Street',
+        city: 'Kansas City',
+        state: 'Kansas',
+        'ISO3166-2-lvl4': 'US-KS',
+        postcode: '66226',
+      },
+      importance: 0.72,
+    } as GeocodeDto & { importance: number }
+
+    const ranked = rankResults([ksWest40thRoad, ksForterraBuilding], 'KS', kcContext)
+    expect(ranked[0].address?.house_number).toBe('23600')
+    expect(Number(ranked[0].lat)).toBeCloseTo(39.05726, 4)
+  })
+
+  it('does not treat a MO house+street hit as strong when state is KS', () => {
+    const moHouseHit: GeocodeDto = {
+      ...moWestportRoad,
+      address: {
+        ...moWestportRoad.address,
+        house_number: '23600',
+      },
+      display_name: '23600 West 40th Street, Kansas City, Missouri, United States',
+    }
+    expect(
+      isStrongGeocodeMatch(moHouseHit, {
+        street: '23600 W 40th St',
+        city: 'Kansas City',
+        state: 'KS',
+      }),
+    ).toBe(false)
+    expect(
+      isStrongGeocodeMatch(ksForterraBuilding, {
+        street: '23600 W 40th St',
+        city: 'Kansas City',
+        state: 'KS',
+      }),
+    ).toBe(true)
   })
 })
 

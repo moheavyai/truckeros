@@ -13,16 +13,8 @@ import {
   buildGeocodeSearchVariants,
   parseNaturalLanguageQuery,
 } from '@/lib/geocode-query'
-import {
-  rankResults,
-  stripNominatimResults,
-  type GeocodeDto,
-} from '@/lib/geocode-server'
-import {
-  NOMINATIM_BASE_URL,
-  NOMINATIM_CONTACT_EMAIL,
-  nominatimHeaders,
-} from '@/lib/nominatim-config'
+import { mergeGeocodeRankingContext, type GeocodeDto } from '@/lib/geocode-server'
+import { searchGeocodeWithVariants } from '@/lib/geocode-search'
 import { STATE_CODE_TO_NAME } from '@/lib/us-states'
 
 export type AgentLocationInput = {
@@ -69,49 +61,6 @@ function normalizeState(raw?: string): string | null {
   return null
 }
 
-async function fetchNominatim(url: string): Promise<Record<string, unknown>[]> {
-  const res = await fetch(url, { headers: nominatimHeaders() })
-  if (!res.ok) return []
-  const data = await res.json()
-  return Array.isArray(data) ? data : []
-}
-
-function buildStructuredUrl(opts: {
-  city: string
-  stateCode: string
-  street?: string
-  zip?: string
-}): string {
-  const params = new URLSearchParams({
-    format: 'json',
-    limit: '5',
-    countrycodes: 'us',
-    addressdetails: '1',
-    email: NOMINATIM_CONTACT_EMAIL,
-    city: opts.city.trim(),
-    state: STATE_CODE_TO_NAME[opts.stateCode],
-    country: 'United States',
-  })
-  if (opts.street?.trim()) params.set('street', opts.street.trim())
-  if (opts.zip?.trim()) params.set('postalcode', opts.zip.trim())
-  return `${NOMINATIM_BASE_URL}/search?${params.toString()}`
-}
-
-function buildFreetextUrl(query: string, stateCode?: string | null): string {
-  const params = new URLSearchParams({
-    format: 'json',
-    limit: '5',
-    countrycodes: 'us',
-    addressdetails: '1',
-    email: NOMINATIM_CONTACT_EMAIL,
-    q: query,
-  })
-  if (stateCode && STATE_CODE_TO_NAME[stateCode]) {
-    params.set('state', STATE_CODE_TO_NAME[stateCode])
-  }
-  return `${NOMINATIM_BASE_URL}/search?${params.toString()}`
-}
-
 /**
  * Resolve a location to coordinates.
  * Prefers explicit lat/lon; otherwise geocodes city/state/street/zip/query.
@@ -129,14 +78,19 @@ export async function resolveLocationToCoords(
   const query = (loc.query || '').trim()
   const stateCode = normalizeState(loc.state)
 
-  // Need at least city+state, or a free-text query
   if (!query && !(city && stateCode)) {
     return null
   }
 
-  const rankingContext = parseNaturalLanguageQuery(
+  const parsed = parseNaturalLanguageQuery(
     query || [street, city, stateCode, zip].filter(Boolean).join(', ')
   )
+  const rankingContext = mergeGeocodeRankingContext(parsed, {
+    state: stateCode,
+    zip,
+    city,
+    street,
+  })
 
   const variants = buildGeocodeSearchVariants({
     q: query || undefined,
@@ -146,49 +100,13 @@ export async function resolveLocationToCoords(
     state: stateCode,
   })
 
-  let rows: Record<string, unknown>[] = []
+  const { ranked } = await searchGeocodeWithVariants({
+    variants,
+    rankingContext,
+    stateParam: stateCode ?? rankingContext.state ?? null,
+    streetFallback: street,
+  })
 
-  // Prefer structured city/state when available
-  if (city && stateCode) {
-    rows = await fetchNominatim(
-      buildStructuredUrl({ city, stateCode, street: street || undefined, zip: zip || undefined })
-    )
-  }
-
-  if (rows.length === 0) {
-    for (const variant of variants) {
-      const q =
-        variant.query ||
-        [variant.street || street, variant.city || city, variant.state || stateCode, zip]
-          .filter(Boolean)
-          .join(', ')
-      if (!q.trim()) continue
-      rows = await fetchNominatim(
-        buildFreetextUrl(q, variant.state ?? stateCode)
-      )
-      if (rows.length > 0) {
-        Object.assign(rankingContext, variant.context)
-        break
-      }
-    }
-  }
-
-  // Last resort: simple "City, ST" string
-  if (rows.length === 0 && city && stateCode) {
-    rows = await fetchNominatim(buildFreetextUrl(`${city}, ${stateCode}`, stateCode))
-  }
-
-  if (rows.length === 0) return null
-
-  const dtos = stripNominatimResults(rows).map((dto, i) => {
-    const rawImportance = rows[i]?.importance
-    return {
-      ...dto,
-      importance: typeof rawImportance === 'number' ? rawImportance : undefined,
-    }
-  }) as Array<GeocodeDto & { importance?: number }>
-
-  const ranked = rankResults(dtos, stateCode ?? rankingContext.state ?? null, rankingContext)
   const best = ranked[0]
   if (!best) return null
 

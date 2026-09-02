@@ -9,159 +9,19 @@ import {
   LruGeocodeCache,
   TokenBucketRateLimiter,
   buildCacheKey,
-  isStrongGeocodeMatch,
-  rankResults,
-  toGeocodeDto,
+  mergeGeocodeRankingContext,
   validateGeocodeInput,
   type GeocodeDto,
-  type GeocodeRankingContext,
 } from '@/lib/geocode-server'
 import { buildGeocodeSearchVariants, parseNaturalLanguageQuery } from '@/lib/geocode-query'
 import {
-  NOMINATIM_BASE_URL,
-  NOMINATIM_CONTACT_EMAIL,
-  nominatimHeaders,
-} from '@/lib/nominatim-config'
-import { STATE_CODE_TO_NAME } from '@/lib/us-states'
+  GEOCODE_NO_LOCATION_MESSAGE,
+  geocodeFailureStatus,
+  searchGeocodeWithVariants,
+} from '@/lib/geocode-search'
 
 const geocodeCache = new LruGeocodeCache()
 const rateLimiter = new TokenBucketRateLimiter(3, 1000)
-
-const SERVER_MAX_ATTEMPTS = 2
-const SERVER_BACKOFF_MS = [400, 900]
-const NOMINATIM_SEARCH_LIMIT = '5'
-const COORD_DEDUP_DECIMALS = 5
-
-type NominatimStrategy = 'structured' | 'freetext'
-
-type GeocodeAttemptOpts = {
-  query: string
-  city: string
-  street: string
-  stateParam: string | null
-  limit: string
-  strategies: NominatimStrategy[]
-}
-
-type RankableGeocodeDto = GeocodeDto & { importance?: number }
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function buildNominatimUrl(
-  strategy: NominatimStrategy,
-  opts: {
-    query: string
-    city: string
-    street: string
-    stateParam: string | null
-    limit: string
-  }
-): string {
-  const base = new URLSearchParams({
-    format: 'json',
-    limit: opts.limit,
-    countrycodes: 'us',
-    addressdetails: '1',
-    email: NOMINATIM_CONTACT_EMAIL,
-  })
-
-  if (strategy === 'structured' && opts.city && opts.stateParam) {
-    base.set('city', opts.city.trim())
-    base.set('state', STATE_CODE_TO_NAME[opts.stateParam])
-    base.set('country', 'United States')
-    if (opts.street.trim()) {
-      base.set('street', opts.street.trim())
-    }
-  } else {
-    base.set('q', opts.query)
-    if (opts.stateParam) {
-      base.set('state', STATE_CODE_TO_NAME[opts.stateParam])
-    }
-  }
-
-  return `${NOMINATIM_BASE_URL}/search?${base.toString()}`
-}
-
-async function fetchNominatimOnce(url: string): Promise<{ ok: boolean; status: number; data: Record<string, unknown>[] | null }> {
-  const res = await fetch(url, {
-    headers: nominatimHeaders(),
-  })
-
-  if (!res.ok) {
-    return { ok: false, status: res.status, data: null }
-  }
-
-  const data = await res.json()
-  return { ok: true, status: res.status, data: Array.isArray(data) ? data : [] }
-}
-
-async function geocodeWithRetry(
-  opts: GeocodeAttemptOpts,
-): Promise<{ data: Record<string, unknown>[] | null; lastStatus: number }> {
-  let lastStatus = 502
-
-  for (const strategy of opts.strategies) {
-    const url = buildNominatimUrl(strategy, opts)
-
-    for (let attempt = 0; attempt < SERVER_MAX_ATTEMPTS; attempt++) {
-      if (attempt > 0) {
-        await sleep(SERVER_BACKOFF_MS[attempt - 1] ?? 900)
-      }
-
-      try {
-        const result = await fetchNominatimOnce(url)
-        lastStatus = result.status
-
-        if (result.ok) {
-          const rows = result.data || []
-          if (rows.length > 0) {
-            return { data: rows, lastStatus: 200 }
-          }
-          break
-        }
-
-        if (result.status === 429 || result.status >= 500) {
-          continue
-        }
-
-        if (result.status === 400) {
-          console.warn(`Nominatim 400 for strategy=${strategy}`)
-          break
-        }
-
-        break
-      } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : String(error)
-        console.error(`Nominatim fetch error (attempt ${attempt + 1}):`, msg)
-        lastStatus = 502
-      }
-    }
-  }
-
-  return { data: null, lastStatus }
-}
-
-function resultCoordKey(dto: GeocodeDto): string {
-  const lat = Number(dto.lat)
-  const lon = Number(dto.lon)
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return `${dto.lat}|${dto.lon}`
-  return `${lat.toFixed(COORD_DEDUP_DECIMALS)}|${lon.toFixed(COORD_DEDUP_DECIMALS)}`
-}
-
-function toRankableDtos(rows: Record<string, unknown>[]): RankableGeocodeDto[] {
-  const out: RankableGeocodeDto[] = []
-  for (const row of rows) {
-    const dto = toGeocodeDto(row)
-    if (!dto) continue
-    out.push({
-      ...dto,
-      importance: typeof row.importance === 'number' ? row.importance : undefined,
-    })
-  }
-  return out
-}
 
 function clientIp(request: NextRequest): string {
   return (
@@ -214,9 +74,16 @@ export async function handleGeocodeGet(request: NextRequest) {
     return NextResponse.json(cached)
   }
 
-  const rankingContext: GeocodeRankingContext = searchParams.get('q')
+  const parsed = searchParams.get('q')
     ? parseNaturalLanguageQuery(searchParams.get('q') || query)
     : parseNaturalLanguageQuery(query)
+
+  const rankingContext = mergeGeocodeRankingContext(parsed, {
+    state: stateParam,
+    zip,
+    city,
+    street,
+  })
 
   const variants = buildGeocodeSearchVariants({
     q: searchParams.get('q') || query,
@@ -226,69 +93,24 @@ export async function handleGeocodeGet(request: NextRequest) {
     state: stateParam,
   })
 
-  const seenCoords = new Set<string>()
-  const union: RankableGeocodeDto[] = []
-  let lastStatus = 502
+  const { ranked: rankedAll, lastStatus } = await searchGeocodeWithVariants({
+    variants,
+    rankingContext,
+    stateParam: stateParam ?? rankingContext.state ?? null,
+    streetFallback: street,
+  })
 
-  for (const variant of variants) {
-    const attempt = await geocodeWithRetry({
-      query: variant.query,
-      city: variant.city,
-      street: variant.street || street || '',
-      stateParam: variant.state ?? stateParam ?? null,
-      limit: NOMINATIM_SEARCH_LIMIT,
-      strategies: [...variant.strategies],
-    })
-
-    lastStatus = attempt.lastStatus
-    if (attempt.data && attempt.data.length > 0) {
-      for (const dto of toRankableDtos(attempt.data)) {
-        const key = resultCoordKey(dto)
-        if (seenCoords.has(key)) continue
-        seenCoords.add(key)
-        union.push(dto)
-      }
-      if (union.some((dto) => isStrongGeocodeMatch(dto, rankingContext))) {
-        break
-      }
-    }
-
-    if (lastStatus === 429) break
-  }
-
-  if (union.length === 0) {
-    const userMessage =
-      lastStatus === 429 || lastStatus >= 500
-        ? GEOCODE_BUSY_USER_MESSAGE
-        : 'No location found. Try again or enter coordinates manually.'
-
+  if (rankedAll.length === 0) {
+    const status = geocodeFailureStatus(lastStatus)
+    const userMessage = status === 404 ? GEOCODE_NO_LOCATION_MESSAGE : GEOCODE_BUSY_USER_MESSAGE
     return NextResponse.json(
       { error: userMessage, userMessage },
-      { status: lastStatus === 429 ? 429 : 404 }
-    )
-  }
-
-  let ranked: RankableGeocodeDto[] = rankResults(
-    union,
-    stateParam ?? rankingContext.state ?? null,
-    rankingContext,
-  ) as RankableGeocodeDto[]
-
-  if (ranked.length === 0) {
-    return NextResponse.json(
-      {
-        error: 'No location found. Try again or enter coordinates manually.',
-        userMessage: 'No location found. Try again or enter coordinates manually.',
-      },
-      { status: 404 }
+      { status, headers: status === 429 ? { 'Retry-After': '1' } : undefined },
     )
   }
 
   const maxResults = Number(limit) || 1
-  if (ranked.length > maxResults) {
-    ranked = ranked.slice(0, maxResults)
-  }
-
+  const ranked = rankedAll.length > maxResults ? rankedAll.slice(0, maxResults) : rankedAll
   const response: GeocodeDto[] = ranked.map(({ importance: _i, ...dto }) => dto)
 
   geocodeCache.set(cacheKey, response)

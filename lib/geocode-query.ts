@@ -27,7 +27,7 @@ export type GeocodeSearchVariant = {
 }
 
 const TRAILING_ZIP_RE = /\b(\d{5})(?:-\d{4})?\s*$/
-const COMMA_ZIP_RE = /,\s*(\d{5})(?:-\d{4})?\b/
+const COMMA_ZIP_RE = /,\s*(\d{5})(?:-\d{4})?\s*(,|$)/
 
 const INTERSTATE_RE =
   /\b(?:I[-\s]?|Interstate\s+)(\d{1,3})(?:\s+(?:Business\s+)?(?:Loop|BL|B\.?L\.?)\s*(E(?:ast)?|W(?:est)?)?)?/gi
@@ -534,31 +534,13 @@ export function buildGeocodeSearchVariants(input: {
     }
   }
 
-  for (const sv of streetVariants(street, state)) {
-    if (city && stateName) {
-      variants.push({ id: 'street-city-state', query: `${sv}, ${city}, ${state}`, city, street: sv })
-      variants.push({
-        id: 'street-city-state-expanded',
-        query: `${expandInterstateNames(sv)}, ${city}, ${stateName}`,
-        city,
-        street: sv,
-      })
-    }
-    if (city) {
-      variants.push({ id: 'street-city', query: `${sv}, ${city}`, city, street: sv })
-      variants.push({
-        id: 'street-city-expanded',
-        query: `${expandInterstateNames(sv)}, ${city}, ${stateName || ''}`.replace(/,\s*$/, ''),
-        city,
-        street: sv,
-      })
-    }
-  }
-
   const houseNum = street.match(/^(\d{1,6})\b/)
+  const streetForms = streetVariants(street, state)
+  const withHouse = houseNum ? streetForms.filter((sv) => sv.startsWith(houseNum[1])) : streetForms
+  const cityLockedStreets = houseNum ? withHouse : streetForms
+
   if (houseNum && state) {
     const stateLabel = stateName || state
-    const withHouse = streetVariants(street, state).filter((sv) => sv.startsWith(houseNum[1]))
     for (const sv of withHouse) {
       variants.push({
         id: 'street-state',
@@ -582,6 +564,27 @@ export function buildGeocodeSearchVariants(input: {
           street: sv,
         })
       }
+    }
+  }
+
+  for (const sv of cityLockedStreets) {
+    if (city && stateName) {
+      variants.push({ id: 'street-city-state', query: `${sv}, ${city}, ${state}`, city, street: sv })
+      variants.push({
+        id: 'street-city-state-expanded',
+        query: `${expandInterstateNames(sv)}, ${city}, ${stateName}`,
+        city,
+        street: sv,
+      })
+    }
+    if (city) {
+      variants.push({ id: 'street-city', query: `${sv}, ${city}`, city, street: sv })
+      variants.push({
+        id: 'street-city-expanded',
+        query: `${expandInterstateNames(sv)}, ${city}, ${stateName || ''}`.replace(/,\s*$/, ''),
+        city,
+        street: sv,
+      })
     }
   }
 
@@ -645,7 +648,7 @@ export function buildGeocodeSearchVariants(input: {
     strategies:
       v.city && state && (v.street || v.id === 'structured-only')
         ? (['structured', 'freetext'] as const)
-        : (['freetext', 'structured'] as const),
+        : (['freetext'] as const),
     context,
   }))
 }
