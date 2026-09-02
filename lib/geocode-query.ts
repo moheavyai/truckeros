@@ -26,7 +26,8 @@ export type GeocodeSearchVariant = {
   context: ParsedGeocodeQuery
 }
 
-const ZIP_RE = /\b(\d{5})(?:-\d{4})?\b/
+const TRAILING_ZIP_RE = /\b(\d{5})(?:-\d{4})?\s*$/
+const COMMA_ZIP_RE = /,\s*(\d{5})(?:-\d{4})?\b/
 
 const INTERSTATE_RE =
   /\b(?:I[-\s]?|Interstate\s+)(\d{1,3})(?:\s+(?:Business\s+)?(?:Loop|BL|B\.?L\.?)\s*(E(?:ast)?|W(?:est)?)?)?/gi
@@ -346,7 +347,7 @@ function cityFromAddressFields(addr: Record<string, string | undefined>): string
 export function parseNaturalLanguageQuery(raw: string): ParsedGeocodeQuery {
   const trimmed = raw.trim()
   const normalized = normalizeGeocodeQuery(trimmed)
-  const zipMatch = trimmed.match(ZIP_RE)
+  const zipMatch = trimmed.match(TRAILING_ZIP_RE) || trimmed.match(COMMA_ZIP_RE)
   const zip = zipMatch ? zipMatch[1] : null
 
   let businessName = ''
@@ -363,6 +364,13 @@ export function parseNaturalLanguageQuery(raw: string): ParsedGeocodeQuery {
       parts.pop()
     } else if (last && /^\d{5}/.test(last)) {
       parts.pop()
+    } else {
+      const stateZip = last.match(/^(.+?)\s+(\d{5})(?:-\d{4})?$/)
+      const parsedState = stateZip ? normalizeStateToken(stateZip[1]) : null
+      if (parsedState) {
+        state = parsedState
+        parts.pop()
+      }
     }
 
     if (parts.length >= 2) {
@@ -426,19 +434,31 @@ function looksLikeStreet(text: string): boolean {
   )
 }
 
+/** Extra Nominatim form: "W 40th" → "West 40th" (does not replace the original). */
+function expandNumberedStreetCardinals(street: string): string {
+  return street.replace(/\b([WE])\.?\s+(\d{1,4}(?:st|nd|rd|th))\b/gi, (_m, dir: string, numbered: string) => {
+    const word = dir.toUpperCase() === 'E' ? 'East' : 'West'
+    return `${word} ${numbered}`
+  })
+}
+
 function streetVariants(street: string, state?: string | null): string[] {
   if (!street) return []
   const variants = new Set<string>()
   variants.add(street)
+  variants.add(expandNumberedStreetCardinals(street))
 
   const expanded = expandInterstateNames(street)
   variants.add(expanded)
+  variants.add(expandNumberedStreetCardinals(expanded))
 
   const houseMatch = street.match(HOUSE_STREET_RE)
   if (houseMatch) {
     const [, num, rest] = houseMatch
     variants.add(`${num} ${expandInterstateNames(rest)}`)
+    variants.add(`${num} ${expandNumberedStreetCardinals(rest)}`)
     variants.add(expandInterstateNames(rest))
+    variants.add(expandNumberedStreetCardinals(rest))
     variants.add(rest)
   } else if (/\b(?:I-\d|Interstate|US Highway)/i.test(street)) {
     variants.add(expandInterstateNames(street))
@@ -532,6 +552,36 @@ export function buildGeocodeSearchVariants(input: {
         city,
         street: sv,
       })
+    }
+  }
+
+  const houseNum = street.match(/^(\d{1,6})\b/)
+  if (houseNum && state) {
+    const stateLabel = stateName || state
+    const withHouse = streetVariants(street, state).filter((sv) => sv.startsWith(houseNum[1]))
+    for (const sv of withHouse) {
+      variants.push({
+        id: 'street-state',
+        query: `${sv}, ${stateLabel}`,
+        city: '',
+        street: sv,
+      })
+      if (stateName && state !== stateName) {
+        variants.push({
+          id: 'street-state-code',
+          query: `${sv}, ${state}`,
+          city: '',
+          street: sv,
+        })
+      }
+      if (zip) {
+        variants.push({
+          id: 'street-state-zip',
+          query: `${sv}, ${state} ${zip}`,
+          city: '',
+          street: sv,
+        })
+      }
     }
   }
 

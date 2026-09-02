@@ -106,6 +106,14 @@ describe('parseNaturalLanguageQuery', () => {
     expect(parsed.street).toMatch(/I-94 Business Loop East/i)
     expect(parsed.state).toBe('ND')
   })
+
+  it('parses KC metro house + street + city + state', () => {
+    const parsed = parseNaturalLanguageQuery('23600 w 40th st, kansas city, ks')
+    expect(parsed.street).toMatch(/23600/)
+    expect(parsed.street).toMatch(/40th/i)
+    expect(parsed.city).toMatch(/kansas city/i)
+    expect(parsed.state).toBe('KS')
+  })
 })
 
 describe('buildGeocodeSearchVariants', () => {
@@ -245,6 +253,35 @@ describe('buildGeocodeSearchVariants', () => {
     const variants = buildGeocodeSearchVariants({ q: 'Minot, ND' })
     const keys = variants.map((v) => v.query)
     expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('drops city for house + street + state and expands W 40th to West 40th', () => {
+    const variants = buildGeocodeSearchVariants({
+      q: '23600 w 40th st, kansas city, ks',
+    })
+    const queries = variants.map((v) => v.query)
+
+    const cityDropped = queries.filter(
+      (q) =>
+        /23600/.test(q) &&
+        /40th/i.test(q) &&
+        !/kansas\s+city/i.test(q) &&
+        (/\bKS\b/.test(q) || /Kansas/.test(q)),
+    )
+    expect(cityDropped.length).toBeGreaterThan(0)
+    expect(queries.some((q) => /West 40th/i.test(q))).toBe(true)
+  })
+
+  it('keeps zip on a city-dropped house+street+state variant', () => {
+    const variants = buildGeocodeSearchVariants({
+      q: '23600 w 40th st, kansas city, KS 66226',
+    })
+    const queries = variants.map((v) => v.query)
+    expect(
+      queries.some(
+        (q) => /23600/.test(q) && /40th/i.test(q) && /66226/.test(q) && !/kansas\s+city/i.test(q),
+      ),
+    ).toBe(true)
   })
 })
 

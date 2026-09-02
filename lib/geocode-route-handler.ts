@@ -9,10 +9,12 @@ import {
   LruGeocodeCache,
   TokenBucketRateLimiter,
   buildCacheKey,
+  isStrongGeocodeMatch,
   rankResults,
-  stripNominatimResults,
+  toGeocodeDto,
   validateGeocodeInput,
   type GeocodeDto,
+  type GeocodeRankingContext,
 } from '@/lib/geocode-server'
 import { buildGeocodeSearchVariants, parseNaturalLanguageQuery } from '@/lib/geocode-query'
 import {
@@ -27,6 +29,8 @@ const rateLimiter = new TokenBucketRateLimiter(3, 1000)
 
 const SERVER_MAX_ATTEMPTS = 2
 const SERVER_BACKOFF_MS = [400, 900]
+const NOMINATIM_SEARCH_LIMIT = '5'
+const COORD_DEDUP_DECIMALS = 5
 
 type NominatimStrategy = 'structured' | 'freetext'
 
@@ -139,6 +143,26 @@ async function geocodeWithRetry(
   return { data: null, lastStatus }
 }
 
+function resultCoordKey(dto: GeocodeDto): string {
+  const lat = Number(dto.lat)
+  const lon = Number(dto.lon)
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return `${dto.lat}|${dto.lon}`
+  return `${lat.toFixed(COORD_DEDUP_DECIMALS)}|${lon.toFixed(COORD_DEDUP_DECIMALS)}`
+}
+
+function toRankableDtos(rows: Record<string, unknown>[]): RankableGeocodeDto[] {
+  const out: RankableGeocodeDto[] = []
+  for (const row of rows) {
+    const dto = toGeocodeDto(row)
+    if (!dto) continue
+    out.push({
+      ...dto,
+      importance: typeof row.importance === 'number' ? row.importance : undefined,
+    })
+  }
+  return out
+}
+
 function clientIp(request: NextRequest): string {
   return (
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
@@ -190,7 +214,7 @@ export async function handleGeocodeGet(request: NextRequest) {
     return NextResponse.json(cached)
   }
 
-  const rankingContext = searchParams.get('q')
+  const rankingContext: GeocodeRankingContext = searchParams.get('q')
     ? parseNaturalLanguageQuery(searchParams.get('q') || query)
     : parseNaturalLanguageQuery(query)
 
@@ -202,30 +226,37 @@ export async function handleGeocodeGet(request: NextRequest) {
     state: stateParam,
   })
 
-  let data: Record<string, unknown>[] | null = null
+  const seenCoords = new Set<string>()
+  const union: RankableGeocodeDto[] = []
   let lastStatus = 502
 
   for (const variant of variants) {
     const attempt = await geocodeWithRetry({
       query: variant.query,
-      city: variant.city || city || '',
+      city: variant.city,
       street: variant.street || street || '',
       stateParam: variant.state ?? stateParam ?? null,
-      limit,
+      limit: NOMINATIM_SEARCH_LIMIT,
       strategies: [...variant.strategies],
     })
 
     lastStatus = attempt.lastStatus
     if (attempt.data && attempt.data.length > 0) {
-      data = attempt.data
-      Object.assign(rankingContext, variant.context)
-      break
+      for (const dto of toRankableDtos(attempt.data)) {
+        const key = resultCoordKey(dto)
+        if (seenCoords.has(key)) continue
+        seenCoords.add(key)
+        union.push(dto)
+      }
+      if (union.some((dto) => isStrongGeocodeMatch(dto, rankingContext))) {
+        break
+      }
     }
 
     if (lastStatus === 429) break
   }
 
-  if (!data || data.length === 0) {
+  if (union.length === 0) {
     const userMessage =
       lastStatus === 429 || lastStatus >= 500
         ? GEOCODE_BUSY_USER_MESSAGE
@@ -237,21 +268,25 @@ export async function handleGeocodeGet(request: NextRequest) {
     )
   }
 
-  const dtos: RankableGeocodeDto[] = stripNominatimResults(data).map((dto, i) => {
-    const rawImportance = data[i]?.importance
-    return {
-      ...dto,
-      importance: typeof rawImportance === 'number' ? rawImportance : undefined,
-    }
-  })
-
   let ranked: RankableGeocodeDto[] = rankResults(
-    dtos,
+    union,
     stateParam ?? rankingContext.state ?? null,
     rankingContext,
   ) as RankableGeocodeDto[]
-  if (limit === '1' && ranked.length > 1) {
-    ranked = [ranked[0]]
+
+  if (ranked.length === 0) {
+    return NextResponse.json(
+      {
+        error: 'No location found. Try again or enter coordinates manually.',
+        userMessage: 'No location found. Try again or enter coordinates manually.',
+      },
+      { status: 404 }
+    )
+  }
+
+  const maxResults = Number(limit) || 1
+  if (ranked.length > maxResults) {
+    ranked = ranked.slice(0, maxResults)
   }
 
   const response: GeocodeDto[] = ranked.map(({ importance: _i, ...dto }) => dto)

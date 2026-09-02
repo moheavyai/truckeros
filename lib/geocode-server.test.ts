@@ -94,6 +94,73 @@ describe('rankResults / scoreGeocodeResult', () => {
   })
 })
 
+describe('Kansas City metro ranking', () => {
+  const moWestportRoad: GeocodeDto = {
+    lat: '39.05524',
+    lon: '-94.60311',
+    display_name: 'West 40th Street, Kansas City, Missouri, United States',
+    address: {
+      road: 'West 40th Street',
+      city: 'Kansas City',
+      state: 'Missouri',
+      'ISO3166-2-lvl4': 'US-MO',
+      postcode: '64111',
+    },
+    importance: 0.72,
+  } as GeocodeDto & { importance: number }
+
+  const ksForterraBuilding: GeocodeDto = {
+    lat: '39.0572565',
+    lon: '-94.8600719',
+    display_name:
+      'Forterra Pipe & Precast, 23600 West 40th Street, Bonner Springs, Johnson County, Kansas, 66012, United States',
+    address: {
+      house_number: '23600',
+      road: 'West 40th Street',
+      city: 'Bonner Springs',
+      state: 'Kansas',
+      'ISO3166-2-lvl4': 'US-KS',
+      postcode: '66012',
+    },
+    importance: 0.31,
+  } as GeocodeDto & { importance: number }
+
+  const kcContext = {
+    street: '23600 W 40th St',
+    city: 'Kansas City',
+    state: 'KS' as const,
+    zip: '66226',
+  }
+
+  it('prefers the KS house-numbered building over the MO Westport road', () => {
+    const ranked = rankResults([moWestportRoad, ksForterraBuilding], 'KS', kcContext)
+    expect(ranked.length).toBeGreaterThan(0)
+    expect(Number(ranked[0].lat)).toBeCloseTo(39.05726, 4)
+    expect(ranked[0].address?.house_number).toBe('23600')
+    expect(ranked[0].address?.['ISO3166-2-lvl4']).toBe('US-KS')
+    expect(ranked.some((r) => r.address?.['ISO3166-2-lvl4'] === 'US-MO')).toBe(false)
+  })
+
+  it('still picks the KS building when zip is omitted', () => {
+    const ranked = rankResults([moWestportRoad, ksForterraBuilding], 'KS', {
+      street: '23600 W 40th St',
+      city: 'Kansas City',
+      state: 'KS',
+    })
+    expect(ranked[0].address?.house_number).toBe('23600')
+    expect(Number(ranked[0].lon)).toBeCloseTo(-94.86007, 4)
+  })
+
+  it('returns empty when the batch is only the other Kansas City', () => {
+    const ranked = rankResults([moWestportRoad], 'KS', {
+      street: '23600 W 40th St',
+      city: 'Kansas City',
+      state: 'KS',
+    })
+    expect(ranked).toEqual([])
+  })
+})
+
 describe('TokenBucketRateLimiter', () => {
   it('blocks after burst exhausted', () => {
     const limiter = new TokenBucketRateLimiter(2, 1000)
