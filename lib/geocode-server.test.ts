@@ -3,6 +3,7 @@ import {
   LruGeocodeCache,
   TokenBucketRateLimiter,
   clampLimit,
+  isKansasCityTwinMiss,
   isStrongGeocodeMatch,
   rankResults,
   resultHasHouseNumber,
@@ -213,12 +214,20 @@ describe('Kansas City metro ranking', () => {
     expect(ranked).toHaveLength(1)
     expect(ranked[0].address?.house_number).toBe('23600')
     expect(rankResults([kcNoState], 'KS', kcContext)).toEqual([])
+  })
 
-    const kcLowerMo: GeocodeDto = {
-      ...kcNoState,
-      display_name: 'West 40th Street, Kansas City, mo, United States',
+  it('treats lowercase , mo as the opposing twin even when display also has Kansas', () => {
+    const kcKansasAndLowerMo: GeocodeDto = {
+      lat: '39.05524',
+      lon: '-94.60311',
+      display_name: 'West 40th Street, Kansas City, Kansas, mo, United States',
+      address: {
+        road: 'West 40th Street',
+        city: 'Kansas City',
+      },
     }
-    expect(rankResults([kcLowerMo], 'KS', kcContext)).toEqual([])
+    expect(isKansasCityTwinMiss(kcKansasAndLowerMo, kcContext)).toBe(true)
+    expect(rankResults([kcKansasAndLowerMo], 'KS', kcContext)).toEqual([])
   })
 
   it('does not treat a MO house+street hit as strong when state is KS', () => {
